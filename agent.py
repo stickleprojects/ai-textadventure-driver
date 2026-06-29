@@ -26,6 +26,18 @@ def _is_failure_response(text):
 
 _DIRECTIONS = {"north", "south", "east", "west", "up", "down", "ne", "nw", "se", "sw"}
 
+_CREATURE_WORDS = frozenset({
+    "horse", "pony", "mare", "stallion",
+    "knight", "orc", "guard", "soldier",
+    "man", "woman", "person", "peasant",
+    "troll", "goblin", "dwarf", "elf",
+    "creature", "beast", "monster", "demon",
+})
+
+
+def _is_creature(name):
+    return bool(set(name.lower().split()) & _CREATURE_WORDS)
+
 
 def _detect_loop(game_log, window=10, threshold=4):
     """Returns the repeated action if any single action appears >= threshold times
@@ -157,7 +169,9 @@ def process_agent_step(state, child, llm_instance):
 
     if "objects" in extracted:
         for obj in extracted["objects"]:
-            if obj in state["known_npcs"]:
+            if obj in state["known_npcs"] or _is_creature(obj):
+                if obj not in state["known_npcs"]:
+                    state["known_npcs"][obj] = {"location": state["current_room"], "greeted": False}
                 continue
             if obj not in state["known_entities"] and obj not in state["uninspected_objects"] and obj not in state["inventory"]:
                 state["uninspected_objects"].append(obj)
@@ -166,6 +180,8 @@ def process_agent_step(state, child, llm_instance):
     for item in extracted.get("added_to_inventory", []):
         if item not in state["inventory"]:
             state["inventory"].append(item)
+        if item in state["known_entities"]:
+            state["known_entities"][item]["status"] = "held"
 
     for spell in extracted.get("learned_spells", []):
         if spell not in state["spellbook"]:

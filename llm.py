@@ -30,10 +30,11 @@ def extract_knowledge(text, action_taken, llm_instance):
     - "objects" are inanimate items only (sword, key, stone, pool, door, chest...)
     - "npcs" are living creatures or characters (horse, knight, orc, guard, man, woman...)
     - Never put a living creature in "objects". Never put an inanimate item in "npcs".
+    - "you can see X" means X is in the current room — add to "objects" if inanimate, "npcs" if living. It does NOT mean X is in your inventory.
     - Only add to "added_to_inventory" if the game explicitly confirms the item was taken
       (e.g. "Taken.", "You pick up the...", "You take the..."). Seeing an item does not mean it is held.
     - use "inventory" command to confirm what is actually held, and only add to "added_to_inventory" if the game confirms it.
-    
+
     Schema required:
     {{
         "room": "string (current location)",
@@ -53,13 +54,15 @@ def extract_knowledge(text, action_taken, llm_instance):
     JSON:
     """
 
-    response = llm_instance(prompt, max_tokens=250, stop=["\n\n"], echo=False)
-    output_text = response['choices'][0]['text'].strip()
-
-    try:
-        json_match = re.search(r'\{.*\}', output_text, re.DOTALL)
-        if json_match:
-            return json.loads(json_match.group(0))
-        return {}
-    except json.JSONDecodeError:
-        return {}
+    for _ in range(3):
+        response = llm_instance(prompt, max_tokens=250, stop=["\n\n"], echo=False)
+        output_text = response['choices'][0]['text'].strip()
+        try:
+            json_match = re.search(r'\{.*\}', output_text, re.DOTALL)
+            if json_match:
+                result = json.loads(json_match.group(0))
+                if result:
+                    return result
+        except json.JSONDecodeError:
+            pass
+    return {}
