@@ -99,8 +99,14 @@ def process_agent_step(state, child, llm_instance):
     if "exits" in extracted:
         update_graph(state, state["current_room"], extracted["exits"], previous_room, action_taken)
 
+    for npc in extracted.get("npcs", []):
+        if npc not in state["known_npcs"]:
+            state["known_npcs"][npc] = {"location": state["current_room"], "greeted": False}
+
     if "objects" in extracted:
         for obj in extracted["objects"]:
+            if obj in state["known_npcs"]:
+                continue
             if obj not in state["known_entities"] and obj not in state["uninspected_objects"] and obj not in state["inventory"]:
                 state["uninspected_objects"].append(obj)
                 state["known_entities"][obj] = {"status": "discovered", "location": state["current_room"]}
@@ -119,7 +125,7 @@ def process_agent_step(state, child, llm_instance):
             state["unresolved_anomalies"][target] = {
                 "room": state["current_room"],
                 "reason": anomaly.get("reason"),
-                "potential_solution": anomaly.get("potential_solution"),
+                "potential_solution": anomaly.get("potential_solution") or "",
             }
 
     for resolved in extracted.get("resolved_anomalies", []):

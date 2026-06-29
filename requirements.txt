@@ -1,5 +1,6 @@
 streamlit
 networkx
 matplotlib
+pyvis
 llama-cpp-python
 pexpect

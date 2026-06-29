@@ -26,6 +26,7 @@ def init_state():
                 "sequence": ["take", "examine", "read", "look inside"],
                 "step_index": 0,
             },
+            "known_npcs": {},
             "unresolved_anomalies": {},
             "active_goal": None,
             "game_log": [],

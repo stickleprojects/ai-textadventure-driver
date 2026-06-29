@@ -1,32 +1,53 @@
 import json
 
-import matplotlib.pyplot as plt
-import networkx as nx
 import streamlit as st
-from datetime import datetime
+import streamlit.components.v1 as components
+from pyvis.network import Network
 
 
 def render_graph(state):
-    fig, ax = plt.subplots(figsize=(6, 4))
-    fig.patch.set_facecolor('#1a1a2e')
-    ax.set_facecolor('#1a1a2e')
-
     g = state["world_graph"]
-    if g.nodes:
-        pos = nx.spring_layout(g, seed=42)
-        nx.draw(g, pos, ax=ax, with_labels=True,
-                node_color='#7c3aed', edge_color='#4a4a6a',
-                font_color='white', node_size=1800, font_size=9,
-                font_weight="bold", width=1.5, node_shape="s")
-        edge_labels = nx.get_edge_attributes(g, 'label')
-        nx.draw_networkx_edge_labels(g, pos, edge_labels=edge_labels,
-                                     font_color='#7c3aed', font_size=8,
-                                     bbox=dict(facecolor='#1a1a2e', edgecolor='none'))
-    else:
-        ax.text(0.5, 0.5, "INITIALIZING MAPPING MATRIX...",
-                color="#7c3aed", ha="center", fontfamily="monospace")
 
-    st.pyplot(fig)
+    if not g.nodes:
+        st.markdown(
+            "<p style='color:#7c3aed;font-family:monospace;text-align:center'>"
+            "INITIALIZING MAPPING MATRIX...</p>",
+            unsafe_allow_html=True,
+        )
+        return
+
+    net = Network(height="430px", width="100%", bgcolor="#1a1a2e", font_color="white", directed=True)
+
+    current_room = state["current_room"]
+    for node in g.nodes:
+        is_current = node == current_room
+        is_unknown = node.startswith("Unknown")
+        net.add_node(
+            node,
+            label=node,
+            shape="box",
+            color={
+                "background": "#f59e0b" if is_current else ("#2a2a4a" if is_unknown else "#7c3aed"),
+                "border": "#f59e0b" if is_current else "#7c3aed",
+            },
+            font={"size": 12, "color": "white"},
+            borderWidth=3 if is_current else 1,
+        )
+
+    for u, v, data in g.edges(data=True):
+        net.add_edge(u, v, label=data.get("label", ""), color="#4a4a6a",
+                     font={"size": 10, "color": "#a78bfa", "strokeWidth": 0})
+
+    net.set_options("""{
+      "physics": {
+        "solver": "forceAtlas2Based",
+        "forceAtlas2Based": { "springLength": 120, "gravitationalConstant": -60 },
+        "stabilization": { "iterations": 150 }
+      },
+      "edges": { "smooth": { "type": "curvedCW", "roundness": 0.2 } }
+    }""")
+
+    components.html(net.generate_html(), height=450, scrolling=False)
 
 
 def generate_markdown_log(state):
