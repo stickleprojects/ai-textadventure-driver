@@ -13,4 +13,7 @@
 6. the engine needs to know it can wear things and should wear disguises (the hood for example)
 7. ~~the engine doesnt understand "you cant do that", "you cant see the huge knight"~~ — fixed: `_is_failure_response()` detects Level 9 refusal phrases and immediately clears the current inspection target so the agent moves on rather than continuing the take/examine/read/look-inside sequence
 8. ~~`anomaly_data.get("potential_solution", "").lower()` throws `NoneType has no attribute lower` when the LLM returns `null` for `potential_solution`~~ — fixed: normalise to `""` at storage time in `process_agent_step` so `None` never enters state
-9. the visualisation of the map doesnt draw the boxes in cardinal direction, update it so "east of XXX" appears to the right of its target - consider adding a new 2d map specifially for this visualisation
+9. ~~the visualisation of the map doesnt draw the boxes in cardinal direction, update it so "east of XXX" appears to the right of its target~~ — fixed: BFS from first discovered room assigns pixel positions from edge direction labels (`_compute_cardinal_positions`); physics disabled so nodes stay pinned; zoom/pan/drag still work
+10. we need to add persistent memory so that the engine can learn successful or failed ways of playing the game and improve, this also means we need to understand the game scoring mechanism and "you died" or "the game ended" states
+11. the warning comimand timed out message is annoying, i cant use it to debug what it actually received, improve the console logging or display the raw text so i can update the rules
+12. the engine is still trying to read the horse

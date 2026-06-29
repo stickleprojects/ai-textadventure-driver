@@ -14,7 +14,7 @@ except ImportError:
 def load_llm(model_path):
     if not LLAMA_AVAILABLE:
         return None
-    return Llama(model_path=model_path, n_ctx=2048, n_threads=4)
+    return Llama(model_path=model_path, n_ctx=2048, n_threads=4, use_mlock=False, verbose=False)
 
 
 def extract_knowledge(text, action_taken, llm_instance):
@@ -32,7 +32,8 @@ def extract_knowledge(text, action_taken, llm_instance):
     - Never put a living creature in "objects". Never put an inanimate item in "npcs".
     - Only add to "added_to_inventory" if the game explicitly confirms the item was taken
       (e.g. "Taken.", "You pick up the...", "You take the..."). Seeing an item does not mean it is held.
-
+    - use "inventory" command to confirm what is actually held, and only add to "added_to_inventory" if the game confirms it.
+    
     Schema required:
     {{
         "room": "string (current location)",
@@ -47,6 +48,7 @@ def extract_knowledge(text, action_taken, llm_instance):
         "resolved_anomalies": ["list of targets that are no longer blocked"]
     }}
 
+    Action taken: "{action_taken}"
     Game Output: "{text}"
     JSON:
     """
