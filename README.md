@@ -58,10 +58,34 @@ cp /path/to/your/GAMEDAT*.DAT gamefiles/knight-orc/
 # Make the interpreter executable (Linux)
 chmod +x tools/glklevel9
 ```
-
 ---
 
 ## Running
+
+### 1. Start llama.cpp server
+
+The app loads the model via `llama-cpp-python` directly (no separate server needed), but you can also run `llama-server` standalone to test or inspect model output:
+
+```bash
+llama-server \
+  -m ../models/Phi-3.5-mini-instruct-Q3_K_M.gguf \
+  --ctx-size 2048 \
+  -t 4 \
+  --no-mmap \
+  --port 8080
+```
+
+Settings tuned for i7-8565U (4 physical cores, 16 GB RAM, CPU-only):
+
+| Flag | Value | Reason |
+|---|---|---|
+| `--ctx-size` | `2048` | Matches `n_ctx` in `llm.py`; fits comfortably in 16 GB |
+| `-t` | `4` | Physical core count; avoids hyperthreading overhead on inference |
+| `--no-mmap` | — | More stable memory behaviour on Linux without a dedicated GPU |
+
+> If you only intend to run the Streamlit app, skip this step — the model is loaded in-process automatically once you set the model path in the sidebar.
+
+### 2. Run the app
 
 ```bash
 source .env/bin/activate
