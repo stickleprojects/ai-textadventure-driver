@@ -21,5 +21,5 @@
 13. ~~eval suite (`tests/test_evals.py`) found the quantized Phi-3.5-mini model non-deterministically returns `{}` for short inputs~~ — fixed: `extract_knowledge` retries up to 3 times on empty result before returning `{}`
 14. ~~the test loop detection is suspicious - we can look at lots of items in the inventory but this would fail the loop check, we might need to use an llm to check for this instead of raw compares~~ — fixed: direction actions that produce a room change are excluded from the loop count (productive navigation); only directions that keep landing on the same room still trigger it. Object inspection never false-positives because each action includes the object name as a unique string.
 15. ~~the map visualization doesnt word wrap the room descriptions so each box is overlapping the previous one~~ — fixed: `_display_label()` in `ui.py` abbreviates `Unknown (X from Y)` to `? X` and word-wraps long names at 20 chars; `widthConstraint: { maximum: 150 }` added as a backstop; node IDs unchanged so agent logic is unaffected
-
+16. move all knightorc-specific code into a config file (for example, which items are npcs, unsuccessful responses, "what now?" prompt, etc.)
 
