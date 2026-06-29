@@ -1,0 +1,15 @@
+{
+  "hooks": {
+    "PreToolUse": [
+      {
+        "matcher": "Bash",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "input=$(cat); branch=$(git symbolic-ref --short HEAD 2>/dev/null); cmd=$(echo \"$input\" | jq -r '.tool_input.command // \"\"'); if echo \"$cmd\" | grep -qE '(^|&&|\\||;)\\s*git\\s+commit' && { [ \"$branch\" = \"main\" ] || [ \"$branch\" = \"master\" ]; }; then echo '{\"hookSpecificOutput\":{\"hookEventName\":\"PreToolUse\",\"permissionDecision\":\"deny\",\"permissionDecisionReason\":\"Direct commits to main/master are not allowed. Create a feature branch first with: git checkout -b <branch-name>\"}}'; fi"
+          }
+        ]
+      }
+    ]
+  }
+}
