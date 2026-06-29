@@ -43,6 +43,26 @@ def _compute_cardinal_positions(graph):
     return {node: (gx * _SPACING, gy * _SPACING) for node, (gx, gy) in grid.items()}
 
 
+def _display_label(node_id):
+    """Short, word-wrapped label for graph nodes (node IDs are unchanged)."""
+    if node_id.startswith("Unknown (") and node_id.endswith(")"):
+        inner = node_id[len("Unknown ("):-1]
+        direction = inner.split(" from ")[0] if " from " in inner else inner[:20]
+        return f"? {direction}"
+    words = node_id.split()
+    lines, line, length = [], [], 0
+    for w in words:
+        if length + len(w) + (1 if line else 0) > 20:
+            lines.append(" ".join(line))
+            line, length = [w], len(w)
+        else:
+            line.append(w)
+            length += len(w) + (1 if len(line) > 1 else 0)
+    if line:
+        lines.append(" ".join(line))
+    return "\n".join(lines)
+
+
 def render_graph(state):
     g = state["world_graph"]
 
@@ -64,7 +84,7 @@ def render_graph(state):
         px, py = positions.get(node, (0, 0))
         net.add_node(
             node,
-            label=node,
+            label=_display_label(node),
             shape="box",
             x=px, y=py,
             physics=False,
@@ -83,7 +103,8 @@ def render_graph(state):
     net.set_options("""{
       "physics": { "enabled": false },
       "interaction": { "dragNodes": true, "zoomView": true, "dragView": true },
-      "edges": { "smooth": { "type": "curvedCW", "roundness": 0.2 } }
+      "edges": { "smooth": { "type": "curvedCW", "roundness": 0.2 } },
+      "nodes": { "widthConstraint": { "maximum": 150 } }
     }""")
 
     components.html(net.generate_html(), height=450, scrolling=False)
