@@ -4,7 +4,8 @@
       "Bash(gh pr create *)",
       "Bash(git checkout *)",
       "Bash(git pull *)",
-      "Bash(git fetch *)"
+      "Bash(git fetch *)",
+      "Bash(git add *)"
     ]
   },
   "hooks": {
