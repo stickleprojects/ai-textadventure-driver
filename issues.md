@@ -11,5 +11,5 @@
    - Fix: tighten LLM prompt so `added_to_inventory` only fires on explicit take confirmations ("Taken.", "You pick up the...")
    - State: `known_entities` already stores `location`; update status from `discovered` → `held` when taken
 6. the engine needs to know it can wear things and should wear disguises (the hood for example)
-7. the engine doesnt understand "you cant do that", "you cant see the huge knight" 
+7. ~~the engine doesnt understand "you cant do that", "you cant see the huge knight"~~ — fixed: `_is_failure_response()` detects Level 9 refusal phrases and immediately clears the current inspection target so the agent moves on rather than continuing the take/examine/read/look-inside sequence
 8. ~~`anomaly_data.get("potential_solution", "").lower()` throws `NoneType has no attribute lower` when the LLM returns `null` for `potential_solution`~~ — fixed: normalise to `""` at storage time in `process_agent_step` so `None` never enters state
