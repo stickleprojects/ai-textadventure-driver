@@ -119,7 +119,7 @@ def process_agent_step(state, child, llm_instance):
             state["unresolved_anomalies"][target] = {
                 "room": state["current_room"],
                 "reason": anomaly.get("reason"),
-                "potential_solution": anomaly.get("potential_solution"),
+                "potential_solution": anomaly.get("potential_solution") or "",
             }
 
     for resolved in extracted.get("resolved_anomalies", []):
