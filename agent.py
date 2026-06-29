@@ -24,12 +24,29 @@ def _is_failure_response(text):
     return bool(_FAILURE_RE.search(text))
 
 
+_DIRECTIONS = {"north", "south", "east", "west", "up", "down", "ne", "nw", "se", "sw"}
+
+
 def _detect_loop(game_log, window=10, threshold=4):
     """Returns the repeated action if any single action appears >= threshold times
-    in the last `window` log entries, else None."""
-    recent = [e["action"] for e in game_log[-window:]]
-    for action in set(recent):
-        if recent.count(action) >= threshold:
+    in the last `window` log entries, else None.
+
+    Direction actions that produced a room change are excluded — they are
+    productive exploration, not repetition. A direction that keeps landing on
+    the same room still counts toward the threshold.
+    """
+    recent = game_log[-window:]
+
+    def _is_productive_move(i):
+        if recent[i]["action"] not in _DIRECTIONS or i == 0:
+            return False
+        prev_room = recent[i - 1].get("extracted", {}).get("room")
+        curr_room = recent[i].get("extracted", {}).get("room")
+        return bool(prev_room and curr_room and prev_room != curr_room)
+
+    actions = [e["action"] for i, e in enumerate(recent) if not _is_productive_move(i)]
+    for action in set(actions):
+        if actions.count(action) >= threshold:
             return action
     return None
 

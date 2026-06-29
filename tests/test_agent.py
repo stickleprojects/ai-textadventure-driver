@@ -39,6 +39,25 @@ def test_detect_loop_ignores_varied_actions():
     assert _detect_loop(game_log) is None
 
 
+def test_detect_loop_ignores_productive_navigation():
+    # "north" repeated 4 times but each time the extracted room changed — exploration, not a loop
+    rooms = ["Room A", "Room B", "Room C", "Room D", "Room E"]
+    game_log = [
+        {"action": "north", "extracted": {"room": rooms[i + 1]}}
+        if i < 4 else {"action": "look", "extracted": {"room": rooms[4]}}
+        for i in range(5)
+    ]
+    # Prepend a prior entry so index 0 has a previous room to diff against
+    game_log = [{"action": "look", "extracted": {"room": "Room A"}}] + game_log
+    assert _detect_loop(game_log, window=6, threshold=4) is None
+
+
+def test_detect_loop_catches_navigation_stuck_in_same_room():
+    # "north" repeated but extracted room never changes — genuinely stuck
+    game_log = [{"action": "north", "extracted": {"room": "Dead End"}} for _ in range(10)]
+    assert _detect_loop(game_log) == "north"
+
+
 def test_active_goal_in_target_room_uses_solution():
     state = make_state(
         current_room="Throne Room",

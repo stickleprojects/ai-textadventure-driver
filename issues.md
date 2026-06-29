@@ -18,5 +18,5 @@
 11. the warning command timed out message is annoying, i cant use it to debug what it actually received, improve the console logging or display the raw text so i can update the rules
 12. the engine is still trying to read the horse
 13. eval suite (`tests/test_evals.py`) found the quantized Phi-3.5-mini model non-deterministically returns `{}` for short inputs ("Taken.", terse room descriptions) — extraction reliability needs improvement, possibly via retry logic, prompt tuning, or a larger/better-quantized model
-14. the test loop detection is suspicious - we can look at lots of items in the inventory but this would fail the loop check, we might need to use an llm to check for this instead of raw compares
+14. ~~the test loop detection is suspicious - we can look at lots of items in the inventory but this would fail the loop check, we might need to use an llm to check for this instead of raw compares~~ — fixed: direction actions that produce a room change are excluded from the loop count (productive navigation); only directions that keep landing on the same room still trigger it. Object inspection never false-positives because each action includes the object name as a unique string.
 
