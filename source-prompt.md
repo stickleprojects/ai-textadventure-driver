@@ -1,0 +1,6 @@
+act as an advanced python ai development assistant. i am building a local autonomous text adventure solving OS for Knight Orc using Streamlit, networkX and a local llama.cpp model. generate the complete standalone code file for app.py featuring an advanced dynamic state schema with zero hardcoding, an automated inspection queue (uninspected_objects) that runs look inside, take, examine, and read sequentially based on dynamic llm knowledge extraction a real-time graph view of rooms, a step speed delay slider, and an option to export the full run log to markdown
+
+sometimes we learn spells by reading objects, for example, you see a pool, when you look inside the pool, you see a stone, you take the stone and look at it and you receive a message that the stone has something written on it, so you read the stone and you get a message saying "you have learned the slow spell", you can then CAST that spell on something thats moving too quickly - for example, a door that slams shut as soon as you open it
+
+please publish the entire app.py with these latest changes, and we need to remember locked doors so when we find a key we can go back and use it on the correct door, or if we are blocked and a spell might help in the future we can go back and use that spell (for example, the fireplace is too hot to examine, so we cast COLD on it once we have learned that spell)
+
