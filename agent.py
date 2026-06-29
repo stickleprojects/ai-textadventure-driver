@@ -1,9 +1,27 @@
+import re
 from datetime import datetime
 
 import networkx as nx
 
 from game_engine import execute_game_command
 from llm import extract_knowledge
+
+_FAILURE_RE = re.compile(
+    r"you can'?t"
+    r"|can'?t see"
+    r"|can'?t do that"
+    r"|don'?t understand"
+    r"|you don'?t have"
+    r"|nothing happens"
+    r"|that'?s not something"
+    r"|there('?s| is) no \w+ here"
+    r"|i don'?t know (that word|what)",
+    re.IGNORECASE,
+)
+
+
+def _is_failure_response(text):
+    return bool(_FAILURE_RE.search(text))
 
 
 def update_graph(state, room_name, exits, previous_room, action):
@@ -91,6 +109,13 @@ def process_agent_step(state, child, llm_instance):
     action_taken = determine_next_action(state)
 
     response = execute_game_command(child, action_taken)
+
+    if _is_failure_response(response):
+        inspection = state["current_inspection"]
+        if inspection["target"]:
+            inspection["target"] = None
+            inspection["step_index"] = 0
+
     extracted = extract_knowledge(response, action_taken, llm_instance)
 
     if "room" in extracted:
