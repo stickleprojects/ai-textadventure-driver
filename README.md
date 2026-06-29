@@ -101,6 +101,57 @@ The app opens in your browser. In the sidebar:
 
 ---
 
+## Testing
+
+### Unit tests (no LLM or game binary required)
+
+```bash
+source .env/bin/activate
+pytest tests/test_game_engine.py tests/test_agent.py -v
+```
+
+### LLM extraction evals (requires local model)
+
+```bash
+pytest tests/test_evals.py -m llm -v
+# Override model path or pass threshold:
+EVAL_MODEL_PATH=../models/my-model.gguf EVAL_THRESHOLD=0.8 pytest tests/test_evals.py -m llm -v
+```
+
+### Full suite minus LLM evals
+
+```bash
+pytest -m "not llm" -v
+```
+
+### Headless watch run (real ROM + real model, no Streamlit)
+
+Runs N agent steps and exits non-zero if a loop or timeout is detected:
+
+```bash
+python scripts/watch_run.py 50
+```
+
+Wire to the `/loop` skill to automate manual watching:
+
+```
+/loop 30m run python scripts/watch_run.py 50 and summarize any findings
+```
+
+### Growing the eval suite from a saved game log
+
+Export a run log via the **Export Run Log (JSON)** button in the sidebar, then:
+
+```bash
+# Preview what would be added (no writes)
+python scripts/generate_evals.py --log game_log.json --out tests/evals/fixtures.py --dry-run
+
+# Append new fixtures (requires ANTHROPIC_API_KEY)
+ANTHROPIC_API_KEY=sk-... python scripts/generate_evals.py --log game_log.json --out tests/evals/fixtures.py
+```
+
+---
+
 ## Project structure
 
 ```

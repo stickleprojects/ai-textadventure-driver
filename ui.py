@@ -96,3 +96,7 @@ def generate_markdown_log(state):
         lines.append(f"**Response:**\n> {entry['response']}\n")
         lines.append(f"**Extracted Knowledge:**\n```json\n{json.dumps(entry['extracted'], indent=2)}\n```\n\n---")
     return "\n".join(lines)
+
+
+def generate_json_log(state):
+    return json.dumps(state["game_log"], indent=2)
