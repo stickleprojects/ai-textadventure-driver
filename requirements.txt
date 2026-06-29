@@ -4,3 +4,5 @@ matplotlib
 pyvis
 llama-cpp-python
 pexpect
+pytest
+pytest-timeout

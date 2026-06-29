@@ -24,6 +24,16 @@ def _is_failure_response(text):
     return bool(_FAILURE_RE.search(text))
 
 
+def _detect_loop(game_log, window=10, threshold=4):
+    """Returns the repeated action if any single action appears >= threshold times
+    in the last `window` log entries, else None."""
+    recent = [e["action"] for e in game_log[-window:]]
+    for action in set(recent):
+        if recent.count(action) >= threshold:
+            return action
+    return None
+
+
 def update_graph(state, room_name, exits, previous_room, action):
     """Adds the current room and its exits to the world graph."""
     if room_name not in state["world_graph"]:
@@ -156,9 +166,14 @@ def process_agent_step(state, child, llm_instance):
     for resolved in extracted.get("resolved_anomalies", []):
         state["unresolved_anomalies"].pop(resolved, None)
 
-    state["game_log"].append({
+    entry = {
         "timestamp": datetime.now().strftime("%H:%M:%S"),
         "action": action_taken,
         "response": response,
         "extracted": extracted,
-    })
+    }
+    state["game_log"].append(entry)
+
+    loop_action = _detect_loop(state["game_log"])
+    if loop_action:
+        entry["loop_detected"] = loop_action

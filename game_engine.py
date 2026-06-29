@@ -35,6 +35,7 @@ def execute_game_command(child, command):
             raw_output = raw_output[len(command):]
         return clean_level9_output(raw_output)
     except pexpect.TIMEOUT:
-        return "WARNING: Command timed out. The game might be waiting for non-standard input."
+        partial = clean_level9_output(child.before) if child.before else "(nothing received)"
+        return f"WARNING: Command timed out waiting for 'What now?'\nRaw output received:\n{partial}"
     except Exception as e:
         return f"CRITICAL ERROR: {str(e)}"

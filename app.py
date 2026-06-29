@@ -7,7 +7,7 @@ import streamlit as st
 from agent import process_agent_step, update_graph
 from game_engine import start_level9
 from llm import LLAMA_AVAILABLE, extract_knowledge, load_llm
-from ui import generate_markdown_log, render_graph
+from ui import generate_json_log, generate_markdown_log, render_graph
 
 st.set_page_config(page_title="Text Adventure Autonomous OS", layout="wide", initial_sidebar_state="expanded")
 
@@ -106,6 +106,13 @@ with st.sidebar:
         data=generate_markdown_log(state),
         file_name=f"knight_orc_run_{datetime.now().strftime('%Y%m%d_%H%M')}.md",
         mime="text/markdown",
+        use_container_width=True,
+    )
+    st.download_button(
+        label="Export Run Log (JSON)",
+        data=generate_json_log(state),
+        file_name=f"knight_orc_run_{datetime.now().strftime('%Y%m%d_%H%M')}.json",
+        mime="application/json",
         use_container_width=True,
     )
 
