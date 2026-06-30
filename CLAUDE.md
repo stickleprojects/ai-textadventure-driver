@@ -67,6 +67,17 @@ The app is split into four modules plus a thin Streamlit entry point:
 - Wearable items / disguises (e.g. hood) not handled
 - "You can't do that" responses are not fed back to correct the inspection queue
 
+## Planning
+
+When designing or documenting an implementation plan (in memory, issues.md, or a design session), always include a **"How will we know it worked?"** section. This must describe what you would actually observe during a live runthrough of the game — not test results, not log file contents alone, but visible agent behaviour:
+
+- Which action(s) should appear (or stop appearing) in the step log
+- What the agent should do differently compared to before the change
+- Which files or state fields to inspect and what to expect in them
+- If the change only takes effect across multiple runs, describe what to watch on run 1 vs run 2
+
+This section is required for any plan that touches agent behaviour, the LLM extraction schema, the config, or the strategy store.
+
 ## Journal
 
 `JOURNAL.md` in the project root records non-obvious findings, rejected approaches, and design decisions. Add an entry whenever:

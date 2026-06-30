@@ -103,6 +103,14 @@ def get_next_move_to_target(state, target_room):
         return None
 
 
+def _nav_command(state, target, fast=True):
+    """Return a navigation command using the game's native nav if configured, else graph-based."""
+    template = config.fast_nav_command if fast else config.full_nav_command
+    if template:
+        return template.format(target=target)
+    return get_next_move_to_target(state, target)
+
+
 def determine_next_action(state):
     """Returns the next command string based on agent priority logic."""
     if state["active_goal"]:
@@ -113,7 +121,7 @@ def determine_next_action(state):
             verb = "cast" if solution in state["spellbook"] else "use"
             state["active_goal"] = None
             return f"{verb} {solution} on {target}"
-        move = get_next_move_to_target(state, target_room)
+        move = _nav_command(state, target_room, fast=True)
         if move:
             return move
         state["active_goal"] = None
@@ -154,14 +162,51 @@ def determine_next_action(state):
         return f"take {new_target}"
 
     for _, v, data in state["world_graph"].edges(state["current_room"], data=True):
-        if v.startswith("Unknown"):
+        if v.startswith("Unknown") and not data.get("futile"):
             return data["label"]
 
     step_count = len(state["game_log"])
     if step_count > 0 and step_count % _SCORE_INTERVAL == 0:
         return "score"
 
+    if state["pending_npc_tasks"]:
+        return state["pending_npc_tasks"][0]["wait_command"]
+
     return "look"
+
+
+def _mark_edge_futile(state, from_room, direction):
+    """Mark a direction from a room as permanently futile — skip in future unknown-exit scans."""
+    state["futile_edges"].add((from_room, direction))
+    for _, _, data in state["world_graph"].edges(from_room, data=True):
+        if data.get("label") == direction:
+            data["futile"] = True
+            break
+
+
+def _snapshot_state(state):
+    return {
+        "room": state["current_room"],
+        "entity_count": len(state["known_entities"]),
+        "npc_count": len(state["known_npcs"]),
+        "inventory_count": len(state["inventory"]),
+    }
+
+
+def _compute_utility(action, response, snap_before, snap_after, insp_verb, effective_target, pre_verb_outcomes):
+    """Classify action utility from state diff. No LLM — deterministic."""
+    if (
+        snap_before["room"] != snap_after["room"]
+        or snap_after["entity_count"] > snap_before["entity_count"]
+        or snap_after["npc_count"] > snap_before["npc_count"]
+        or snap_after["inventory_count"] > snap_before["inventory_count"]
+    ):
+        return "productive"
+    if _is_hard_failure(response):
+        return "futile"
+    if insp_verb and effective_target and insp_verb in pre_verb_outcomes:
+        return "redundant"
+    return "informative"
 
 
 def process_agent_step(state, child, llm_instance):
@@ -177,6 +222,12 @@ def process_agent_step(state, child, llm_instance):
     # post_insp_target covers new takes; pre_insp_target covers ongoing inspection verbs.
     effective_target = post_insp_target or pre_insp_target
     insp_verb = _parse_inspection_action(action_taken, effective_target)
+
+    snap_before = _snapshot_state(state)
+    pre_verb_outcomes = (
+        state["known_entities"].get(effective_target, {}).get("verb_outcomes", {}).copy()
+        if effective_target else {}
+    )
 
     response = execute_game_command(child, action_taken)
 
@@ -254,12 +305,21 @@ def process_agent_step(state, child, llm_instance):
             state["current_score"] = int(m.group(1))
             state["max_score"] = int(m.group(2))
 
+    utility = _compute_utility(
+        action_taken, response, snap_before, _snapshot_state(state),
+        insp_verb, effective_target, pre_verb_outcomes,
+    )
+
+    if utility == "futile" and action_taken in _DIRECTIONS:
+        _mark_edge_futile(state, previous_room, action_taken)
+
     entry = {
         "timestamp": datetime.now().strftime("%H:%M:%S"),
         "action": action_taken,
         "response": response,
         "extracted": extracted,
         "score": state.get("current_score"),
+        "utility": utility,
     }
     state["game_log"].append(entry)
 

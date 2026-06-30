@@ -28,6 +28,7 @@ from game_config import config
 from agent import process_agent_step
 from game_engine import start_level9
 from llm import load_llm
+from run_evaluator import classify_run, load_strategy, merge_run_record
 
 # Suppress Streamlit's "missing ScriptRunContext" warning — harmless outside a
 # Streamlit session; @st.cache_resource just runs without caching.
@@ -38,9 +39,12 @@ INTERPRETER_PATH = os.environ.get("LEVEL9_INTERPRETER", "./tools/glklevel9")
 ROM_PATH = os.environ.get("LEVEL9_ROM", "./gamefiles/knight-orc/GAMEDAT1.DAT")
 MODEL_PATH = os.environ.get("EVAL_MODEL_PATH", "../models/Phi-3.5-mini-instruct-Q3_K_M.gguf")
 LOG_DIR = Path("logs")
+RUNS_DIR = Path("runs")
+STRATEGY_PATH = os.environ.get("GAME_STRATEGY", "configs/knight_orc_strategy.json")
 
 
-def make_initial_state():
+def make_initial_state(strategy_path=STRATEGY_PATH):
+    strategy = load_strategy(strategy_path)
     return {
         "current_room": "Unknown Location",
         "inventory": [],
@@ -56,6 +60,8 @@ def make_initial_state():
         "is_running": False,
         "current_score": None,
         "max_score": None,
+        "futile_edges": strategy["futile_edges"],
+        "pending_npc_tasks": [],
     }
 
 
@@ -76,14 +82,22 @@ def _step_summary(entry):
     return " | ".join(parts)
 
 
-def _write_log(game_log):
-    """Persist the full game log to logs/watch_TIMESTAMP.json and return the path."""
+def _write_log(game_log, run_id):
+    """Persist the full game log to logs/<run_id>.json and return the path."""
     LOG_DIR.mkdir(exist_ok=True)
-    ts = datetime.now().strftime("%Y%m%d_%H%M%S")
-    log_path = LOG_DIR / f"watch_{ts}.json"
+    log_path = LOG_DIR / f"{run_id}.json"
     with open(log_path, "w") as f:
         json.dump(game_log, f, indent=2)
     return log_path
+
+
+def _write_run_record(record):
+    """Write a compact per-run summary dict to runs/<run_id>.json."""
+    RUNS_DIR.mkdir(exist_ok=True)
+    path = RUNS_DIR / f"{record['run_id']}.json"
+    with open(path, "w") as f:
+        json.dump(record, f, indent=2)
+    return path
 
 
 def run(steps=50, verbose=False):
@@ -99,6 +113,7 @@ def run(steps=50, verbose=False):
     if verbose and llm is None:
         print("WARNING: LLM not loaded — extraction will return {}.", file=sys.stderr)
 
+    run_id = f"watch_{datetime.now().strftime('%Y%m%d_%H%M%S')}"
     state = make_initial_state()
     findings = []
 
@@ -150,9 +165,23 @@ def run(steps=50, verbose=False):
     finally:
         if child.isalive():
             child.close()
-        log_path = _write_log(state["game_log"])
+        steps_run = len(state["game_log"])
+        outcome = classify_run(state["game_log"], findings, state.get("current_score"))
+        run_record = {
+            "run_id": run_id,
+            "outcome": outcome,
+            "final_score": state.get("current_score"),
+            "max_score": state.get("max_score"),
+            "steps": steps_run,
+            "futile_edges": [list(e) for e in sorted(state.get("futile_edges", set()))],
+        }
+        log_path = _write_log(state["game_log"], run_id)
+        run_path = _write_run_record(run_record)
+        merge_run_record(run_record, STRATEGY_PATH)
         if verbose:
-            print(f"\nFull log written to {log_path}", file=sys.stderr)
+            print(f"\nOutcome: {outcome}", file=sys.stderr)
+            print(f"Full log written to {log_path}", file=sys.stderr)
+            print(f"Run record written to {run_path}", file=sys.stderr)
             print(f"Done. {len(findings)} finding(s).", file=sys.stderr)
 
     return findings

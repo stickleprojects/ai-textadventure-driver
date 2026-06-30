@@ -4,16 +4,21 @@ import pytest
 import networkx as nx
 
 from agent import (
+    _compute_utility,
     _detect_loop,
     _is_failure_response,
     _is_hard_failure,
     _is_soft_failure,
+    _mark_edge_futile,
+    _nav_command,
     _parse_inspection_action,
     _record_verb_outcome,
+    _snapshot_state,
     determine_next_action,
     process_agent_step,
     update_graph,
 )
+from game_config import config
 from tests.conftest import make_state
 
 
@@ -407,3 +412,279 @@ class TestStuckAnomalyLoop:
              patch("agent.extract_knowledge", return_value={"resolved_anomalies": ["rubbish"]}):
             process_agent_step(state, stub_child, None)
         assert "rubbish" not in state["unresolved_anomalies"]
+
+
+# ── utility tagging (_compute_utility + process_agent_step integration) ───────
+
+class TestComputeUtility:
+    def _snap(self, room="Hall", entities=0, npcs=0, inventory=0):
+        return {"room": room, "entity_count": entities, "npc_count": npcs, "inventory_count": inventory}
+
+    def test_room_change_is_productive(self):
+        before = self._snap(room="Hall")
+        after = self._snap(room="Courtyard")
+        assert _compute_utility("north", "You go north.", before, after, None, None, {}) == "productive"
+
+    def test_new_entity_is_productive(self):
+        before = self._snap(entities=0)
+        after = self._snap(entities=1)
+        assert _compute_utility("look", "You see a sword.", before, after, None, None, {}) == "productive"
+
+    def test_new_npc_is_productive(self):
+        before = self._snap(npcs=0)
+        after = self._snap(npcs=1)
+        assert _compute_utility("look", "A knight is here.", before, after, None, None, {}) == "productive"
+
+    def test_new_inventory_item_is_productive(self):
+        before = self._snap(inventory=0)
+        after = self._snap(inventory=1)
+        assert _compute_utility("take sword", "Taken.", before, after, "take", "sword", {}) == "productive"
+
+    def test_hard_failure_with_no_state_change_is_futile(self):
+        snap = self._snap()
+        assert _compute_utility("north", "You can't do that.", snap, snap, None, None, {}) == "futile"
+
+    def test_first_examine_with_no_state_change_is_informative(self):
+        snap = self._snap()
+        # verb not in pre_verb_outcomes → informative
+        assert _compute_utility("examine sword", "A fine blade.", snap, snap, "examine", "sword", {}) == "informative"
+
+    def test_repeated_examine_is_redundant(self):
+        snap = self._snap()
+        pre = {"examine": "succeeded"}
+        assert _compute_utility("examine sword", "A fine blade.", snap, snap, "examine", "sword", pre) == "redundant"
+
+    def test_look_with_no_target_is_informative(self):
+        snap = self._snap()
+        assert _compute_utility("look", "You are in the Hall.", snap, snap, None, None, {}) == "informative"
+
+    def test_productive_beats_hard_failure(self):
+        # If room changed despite a confusing failure message, still productive
+        before = self._snap(room="Hall")
+        after = self._snap(room="Courtyard")
+        assert _compute_utility("north", "Nothing happens. You stumble through.", before, after, None, None, {}) == "productive"
+
+
+class TestUtilityTaggedInLog:
+    def test_futile_direction_tagged_in_log(self, stub_child):
+        state = make_state(current_room="Hall")
+        state["world_graph"].add_node("Hall")
+        state["world_graph"].add_edge("Hall", "Unknown (north from Hall)", label="north")
+        with patch("agent.execute_game_command", return_value="You can't do that."), \
+             patch("agent.extract_knowledge", return_value={}):
+            process_agent_step(state, stub_child, None)
+        assert state["game_log"][-1]["utility"] == "futile"
+
+    def test_room_change_tagged_productive(self, stub_child):
+        state = make_state(current_room="Hall")
+        state["world_graph"].add_node("Hall")
+        state["world_graph"].add_edge("Hall", "Unknown (north from Hall)", label="north")
+        with patch("agent.execute_game_command", return_value="You go north."), \
+             patch("agent.extract_knowledge", return_value={"room": "Courtyard", "exits": []}):
+            process_agent_step(state, stub_child, None)
+        assert state["game_log"][-1]["utility"] == "productive"
+
+    def test_first_examine_tagged_informative(self, stub_child):
+        state = make_state(
+            current_room="Hall",
+            current_inspection={"target": "sword", "sequence": ["examine"], "step_index": 0},
+            known_entities={"sword": {"status": "held", "location": "Hall", "verb_outcomes": {}}},
+        )
+        with patch("agent.execute_game_command", return_value="A fine blade."), \
+             patch("agent.extract_knowledge", return_value={}):
+            process_agent_step(state, stub_child, None)
+        assert state["game_log"][-1]["utility"] == "informative"
+
+    def test_repeated_examine_tagged_redundant(self, stub_child):
+        state = make_state(
+            current_room="Hall",
+            current_inspection={"target": "sword", "sequence": ["examine"], "step_index": 0},
+            known_entities={"sword": {"status": "held", "location": "Hall", "verb_outcomes": {"examine": "succeeded"}}},
+        )
+        with patch("agent.execute_game_command", return_value="A fine blade."), \
+             patch("agent.extract_knowledge", return_value={}):
+            process_agent_step(state, stub_child, None)
+        assert state["game_log"][-1]["utility"] == "redundant"
+
+
+# ── futile_edges ──────────────────────────────────────────────────────────────
+
+class TestMarkEdgeFutile:
+    def test_adds_to_futile_edges_set(self):
+        state = make_state(current_room="Hall")
+        state["world_graph"].add_node("Hall")
+        state["world_graph"].add_edge("Hall", "Unknown (north from Hall)", label="north")
+        _mark_edge_futile(state, "Hall", "north")
+        assert ("Hall", "north") in state["futile_edges"]
+
+    def test_tags_graph_edge_data(self):
+        state = make_state(current_room="Hall")
+        state["world_graph"].add_node("Hall")
+        state["world_graph"].add_edge("Hall", "Unknown (north from Hall)", label="north")
+        _mark_edge_futile(state, "Hall", "north")
+        data = state["world_graph"].get_edge_data("Hall", "Unknown (north from Hall)")
+        assert data.get("futile") is True
+
+    def test_no_crash_when_edge_absent(self):
+        state = make_state(current_room="Hall")
+        state["world_graph"].add_node("Hall")
+        _mark_edge_futile(state, "Hall", "north")  # edge doesn't exist — should not raise
+        assert ("Hall", "north") in state["futile_edges"]
+
+
+class TestFutileEdgesInNavigation:
+    def test_futile_edge_skipped_prefers_non_futile(self):
+        state = make_state(current_room="Hall")
+        state["world_graph"].add_node("Hall")
+        state["world_graph"].add_edge("Hall", "Unknown (north from Hall)", label="north", futile=True)
+        state["world_graph"].add_edge("Hall", "Unknown (east from Hall)", label="east")
+        state["futile_edges"].add(("Hall", "north"))
+        assert determine_next_action(state) == "east"
+
+    def test_all_exits_futile_falls_through_to_look(self):
+        state = make_state(current_room="Hall")
+        state["world_graph"].add_node("Hall")
+        state["world_graph"].add_edge("Hall", "Unknown (north from Hall)", label="north", futile=True)
+        state["futile_edges"].add(("Hall", "north"))
+        assert determine_next_action(state) == "look"
+
+    def test_known_room_exit_never_skipped(self):
+        state = make_state(current_room="Hall")
+        state["world_graph"].add_node("Hall")
+        state["world_graph"].add_node("Courtyard")
+        state["world_graph"].add_edge("Hall", "Courtyard", label="north")
+        # Even if we incorrectly mark it futile, it won't be picked by the Unknown scan
+        # (it's not an Unknown node — this tests the Unknown filter still works)
+        assert determine_next_action(state) == "look"
+
+
+class TestFutileEdgesMarkedOnStep:
+    def test_futile_direction_marked_after_hard_failure(self, stub_child):
+        state = make_state(current_room="Hall")
+        state["world_graph"].add_node("Hall")
+        state["world_graph"].add_edge("Hall", "Unknown (north from Hall)", label="north")
+        with patch("agent.execute_game_command", return_value="You can't do that."), \
+             patch("agent.extract_knowledge", return_value={}):
+            process_agent_step(state, stub_child, None)
+        assert ("Hall", "north") in state["futile_edges"]
+
+    def test_productive_direction_not_marked_futile(self, stub_child):
+        state = make_state(current_room="Hall")
+        state["world_graph"].add_node("Hall")
+        state["world_graph"].add_edge("Hall", "Unknown (north from Hall)", label="north")
+        with patch("agent.execute_game_command", return_value="You go north."), \
+             patch("agent.extract_knowledge", return_value={"room": "Courtyard", "exits": []}):
+            process_agent_step(state, stub_child, None)
+        assert ("Hall", "north") not in state["futile_edges"]
+
+    def test_non_direction_hard_failure_not_marked(self, stub_child):
+        state = make_state(
+            current_room="Hall",
+            current_inspection={"target": "rock", "sequence": ["eat"], "step_index": 0},
+            known_entities={"rock": {"status": "held", "location": "Hall", "verb_outcomes": {}}},
+        )
+        with patch("agent.execute_game_command", return_value="You can't do that."), \
+             patch("agent.extract_knowledge", return_value={}):
+            process_agent_step(state, stub_child, None)
+        assert len(state["futile_edges"]) == 0
+
+
+# ── navigation config (_nav_command) ─────────────────────────────────────────
+
+class TestNavCommand:
+    def test_fast_template_used_when_configured(self):
+        state = make_state(current_room="Hall")
+        with patch.object(config, "fast_nav_command", "run to {target}"):
+            assert _nav_command(state, "Courtyard", fast=True) == "run to Courtyard"
+
+    def test_full_template_used_when_configured(self):
+        state = make_state(current_room="Hall")
+        with patch.object(config, "full_nav_command", "go to {target}"):
+            assert _nav_command(state, "Courtyard", fast=False) == "go to Courtyard"
+
+    def test_falls_back_to_graph_when_no_template(self):
+        state = make_state(current_room="Hall")
+        state["world_graph"].add_node("Hall")
+        state["world_graph"].add_node("Courtyard")
+        state["world_graph"].add_edge("Hall", "Courtyard", label="north")
+        with patch.object(config, "fast_nav_command", None):
+            assert _nav_command(state, "Courtyard", fast=True) == "north"
+
+    def test_graph_fallback_returns_none_when_no_path(self):
+        state = make_state(current_room="Hall")
+        state["world_graph"].add_node("Hall")
+        with patch.object(config, "fast_nav_command", None):
+            assert _nav_command(state, "Courtyard", fast=True) is None
+
+
+class TestActiveGoalNavigation:
+    def _goal_state(self):
+        g = nx.DiGraph()
+        g.add_node("Hall")
+        g.add_node("Courtyard")
+        g.add_edge("Hall", "Courtyard", label="north")
+        return make_state(
+            current_room="Hall",
+            inventory=["key"],
+            active_goal={"room": "Courtyard", "target": "door", "solution": "key"},
+            world_graph=g,
+        )
+
+    def test_active_goal_emits_fast_nav_when_configured(self):
+        with patch.object(config, "fast_nav_command", "run to {target}"):
+            assert determine_next_action(self._goal_state()) == "run to Courtyard"
+
+    def test_active_goal_falls_back_to_graph_step_when_no_template(self):
+        with patch.object(config, "fast_nav_command", None):
+            assert determine_next_action(self._goal_state()) == "north"
+
+
+# ── pending_npc_tasks ─────────────────────────────────────────────────────────
+
+class TestPendingNpcTasks:
+    def test_wait_command_emitted_when_task_pending_and_nothing_else(self):
+        state = make_state(
+            pending_npc_tasks=[
+                {"npc": "Denzyl", "task_description": "fetch the spear", "wait_command": "wait for denzyl"},
+            ]
+        )
+        assert determine_next_action(state) == "wait for denzyl"
+
+    def test_first_task_wait_command_used_when_multiple_pending(self):
+        state = make_state(
+            pending_npc_tasks=[
+                {"npc": "Denzyl", "task_description": "fetch spear", "wait_command": "wait for denzyl"},
+                {"npc": "Gripper", "task_description": "find key", "wait_command": "wait for gripper"},
+            ]
+        )
+        assert determine_next_action(state) == "wait for denzyl"
+
+    def test_empty_pending_tasks_falls_through_to_look(self):
+        assert determine_next_action(make_state()) == "look"
+
+    def test_inspection_takes_priority_over_pending_task(self):
+        state = make_state(
+            current_inspection={"target": "sword", "sequence": ["examine"], "step_index": 0},
+            known_entities={"sword": {"status": "held", "location": "Hall", "verb_outcomes": {}}},
+            pending_npc_tasks=[
+                {"npc": "Denzyl", "task_description": "fetch spear", "wait_command": "wait for denzyl"},
+            ],
+        )
+        assert determine_next_action(state) == "examine sword"
+
+    def test_unknown_exit_takes_priority_over_pending_task(self):
+        state = make_state(current_room="Hall")
+        state["world_graph"].add_node("Hall")
+        state["world_graph"].add_edge("Hall", "Unknown (north from Hall)", label="north")
+        state["pending_npc_tasks"] = [
+            {"npc": "Denzyl", "task_description": "fetch spear", "wait_command": "wait for denzyl"},
+        ]
+        assert determine_next_action(state) == "north"
+
+    def test_config_loads_wait_for_command(self, tmp_path):
+        cfg_file = tmp_path / "game.json"
+        cfg_file.write_text('{"npc_commands": {"wait_for_command": "wait for {npc}"}}')
+        from game_config import GameConfig
+        cfg = GameConfig()
+        cfg.load_from_file(cfg_file)
+        assert cfg.wait_for_command == "wait for {npc}"
