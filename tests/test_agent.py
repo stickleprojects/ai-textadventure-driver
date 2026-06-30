@@ -1,6 +1,7 @@
 from unittest.mock import patch, PropertyMock
 
 import pytest
+import networkx as nx
 
 from agent import (
     _detect_loop,
@@ -11,6 +12,7 @@ from agent import (
     _record_verb_outcome,
     determine_next_action,
     process_agent_step,
+    update_graph,
 )
 from tests.conftest import make_state
 
@@ -341,3 +343,65 @@ class TestProcessAgentStepOutcomes:
             process_agent_step(state, stub_child, None)
         assert "horse" not in state["uninspected_objects"]
         assert "horse" not in state["known_entities"]
+
+
+# ── issue 19 regression tests ─────────────────────────────────────────────────
+
+class TestNullRoomHandling:
+    def test_null_room_in_extracted_does_not_overwrite_current_room(self, stub_child):
+        state = make_state(current_room="Dingy Stable")
+        with patch("agent.execute_game_command", return_value="Nothing happens."), \
+             patch("agent.extract_knowledge", return_value={"room": None, "exits": []}):
+            process_agent_step(state, stub_child, None)
+        assert state["current_room"] == "Dingy Stable"
+
+    def test_absent_room_in_extracted_does_not_overwrite_current_room(self, stub_child):
+        state = make_state(current_room="Dingy Stable")
+        with patch("agent.execute_game_command", return_value="Taken."), \
+             patch("agent.extract_knowledge", return_value={"added_to_inventory": ["key"]}):
+            process_agent_step(state, stub_child, None)
+        assert state["current_room"] == "Dingy Stable"
+
+    def test_update_graph_none_room_is_a_no_op(self):
+        state = make_state(current_room="Hall")
+        initial_nodes = set(state["world_graph"].nodes)
+        update_graph(state, None, ["north"], "Hall", "north")
+        assert set(state["world_graph"].nodes) == initial_nodes
+
+
+class TestStuckAnomalyLoop:
+    def test_hard_failure_on_goal_action_removes_anomaly(self, stub_child):
+        g = nx.DiGraph()
+        g.add_node("Garbage Pile")
+        state = make_state(
+            current_room="Garbage Pile",
+            inventory=["putty knife"],
+            unresolved_anomalies={"rubbish": {
+                "room": "Garbage Pile",
+                "reason": "blocking path",
+                "potential_solution": "putty knife",
+            }},
+            world_graph=g,
+        )
+        with patch("agent.execute_game_command", return_value="Nothing happens."), \
+             patch("agent.extract_knowledge", return_value={}):
+            process_agent_step(state, stub_child, None)
+        assert "rubbish" not in state["unresolved_anomalies"]
+
+    def test_success_on_goal_action_keeps_anomaly_for_llm_to_resolve(self, stub_child):
+        g = nx.DiGraph()
+        g.add_node("Garbage Pile")
+        state = make_state(
+            current_room="Garbage Pile",
+            inventory=["putty knife"],
+            unresolved_anomalies={"rubbish": {
+                "room": "Garbage Pile",
+                "reason": "blocking path",
+                "potential_solution": "putty knife",
+            }},
+            world_graph=g,
+        )
+        with patch("agent.execute_game_command", return_value="The rubbish clears."), \
+             patch("agent.extract_knowledge", return_value={"resolved_anomalies": ["rubbish"]}):
+            process_agent_step(state, stub_child, None)
+        assert "rubbish" not in state["unresolved_anomalies"]
