@@ -1,6 +1,10 @@
 {
   "futile_edges": [
     [
+      "alder clump",
+      "east"
+    ],
+    [
       "pile of garbage",
       "north"
     ]
@@ -24,6 +28,16 @@
     {
       "run_id": "watch_20260701_081328",
       "outcome": "interrupted",
+      "final_score": null
+    },
+    {
+      "run_id": "watch_20260701_083519",
+      "outcome": "agent_failure",
+      "final_score": null
+    },
+    {
+      "run_id": "watch_20260701_085624",
+      "outcome": "agent_failure",
       "final_score": null
     }
   ],
@@ -72,6 +86,38 @@
     },
     "furry bread": {
       "take": "invalid"
+    },
+    "flagpole": {
+      "eat": "invalid",
+      "drink": "invalid",
+      "open": "invalid",
+      "close": "invalid",
+      "unlock": "invalid",
+      "lock": "invalid",
+      "pull": "invalid",
+      "turn on": "invalid",
+      "turn off": "invalid"
+    },
+    "halyard": {
+      "wear": "invalid",
+      "eat": "invalid",
+      "drink": "invalid",
+      "open": "invalid",
+      "close": "invalid",
+      "unlock": "invalid",
+      "lock": "invalid",
+      "turn on": "invalid"
+    },
+    "golden rod": {
+      "wear": "invalid",
+      "drink": "invalid",
+      "open": "invalid",
+      "close": "invalid",
+      "unlock": "invalid",
+      "lock": "invalid",
+      "pull": "invalid",
+      "turn on": "invalid",
+      "turn off": "invalid"
     }
   }
 }

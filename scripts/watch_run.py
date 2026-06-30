@@ -134,6 +134,8 @@ def run(steps=50, verbose=False):
         print("WARNING: LLM not loaded — extraction will return {}.", file=sys.stderr)
 
     run_id = f"watch_{datetime.now().strftime('%Y%m%d_%H%M%S')}"
+    if verbose:
+        print(f"Run ID: {run_id}", file=sys.stderr)
     state = make_initial_state()
     findings = []
     run_start = time.monotonic()
