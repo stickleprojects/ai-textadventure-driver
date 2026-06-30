@@ -4,6 +4,12 @@ Incorrect or broken behaviour observed during runs. Original issue numbers prese
 
 ## Open
 
+45. maze rooms with non-unique names cause the world graph to collapse distinct locations into a single node, triggering a loop. Observed in the "alder clump" area — multiple distinct rooms share the same name but have different exits; the agent loops because it thinks it has already visited and explored the single "alder clump" node.
+    - **Root cause:** `update_graph` uses the raw room name as the node ID; `state["current_room"]` is set from `extracted["room"]` before exits are known, so there is no opportunity to fingerprint at assignment time
+    - **Fix:** use `room_name + sorted(exits)` as the canonical node ID (e.g. `"alder clump {E,S,SW,W}"`); resolve the fingerprinted ID after exits are extracted and use it for both `state["current_room"]` and the edge from the previous room; display label strips the suffix for readability
+    - **Edge cases:** LLM returns empty exits on first visit (defer fingerprinting until exits are known); exits discovered incrementally across visits (merge into existing fingerprinted node or create new one)
+    - **Effort: Medium | Risk: Medium** — touches `update_graph`, `process_agent_step`, and `state["current_room"]` assignment; needs careful handling of the empty-exits case
+
 38. we see a location of "propet_northeast" — LLM is hallucinating a room name from a direction or property string; prompt needs a rule that room names must be proper nouns from the game narrative, not directions or adjectives
 39. we see a location of "Denzyl" not listed as an npc — LLM is placing an NPC name in the `room` field; prompt should clarify that room must be a place, not a character name; `Denzyl` should appear in `npcs` instead
 
