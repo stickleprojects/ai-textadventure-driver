@@ -178,12 +178,20 @@ def run(steps=50, verbose=False):
                 })
                 break
     except Exception as exc:
+        state["game_log"].append({
+            "timestamp": datetime.now().strftime("%H:%M:%S"),
+            "action": "CRASH",
+            "response": str(exc),
+            "extracted": {},
+            "score": state.get("current_score"),
+            "utility": "crash",
+        })
         findings.append({
             "step": len(state["game_log"]),
             "type": "crash",
             "error": str(exc),
-            "last_action": state["game_log"][-1]["action"] if state["game_log"] else None,
-            "last_response": state["game_log"][-1]["response"] if state["game_log"] else None,
+            "last_action": state["game_log"][-2]["action"] if len(state["game_log"]) > 1 else None,
+            "last_response": state["game_log"][-2]["response"] if len(state["game_log"]) > 1 else None,
         })
         print(f"CRASH at step {len(state['game_log'])}: {exc}", file=sys.stderr)
     finally:

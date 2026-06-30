@@ -39,6 +39,8 @@ def extract_knowledge(text, action_taken, llm_instance):
     - Only set "room" if the game output explicitly names or describes a new location. If the
       response is terse (e.g. "Taken.", "OK.", "You can't do that.") and contains no room name,
       omit "room" entirely. Never infer or guess a room name from the action text or item names.
+    - If examining an object reveals another distinct item (e.g. "fastened to it is a halyard",
+      "inside is a key", "a note is attached"), include that item in "objects" too.
 
     Schema required:
     {{
