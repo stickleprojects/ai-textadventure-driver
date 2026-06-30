@@ -17,7 +17,8 @@
         "nothing happens",
         "that'?s not something",
         "there('?s| is) no \\w+ here",
-        "i don'?t know (that word|what)"
+        "i don'?t know (that word|what)",
+        "don'?t need to use the word"
     ],
     "soft_failure_patterns": [
         "right now",
