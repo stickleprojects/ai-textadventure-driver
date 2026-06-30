@@ -27,7 +27,6 @@ EVAL_CASES = [
         "action": "take sword",
         "game_output": "Taken.",
         "expected": {"added_to_inventory": ["sword"]},
-        "xfail": "issue 13: LLM returns {} for terse confirmations with no room/exits context",
     },
     {
         "id": "no_phantom_inventory",
@@ -40,7 +39,6 @@ EVAL_CASES = [
         "action": "look",
         "game_output": "You are in the Forest Path. Exits: north, east.",
         "expected": {"exits": ["north", "east"]},
-        "xfail": "issue 13: quantized model non-deterministically returns {} for short prompts",
     },
     {
         "id": "knight_is_npc",

@@ -33,6 +33,9 @@ def extract_knowledge(text, action_taken, llm_instance):
     - "you can see X" means X is in the current room — add to "objects" if inanimate, "npcs" if living. It does NOT mean X is in your inventory.
     - Only add to "added_to_inventory" if the game explicitly confirms the item was taken
       (e.g. "Taken.", "You pick up the...", "You take the..."). Seeing an item does not mean it is held.
+    - When the action is "take <item>" and the response is a terse confirmation ("Taken.", "OK."),
+      set added_to_inventory to ["<item>"] — use the item name from the action, not the response.
+    - Always extract exits from phrases like "Exits: north, east" or "you can go north".
     - Only set "room" if the game output explicitly names or describes a new location. If the
       response is terse (e.g. "Taken.", "OK.", "You can't do that.") and contains no room name,
       omit "room" entirely. Never infer or guess a room name from the action text or item names.
@@ -50,6 +53,10 @@ def extract_knowledge(text, action_taken, llm_instance):
         ],
         "resolved_anomalies": ["list of targets that are no longer blocked"]
     }}
+
+    Examples:
+    Action: "take sword"  Output: "Taken."  → {{"added_to_inventory": ["sword"]}}
+    Action: "look"  Output: "Exits: north, east."  → {{"exits": ["north", "east"]}}
 
     Action taken: "{action_taken}"
     Game Output: "{text}"
