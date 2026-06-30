@@ -43,6 +43,10 @@ def test_extraction_case(case, llm_instance):
         violations = set(forbidden) & set(actual_values)
         assert not violations, f"{case['id']}: forbidden values {violations} found in '{field}': {actual_values}"
 
+    for field in case.get("absent", []):
+        value = actual.get(field)
+        assert not value, f"{case['id']}: field '{field}' should be absent/null, got: {value!r}"
+
     scores = []
     for field, expected_value in case["expected"].items():
         actual_value = actual.get(field, [])

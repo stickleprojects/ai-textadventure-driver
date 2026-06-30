@@ -6,3 +6,4 @@ llama-cpp-python
 pexpect
 pytest
 pytest-timeout
+anthropic

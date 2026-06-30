@@ -1,4 +1,20 @@
 EVAL_CASES = [
+    # room hallucination: terse take confirmation should NOT produce a room name
+    {
+        "id": "taken_no_room_hallucination",
+        "action": "take putty knife",
+        "game_output": "Taken.",
+        "expected": {"added_to_inventory": ["putty knife"]},
+        "absent": ["room"],
+    },
+    # terse failure response should produce no room
+    {
+        "id": "failure_no_room_hallucination",
+        "action": "examine putty knife",
+        "game_output": "You can't do that.",
+        "expected": {},
+        "absent": ["room"],
+    },
     {
         "id": "horse_is_npc",
         "action": "look",
