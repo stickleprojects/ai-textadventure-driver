@@ -33,8 +33,9 @@ def execute_game_command(child, command):
         child.sendline(command)
         child.expect(config.prompt_pattern)
         raw_output = child.before
-        if raw_output.startswith(command):
-            raw_output = raw_output[len(command):]
+        trimmed = raw_output.lstrip('\r\n ')
+        if trimmed.startswith(command):
+            raw_output = trimmed[len(command):]
         return clean_level9_output(raw_output)
     except pexpect.TIMEOUT:
         partial = clean_level9_output(child.before) if child.before else "(nothing received)"

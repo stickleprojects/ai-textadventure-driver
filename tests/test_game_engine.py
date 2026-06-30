@@ -37,3 +37,10 @@ def test_command_strips_echo(stub_child):
     stub_child.before = "look\nYou are in a forest."
     result = execute_game_command(stub_child, "look")
     assert result == "You are in a forest."
+
+
+def test_command_strips_echo_with_leading_crlf(stub_child):
+    # pexpect may include \r\n before the echo in some terminal modes
+    stub_child.before = "\r\nwear putty knife\r\nYou can't wear that."
+    result = execute_game_command(stub_child, "wear putty knife")
+    assert result == "You can't wear that."
