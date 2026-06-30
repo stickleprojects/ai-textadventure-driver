@@ -180,6 +180,19 @@ def run(steps=50, verbose=False):
                     ],
                 })
                 break
+    except KeyboardInterrupt:
+        steps_done = len(state["game_log"])
+        print(f"\nInterrupted at step {steps_done} — saving logs...", file=sys.stderr)
+        state["game_log"].append({
+            "timestamp": datetime.now().strftime("%H:%M:%S"),
+            "action": "INTERRUPTED",
+            "response": "Run interrupted by user (Ctrl+C).",
+            "extracted": {},
+            "score": state.get("current_score"),
+            "utility": "interrupted",
+            "token_usage": {"input_tokens": 0, "output_tokens": 0},
+        })
+        findings.append({"step": steps_done, "type": "interrupted"})
     except Exception as exc:
         state["game_log"].append({
             "timestamp": datetime.now().strftime("%H:%M:%S"),

@@ -76,6 +76,16 @@ class TestClassifyRun:
         log = [_log_entry("You are in the forest.")]
         assert classify_run(log, [], final_score=0) == "ambiguous"
 
+    def test_interrupted_outcome(self):
+        log = [_log_entry("You are in the forest.")]
+        findings = [{"type": "interrupted"}]
+        assert classify_run(log, findings) == "interrupted"
+
+    def test_interrupted_takes_priority_over_score(self):
+        log = [_log_entry("You are in the forest.")]
+        findings = [{"type": "interrupted"}]
+        assert classify_run(log, findings, final_score=10) == "interrupted"
+
 
 # ── 10.a — run_evaluator.classify_finding ────────────────────────────────────
 
