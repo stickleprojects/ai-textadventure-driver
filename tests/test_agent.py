@@ -27,6 +27,8 @@ from tests.conftest import make_state
     "That's not something you can take.",
     "There is no sword here.",
     "I don't know that word.",
+    "You don't need to use the word PUSH to finish this part of the game.",
+    "You don't need to use the word EAT to finish this part of the game.",
 ])
 def test_failure_response_detected(text):
     assert _is_failure_response(text)

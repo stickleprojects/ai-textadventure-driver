@@ -42,6 +42,7 @@ class GameConfig:
             r"that'?s not something",
             r"there('?s| is) no \w+ here",
             r"i don'?t know (that word|what)",
+            r"don'?t need to use the word",
         ]
         self._soft_failure_patterns = [
             r"right now",
