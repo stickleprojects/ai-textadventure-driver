@@ -32,5 +32,9 @@
         "death": ["you have died", "you are dead", "killed"],
         "finished": ["congratulations", "you have finished", "the end"],
         "score": ["you score \\d+ out of \\d+"]
+    },
+    "navigation": {
+        "fast_nav_command": "run to {target}",
+        "full_nav_command": "go to {target}"
     }
 }

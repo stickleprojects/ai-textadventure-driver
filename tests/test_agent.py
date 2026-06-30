@@ -10,6 +10,7 @@ from agent import (
     _is_hard_failure,
     _is_soft_failure,
     _mark_edge_futile,
+    _nav_command,
     _parse_inspection_action,
     _record_verb_outcome,
     _snapshot_state,
@@ -17,6 +18,7 @@ from agent import (
     process_agent_step,
     update_graph,
 )
+from game_config import config
 from tests.conftest import make_state
 
 
@@ -585,3 +587,53 @@ class TestFutileEdgesMarkedOnStep:
              patch("agent.extract_knowledge", return_value={}):
             process_agent_step(state, stub_child, None)
         assert len(state["futile_edges"]) == 0
+
+
+# ── navigation config (_nav_command) ─────────────────────────────────────────
+
+class TestNavCommand:
+    def test_fast_template_used_when_configured(self):
+        state = make_state(current_room="Hall")
+        with patch.object(config, "fast_nav_command", "run to {target}"):
+            assert _nav_command(state, "Courtyard", fast=True) == "run to Courtyard"
+
+    def test_full_template_used_when_configured(self):
+        state = make_state(current_room="Hall")
+        with patch.object(config, "full_nav_command", "go to {target}"):
+            assert _nav_command(state, "Courtyard", fast=False) == "go to Courtyard"
+
+    def test_falls_back_to_graph_when_no_template(self):
+        state = make_state(current_room="Hall")
+        state["world_graph"].add_node("Hall")
+        state["world_graph"].add_node("Courtyard")
+        state["world_graph"].add_edge("Hall", "Courtyard", label="north")
+        with patch.object(config, "fast_nav_command", None):
+            assert _nav_command(state, "Courtyard", fast=True) == "north"
+
+    def test_graph_fallback_returns_none_when_no_path(self):
+        state = make_state(current_room="Hall")
+        state["world_graph"].add_node("Hall")
+        with patch.object(config, "fast_nav_command", None):
+            assert _nav_command(state, "Courtyard", fast=True) is None
+
+
+class TestActiveGoalNavigation:
+    def _goal_state(self):
+        g = nx.DiGraph()
+        g.add_node("Hall")
+        g.add_node("Courtyard")
+        g.add_edge("Hall", "Courtyard", label="north")
+        return make_state(
+            current_room="Hall",
+            inventory=["key"],
+            active_goal={"room": "Courtyard", "target": "door", "solution": "key"},
+            world_graph=g,
+        )
+
+    def test_active_goal_emits_fast_nav_when_configured(self):
+        with patch.object(config, "fast_nav_command", "run to {target}"):
+            assert determine_next_action(self._goal_state()) == "run to Courtyard"
+
+    def test_active_goal_falls_back_to_graph_step_when_no_template(self):
+        with patch.object(config, "fast_nav_command", None):
+            assert determine_next_action(self._goal_state()) == "north"

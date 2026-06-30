@@ -103,6 +103,14 @@ def get_next_move_to_target(state, target_room):
         return None
 
 
+def _nav_command(state, target, fast=True):
+    """Return a navigation command using the game's native nav if configured, else graph-based."""
+    template = config.fast_nav_command if fast else config.full_nav_command
+    if template:
+        return template.format(target=target)
+    return get_next_move_to_target(state, target)
+
+
 def determine_next_action(state):
     """Returns the next command string based on agent priority logic."""
     if state["active_goal"]:
@@ -113,7 +121,7 @@ def determine_next_action(state):
             verb = "cast" if solution in state["spellbook"] else "use"
             state["active_goal"] = None
             return f"{verb} {solution} on {target}"
-        move = get_next_move_to_target(state, target_room)
+        move = _nav_command(state, target_room, fast=True)
         if move:
             return move
         state["active_goal"] = None

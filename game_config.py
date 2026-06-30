@@ -14,6 +14,10 @@ JSON schema (all keys optional — missing keys keep their defaults):
         "death":    [str],
         "finished": [str],
         "score":    [str]
+    },
+    "navigation": {
+        "fast_nav_command":   string  — template for fast navigation (e.g. "run to {target}"); omit to use graph-based step-by-step
+        "full_nav_command":   string  — template for full navigation showing intermediate rooms (e.g. "go to {target}"); omit to use graph-based
     }
 }
 
@@ -67,6 +71,8 @@ class GameConfig:
             k: [re.compile(p, re.IGNORECASE) for p in patterns]
             for k, patterns in self._DEFAULT_END_STATE_PATTERNS.items()
         }
+        self.fast_nav_command = None  # e.g. "run to {target}"
+        self.full_nav_command = None  # e.g. "go to {target}"
         self._compile()
 
     def _compile(self):
@@ -114,6 +120,12 @@ class GameConfig:
                 k: [re.compile(p, re.IGNORECASE) for p in patterns]
                 for k, patterns in data["end_state_patterns"].items()
             }
+        if "navigation" in data:
+            nav = data["navigation"]
+            if "fast_nav_command" in nav:
+                self.fast_nav_command = nav["fast_nav_command"]
+            if "full_nav_command" in nav:
+                self.full_nav_command = nav["full_nav_command"]
 
 
 config = GameConfig()
