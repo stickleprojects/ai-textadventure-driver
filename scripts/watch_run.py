@@ -42,6 +42,9 @@ MODEL_PATH = os.environ.get("EVAL_MODEL_PATH", "../models/Phi-3.5-mini-instruct-
 LOG_DIR = Path("logs")
 RUNS_DIR = Path("runs")
 STRATEGY_PATH = os.environ.get("GAME_STRATEGY", "configs/knight_orc_strategy.json")
+# Cost per million tokens — set to forecast cloud API spend; 0 = local/free
+LLM_INPUT_PRICE_PER_MILLION = float(os.environ.get("LLM_INPUT_PRICE_PER_MILLION", "0"))
+LLM_OUTPUT_PRICE_PER_MILLION = float(os.environ.get("LLM_OUTPUT_PRICE_PER_MILLION", "0"))
 
 
 def make_initial_state(strategy_path=STRATEGY_PATH):
@@ -213,11 +216,20 @@ def run(steps=50, verbose=False):
             "futile_edges": [list(e) for e in sorted(state.get("futile_edges", set()))],
             "entity_verb_outcomes": entity_verb_outcomes,
         }
+        total_input = sum(e.get("token_usage", {}).get("input_tokens", 0) for e in state["game_log"])
+        total_output = sum(e.get("token_usage", {}).get("output_tokens", 0) for e in state["game_log"])
+        run_record["token_usage"] = {"input_tokens": total_input, "output_tokens": total_output}
+
         log_path = _write_log(state["game_log"], run_id)
         run_path = _write_run_record(run_record)
         merge_run_record(run_record, STRATEGY_PATH)
         if verbose:
             print(f"\nOutcome: {outcome}", file=sys.stderr)
+            print(f"Tokens: {total_input:,} in / {total_output:,} out", file=sys.stderr)
+            if LLM_INPUT_PRICE_PER_MILLION or LLM_OUTPUT_PRICE_PER_MILLION:
+                cost = (total_input * LLM_INPUT_PRICE_PER_MILLION
+                        + total_output * LLM_OUTPUT_PRICE_PER_MILLION) / 1_000_000
+                print(f"Estimated cost: ${cost:.4f}", file=sys.stderr)
             print(f"Full log written to {log_path}", file=sys.stderr)
             print(f"Run record written to {run_path}", file=sys.stderr)
             print(f"Done. {len(findings)} finding(s).", file=sys.stderr)
