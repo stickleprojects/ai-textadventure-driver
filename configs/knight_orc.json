@@ -18,7 +18,17 @@
         "that'?s not something",
         "there('?s| is) no \\w+ here",
         "i don'?t know (that word|what)",
-        "don'?t need to use the word"
+        "don'?t need to use the word",
+        "You can't eat that",
+        "You can't drink that",
+        "You can't wear that",
+        "You can't take that",
+        "You can't open that",
+        "You can't close that",
+        "Yeuch!",
+        "What a peculiar idea.",
+        "Cannot drink",
+        "Strange concept"
     ],
     "soft_failure_patterns": [
         "right now",
@@ -26,7 +36,8 @@
         "(you'?re|you are) already (wearing|carrying|holding)",
         "while (you'?re|you are) (wearing|carrying|holding)",
         "can'?t do that yet",
-        "not yet"
+        "not yet",
+        "can'?t[^.\\n]{0,80}because"
     ],
     "end_state_patterns": {
         "death": ["you have died", "you are dead", "killed"],

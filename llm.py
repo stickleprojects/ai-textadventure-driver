@@ -26,6 +26,9 @@ def extract_knowledge(text, action_taken, llm_instance):
     Analyze the text adventure game output and extract environment data in strict JSON.
     Track inventory additions, learned magic, and physical/magical blockers (anomalies).
 
+    Useful notes:
+    - If the response has "Exits lead in all directions" or "Exits lead in every direction", treat it as a special case and set exits to ["north", "south", "east", "west", "up", "down"].
+
     IMPORTANT distinctions:
     - "objects" are inanimate items only (sword, key, stone, pool, door, chest...)
     - "npcs" are living creatures or characters (horse, knight, orc, guard, man, woman...)
@@ -39,6 +42,8 @@ def extract_knowledge(text, action_taken, llm_instance):
     - Only set "room" if the game output explicitly names or describes a new location. If the
       response is terse (e.g. "Taken.", "OK.", "You can't do that.") and contains no room name,
       omit "room" entirely. Never infer or guess a room name from the action text or item names.
+    - If examining an object reveals another distinct item (e.g. "fastened to it is a halyard",
+      "inside is a key", "a note is attached"), include that item in "objects" too.
 
     Schema required:
     {{

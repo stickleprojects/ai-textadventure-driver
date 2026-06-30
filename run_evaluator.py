@@ -71,17 +71,19 @@ def load_strategy(strategy_path):
     """Load accumulated strategy from file. Returns empty defaults if file absent.
 
     Returns dict with:
-        futile_edges  — set of (room, direction) tuples
-        run_history   — list of {run_id, outcome, final_score} dicts
+        futile_edges         — set of (room, direction) tuples
+        run_history          — list of {run_id, outcome, final_score} dicts
+        entity_verb_outcomes — {entity_name: {verb: "invalid"}} persisted hard failures
     """
     path = Path(strategy_path)
     if not path.exists():
-        return {"futile_edges": set(), "run_history": []}
+        return {"futile_edges": set(), "run_history": [], "entity_verb_outcomes": {}}
     with open(path) as f:
         data = json.load(f)
     return {
         "futile_edges": {tuple(e) for e in data.get("futile_edges", [])},
         "run_history": data.get("run_history", []),
+        "entity_verb_outcomes": data.get("entity_verb_outcomes", {}),
     }
 
 
@@ -96,6 +98,14 @@ def merge_run_record(run_record, strategy_path):
     new_edges = {tuple(e) for e in run_record.get("futile_edges", [])}
     strategy["futile_edges"] |= new_edges
 
+    # Union invalid (hard-failure) verb outcomes — blocked outcomes are state-dependent
+    # and must not be persisted, as they may succeed in a future run.
+    for entity, verbs in run_record.get("entity_verb_outcomes", {}).items():
+        existing = strategy["entity_verb_outcomes"].setdefault(entity, {})
+        for verb, outcome in verbs.items():
+            if outcome == "invalid":
+                existing[verb] = "invalid"
+
     strategy["run_history"].append({
         "run_id": run_record["run_id"],
         "outcome": run_record["outcome"],
@@ -109,6 +119,7 @@ def merge_run_record(run_record, strategy_path):
             {
                 "futile_edges": [list(e) for e in sorted(strategy["futile_edges"])],
                 "run_history": strategy["run_history"],
+                "entity_verb_outcomes": strategy["entity_verb_outcomes"],
             },
             f,
             indent=2,

@@ -343,6 +343,26 @@ class TestProcessAgentStepOutcomes:
             process_agent_step(state, stub_child, None)
         assert state["known_entities"]["hat"]["verb_outcomes"].get("wear") == "succeeded"
 
+    def test_hard_failure_does_not_add_to_inventory(self, stub_child):
+        # LLM hallucinates added_to_inventory from the command echo when the game
+        # says "You don't need to use the word X" — inventory must not be updated.
+        state = make_state(uninspected_objects=["fish-heads"])
+        state["known_entities"]["fish-heads"] = {"status": "discovered", "location": "Hall", "verb_outcomes": {}}
+        response = "Take fish-heads\nYou don't need to use the word \"fish-heads\" to finish this part of the game."
+        with patch("agent.execute_game_command", return_value=response), \
+             patch("agent.extract_knowledge", return_value={"added_to_inventory": ["fish-heads"]}):
+            process_agent_step(state, stub_child, None)
+        assert "fish-heads" not in state["inventory"]
+
+    def test_hard_failure_with_hallucinated_inventory_is_futile(self, stub_child):
+        state = make_state(uninspected_objects=["fish-heads"])
+        state["known_entities"]["fish-heads"] = {"status": "discovered", "location": "Hall", "verb_outcomes": {}}
+        response = "Take fish-heads\nYou don't need to use the word \"fish-heads\" to finish this part of the game."
+        with patch("agent.execute_game_command", return_value=response), \
+             patch("agent.extract_knowledge", return_value={"added_to_inventory": ["fish-heads"]}):
+            process_agent_step(state, stub_child, None)
+        assert state["game_log"][-1]["utility"] == "futile"
+
     def test_npc_not_added_to_inspection_queue(self, stub_child):
         state = make_state(known_npcs={"horse": {"location": "Stable", "greeted": False}})
         with patch("agent.execute_game_command", return_value="A horse is here."), \
