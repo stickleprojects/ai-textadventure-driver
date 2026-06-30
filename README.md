@@ -116,6 +116,8 @@ pytest tests/test_game_engine.py tests/test_agent.py -v
 pytest tests/test_evals.py -m llm -v
 # Override model path or pass threshold:
 EVAL_MODEL_PATH=../models/my-model.gguf EVAL_THRESHOLD=0.8 pytest tests/test_evals.py -m llm -v
+# Run a single eval case by ID:
+pytest "tests/test_evals.py::test_extraction_case[handles_you_dont_need_to_use_the_word]" -v -m llm
 ```
 
 ### Full suite minus LLM evals
