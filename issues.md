@@ -41,3 +41,36 @@
       - Cross-run strategy store: records what was tried, what was observed, what worked — feeds back into the next run's decision making
     - **Relationship to issue 10:** this is the concrete motivating example for issue 10's part (c) (cross-run learning). Recommend resolving issue 10 parts (a) and (b) first (death/end detection, scoring), then using this as the target for part (c).
     - **Effort: Very High | Risk: Very High**
+22. the LLM extraction schema has no way to detect NPC movement events — NPCs wander independently each game tick and may appear in or leave the current room at any time. Without this, `known_npcs` locations go stale immediately and the agent cannot react to an NPC arriving or departing.
+    - Add `npc_arrivals: ["Denzyl"]` — NPC appeared in current room (walked in, arrived, etc.)
+    - Add `npc_departures: [{"npc": "Denzyl", "direction": "north", "destination": "inside"}]` — NPC left; direction and destination are both optional (game may say "goes north" or "goes inside")
+    - Agent effects: arrivals update `known_npcs[npc].location = current_room`; departures mark location stale
+    - For KO the agent responds to a departure with `run to <npc>` (simplest; no known advantage to `follow` or `go <destination>` instead)
+    - NPCs stay in a room for 1–3 ticks; speaking to them anchors them temporarily (issue 2)
+    - **Effort: Low | Risk: Low** — schema addition + two new branches in `process_agent_step`
+23. the LLM extraction schema cannot detect inventory transfers initiated by NPCs — items given to the agent by an NPC ("Denzyl gives you the spear") are not added to inventory, and items stolen by an NPC ("The troll steals the gold plate") are not removed. Both corrupt agent state silently.
+    - Add `received_from_npc: [{"item": "spear", "npc": "Denzyl"}]` — item enters inventory via NPC; agent adds to `inventory`, resolves matching `pending_npc_task` if present
+    - Add `taken_by_npc: [{"item": "gold plate", "npc": "troll"}]` — item leaves inventory involuntarily; agent removes from `inventory`, optionally adds anomaly (`troll has the gold plate`)
+    - **Effort: Low | Risk: Low** — schema addition + inventory mutation in `process_agent_step`; anomaly creation on theft is optional but useful
+24. game-specific navigation and interaction commands are hardcoded in `determine_next_action` rather than declared in config, making the agent Knight Orc-specific. Other games without `run to` / `go to` / `follow` support cannot benefit from these optimisations and have no fallback documented.
+    - Add `navigation` block to `game_config.json`: `fast_nav_command` (`"run to {target}"`) and `full_nav_command` (`"go to {target}"`) — both optional; absent means use graph-based step-by-step fallback
+    - Add `npc_commands` block: `follow_command` (`"follow {npc}"`), `wait_for_command` (`"wait for {npc}"`)
+    - Add `item_commands` block: `drop_command` (`"drop {item}"`), `give_command` (`"give {item} to {npc}"`)
+    - `GameConfig` exposes each as `str | None`; agent uses them when present, falls back to generic approach when absent
+    - `_nav_command(state, target, fast=True)` helper in `agent.py` replaces `get_next_move_to_target` for goal navigation
+    - Navigation section already planned in issue 10c build order; this issue tracks the full command config surface
+    - **Effort: Low | Risk: Low** — config + `GameConfig` additions; agent logic changes are small
+25. the agent has no way to detect or respond to route blockages reported by the game ("You are blocked by the drawbridge"). These are distinct from hard failures on objects — the verb is valid but a specific obstacle is preventing movement along a known path.
+    - Add `blocked_by: [{"obstacle": "drawbridge", "blocking": "route to castle"}]` to extraction schema
+    - Agent effect: mark the relevant graph edge as futile (skip in unknown-exit scan) OR add as anomaly with `potential_solution: null` so the pipeline can resolve it when a solution is known
+    - Distinguish from `hard_failure_patterns` which are object-level refusals — blockage is navigation-level and potentially temporary
+    - **Effort: Low | Risk: Low** — schema addition + one new branch in `process_agent_step`; overlaps with `futile_edges` work in issue 10c
+26. add pipeline and quality gates to ensure the docs are good standard and the python tests pass
+27. the agent re-learns verb failures from scratch on every run — on first encountering a fence it tries `read`, `wear`, `eat`, `drink`, `lock`, etc., all of which fail, wasting many steps. These failures should be persisted in `knight_orc_strategy.json` and pre-loaded at startup so subsequent runs skip verbs already known to be permanently invalid for a given object type.
+    - Extend strategy merge in `run_evaluator.merge_run_record()` to include `entity_verb_outcomes: {object_name: {verb: outcome}}` — union of `invalid` outcomes across runs, keyed by object name rather than instance
+    - Extend `make_initial_state()` to pre-populate `known_entities` with persisted `invalid` outcomes at startup
+    - **Only persist `invalid` (hard failure) outcomes** — `blocked` outcomes (soft failures) must not be persisted because they are state-dependent and may succeed in a future run (e.g. when the agent has the right item or the right game state)
+    - Edge case: some responses containing "can't" are actually state-dependent, not permanent — e.g. "you can't read the text because it's too small" (needs a magnifying glass) or "you can't push that right now" (obstacle is temporary). These should be classified as `blocked`, not `invalid`, so they are retried rather than permanently skipped. Review `hard_failure_patterns` to ensure reason-qualified refusals ("can't ... because", "can't ... right now") are routed to `blocked` rather than `invalid`.
+    - A `blocked` outcome may also be a puzzle hint worth extracting as an anomaly — "too small to read" implies a solution item exists; this could feed the anomaly pipeline.
+    - **Effort: Medium | Risk: Low** — strategy file schema extension + `make_initial_state` change + soft/hard failure pattern review; no agent logic changes
+    - **How will we know it worked?** On run 1 a fence still gets all verbs tried. After run 1, `knight_orc_strategy.json` contains `"entity_verb_outcomes": {"fence": {"read": "invalid", "wear": "invalid", ...}}`. On run 2, `examine fence` / `push fence` etc. appear but `read fence`, `wear fence`, `eat fence` do not. Over several runs, the wasted-verb steps for repeatedly-seen objects drop to near zero.

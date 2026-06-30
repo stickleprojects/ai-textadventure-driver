@@ -1,0 +1,15 @@
+{
+  "futile_edges": [
+    [
+      "pile of garbage",
+      "north"
+    ]
+  ],
+  "run_history": [
+    {
+      "run_id": "watch_20260630_182818",
+      "outcome": "ambiguous",
+      "final_score": null
+    }
+  ]
+}
