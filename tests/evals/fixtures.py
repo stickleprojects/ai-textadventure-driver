@@ -47,4 +47,16 @@ EVAL_CASES = [
         "expected": {"objects": ["key"], "npcs": ["knight"]},
         "must_not": {"objects": ["knight"]},
     },
+    {
+        "id": "exits_all_directions",
+        "action": "look",
+        "game_output": "You are in a dismal fairground. Exits lead in all directions.",
+        "expected": {"exits": ["north", "south", "east", "west"]},
+    },
+    {
+        "id": "sub_object_from_examine",
+        "action": "examine flagpole",
+        "game_output": "It is an ugly white post, a hundred feet tall. Fastened to it is a halyard.",
+        "expected": {"objects": ["halyard"]},
+    },
 ]
