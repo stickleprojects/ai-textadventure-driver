@@ -21,7 +21,6 @@ import argparse
 import json
 import os
 import sys
-from collections import Counter
 from datetime import datetime
 from pathlib import Path
 
@@ -30,6 +29,7 @@ import networkx as nx
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
 from game_config import config
+from log_analyzer import analyze_log
 from agent import process_agent_step
 from game_engine import start_level9
 from llm import load_llm
@@ -59,92 +59,6 @@ def _make_initial_state():
         "game_log": [],
         "is_running": False,
     }
-
-
-def analyze_log(game_log):
-    issues = []
-    n = len(game_log)
-    if n == 0:
-        return [{"type": "no_steps", "description": "No steps were recorded — startup may have failed"}]
-
-    # Empty LLM extractions
-    empty = [e for e in game_log if not e["extracted"]]
-    if empty:
-        issues.append({
-            "type": "empty_llm_extraction",
-            "count": len(empty),
-            "pct": round(100 * len(empty) / n),
-            "description": f"LLM returned empty dict on {len(empty)}/{n} steps ({round(100*len(empty)/n)}%)",
-            "example_inputs": [e["response"][:120] for e in empty[:3]],
-        })
-
-    # Loop detection fires
-    loops = [e for e in game_log if e.get("loop_detected")]
-    if loops:
-        issues.append({
-            "type": "loop_detected",
-            "count": len(loops),
-            "looping_actions": list({e["loop_detected"] for e in loops}),
-            "description": "Agent got stuck repeating the same action",
-        })
-
-    # Timeouts / critical errors
-    timeouts = [e for e in game_log if "WARNING" in e["response"] or "CRITICAL" in e["response"]]
-    if timeouts:
-        issues.append({
-            "type": "command_timeout_or_error",
-            "count": len(timeouts),
-            "description": "Game commands timed out or produced critical errors",
-            "examples": [{"action": e["action"], "snippet": e["response"][:200]} for e in timeouts[:3]],
-        })
-
-    # Creature words appearing in the objects list (LLM misclassification)
-    misclassified = []
-    for e in game_log:
-        for obj in e["extracted"].get("objects", []):
-            if any(w in obj.lower().split() for w in config.creature_words):
-                misclassified.append({
-                    "action": e["action"],
-                    "object": obj,
-                    "response_snippet": e["response"][:80],
-                })
-    if misclassified:
-        issues.append({
-            "type": "creature_misclassified_as_object",
-            "count": len(misclassified),
-            "description": "LLM put a living creature into the 'objects' list",
-            "examples": misclassified[:5],
-        })
-
-    # Inspection failures (read / examine / look inside returned a refusal)
-    inspection_fails = []
-    for e in game_log:
-        action = e["action"].lower()
-        if any(action.startswith(v) for v in ("read ", "look inside ", "examine ")):
-            if config.failure_pattern.search(e["response"]):
-                inspection_fails.append({"action": e["action"], "response": e["response"][:100]})
-    if inspection_fails:
-        issues.append({
-            "type": "inspection_failure",
-            "count": len(inspection_fails),
-            "description": "Agent tried to inspect items/creatures that refused the action",
-            "examples": inspection_fails[:5],
-        })
-
-    # Stuck in a single room for most of the run
-    rooms = [e["extracted"].get("room") for e in game_log if e["extracted"].get("room")]
-    if rooms:
-        most_common_room, count = Counter(rooms).most_common(1)[0]
-        if count > n * 0.6:
-            issues.append({
-                "type": "stuck_in_room",
-                "room": most_common_room,
-                "steps_in_room": count,
-                "total_steps": n,
-                "description": f"Agent spent {count}/{n} steps in '{most_common_room}'",
-            })
-
-    return issues
 
 
 def run(steps=50):

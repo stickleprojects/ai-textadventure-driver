@@ -1,5 +1,5 @@
 {
-    "prompt_pattern": "What now\\?",
+    "prompt_pattern": "What now\\?|\\r?\\n>",
     "inspection_sequence": ["take", "examine", "read", "look inside"],
     "creature_words": [
         "horse", "pony", "mare", "stallion",

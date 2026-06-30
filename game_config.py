@@ -17,7 +17,9 @@ import re
 
 class GameConfig:
     def __init__(self):
-        self.prompt_pattern = r'What now\?'
+        # Matches both the verbose prompt and the terse ">" prompt that
+        # Knight Orc switches to after a few successful commands.
+        self.prompt_pattern = r'What now\?|\r?\n>'
         self.inspection_sequence = ["take", "examine", "read", "look inside"]
         self.creature_words = frozenset({
             "horse", "pony", "mare", "stallion",

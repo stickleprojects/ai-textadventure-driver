@@ -13,6 +13,7 @@ Wire into the /loop skill:
 """
 import argparse
 import json
+import logging
 import os
 import sys
 
@@ -25,6 +26,11 @@ from game_config import config
 from agent import process_agent_step
 from game_engine import start_level9
 from llm import load_llm
+
+# Suppress Streamlit's "missing ScriptRunContext" warning — harmless outside a
+# Streamlit session; @st.cache_resource just runs without caching.
+# Must be after imports: streamlit resets its logger levels at import time.
+logging.getLogger("streamlit.runtime.scriptrunner_utils.script_run_context").setLevel(logging.ERROR)
 
 INTERPRETER_PATH = os.environ.get("LEVEL9_INTERPRETER", "./tools/glklevel9")
 ROM_PATH = os.environ.get("LEVEL9_ROM", "./gamefiles/knight-orc/GAMEDAT1.DAT")
@@ -48,18 +54,53 @@ def make_initial_state():
     }
 
 
-def run(steps=50):
+def _step_summary(entry):
+    """One-line summary of what happened in a step, for progress output."""
+    ex = entry.get("extracted") or {}
+    parts = []
+    if ex.get("room"):
+        parts.append(ex["room"])
+    if ex.get("objects"):
+        parts.append(f"objects: {', '.join(ex['objects'][:3])}")
+    if ex.get("npcs"):
+        parts.append(f"npcs: {', '.join(ex['npcs'][:2])}")
+    if ex.get("added_to_inventory"):
+        parts.append(f"took: {', '.join(ex['added_to_inventory'])}")
+    if not ex:
+        parts.append("(no extraction)")
+    return " | ".join(parts)
+
+
+def run(steps=50, verbose=False):
     child, initial_text = start_level9(INTERPRETER_PATH, ROM_PATH)
     if child is None:
+        print(f"ERROR: {initial_text}", file=sys.stderr)
         return [{"step": 0, "type": "startup_error", "message": initial_text}]
 
+    if verbose:
+        print(f"Started game. Running {steps} steps...", file=sys.stderr)
+
     llm = load_llm(MODEL_PATH)
+    if verbose and llm is None:
+        print("WARNING: LLM not loaded — extraction will return {}.", file=sys.stderr)
+
     state = make_initial_state()
     findings = []
 
     for i in range(steps):
         process_agent_step(state, child, llm)
         last = state["game_log"][-1]
+
+        if verbose:
+            flag = ""
+            if "WARNING" in last["response"] or "CRITICAL" in last["response"]:
+                flag = "  ⚠ TIMEOUT/ERROR"
+            elif last.get("loop_detected"):
+                flag = f"  ✗ LOOP ({last['loop_detected']!r})"
+            print(
+                f"[{i+1:>3}/{steps}] {last['action']:<28} {_step_summary(last)}{flag}",
+                file=sys.stderr,
+            )
 
         if "WARNING" in last["response"] or "CRITICAL" in last["response"]:
             findings.append({
@@ -81,6 +122,9 @@ def run(steps=50):
     if child.isalive():
         child.close()
 
+    if verbose:
+        print(f"\nDone. {len(findings)} finding(s).", file=sys.stderr)
+
     return findings
 
 
@@ -93,6 +137,6 @@ if __name__ == "__main__":
     if args.config:
         config.load_from_file(args.config)
 
-    findings = run(steps=args.steps)
+    findings = run(steps=args.steps, verbose=True)
     print(json.dumps(findings, indent=2))
     sys.exit(1 if findings else 0)
