@@ -10,8 +10,8 @@ Incorrect or broken behaviour observed during runs. Original issue numbers prese
     - **Edge cases:** LLM returns empty exits on first visit (defer fingerprinting until exits are known); exits discovered incrementally across visits (merge into existing fingerprinted node or create new one)
     - **Effort: Medium | Risk: Medium** — touches `update_graph`, `process_agent_step`, and `state["current_room"]` assignment; needs careful handling of the empty-exits case
 
-38. we see a location of "propet_northeast" — LLM is hallucinating a room name from a direction or property string; prompt needs a rule that room names must be proper nouns from the game narrative, not directions or adjectives
-39. we see a location of "Denzyl" not listed as an npc — LLM is placing an NPC name in the `room` field; prompt should clarify that room must be a place, not a character name; `Denzyl` should appear in `npcs` instead
+38. ~~we see a location of "propet_northeast" — LLM hallucinating a direction string as room name~~ — fixed: prompt now gives concrete counter-examples: directions, character names, object names, and descriptors are all prohibited as room values; only a named place is valid
+39. ~~we see a location of "Denzyl" not listed as an npc — LLM placing NPC name in `room` field~~ — fixed: same prompt rule as 38; character names explicitly listed as invalid room values; eval case added to verify `Denzyl` appears in `npcs` and not `room`
 
 ## Closed
 

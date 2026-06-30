@@ -65,4 +65,17 @@ EVAL_CASES = [
         "game_output": "You don't need to use the word \"beef\" to finish this part of the game.",
         "expected": {"added_to_inventory": []},
     },
+    {
+        "id": "direction_string_not_used_as_room",
+        "action": "east",
+        "game_output": "You go east.",
+        "absent": ["room"],
+    },
+    {
+        "id": "npc_name_not_used_as_room",
+        "action": "look",
+        "game_output": "Denzyl is here.",
+        "expected": {"npcs": ["Denzyl"]},
+        "absent": ["room"],
+    },
 ]
