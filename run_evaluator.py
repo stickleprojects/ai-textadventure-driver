@@ -1,4 +1,4 @@
-"""Classify the outcome of a completed agent run.
+"""Classify the outcome of a completed agent run and manage the cross-run strategy file.
 
 Outcome categories
 ------------------
@@ -13,8 +13,15 @@ Crash sub-classification (classify_finding)
 config_fix  — failure response text not matched by any existing pattern in config
 python_fix  — finding type is "crash" (exception traceback present)
 ambiguous   — neither of the above; needs human review
+
+Strategy file (merge_run_record / load_strategy)
+-------------------------------------------------
+configs/knight_orc_strategy.json accumulates futile_edges and run_history across
+runs. load_strategy() returns empty defaults if the file does not exist.
 """
+import json
 import re
+from pathlib import Path
 
 from game_config import config
 
@@ -58,6 +65,55 @@ def classify_run(game_log, findings, final_score=None):
         return "score_improved"
 
     return "ambiguous"
+
+
+def load_strategy(strategy_path):
+    """Load accumulated strategy from file. Returns empty defaults if file absent.
+
+    Returns dict with:
+        futile_edges  — set of (room, direction) tuples
+        run_history   — list of {run_id, outcome, final_score} dicts
+    """
+    path = Path(strategy_path)
+    if not path.exists():
+        return {"futile_edges": set(), "run_history": []}
+    with open(path) as f:
+        data = json.load(f)
+    return {
+        "futile_edges": {tuple(e) for e in data.get("futile_edges", [])},
+        "run_history": data.get("run_history", []),
+    }
+
+
+def merge_run_record(run_record, strategy_path):
+    """Merge a completed run's data into the accumulated strategy file.
+
+    Unions futile_edges across runs; appends a summary entry to run_history.
+    Creates the file (and its parent directory) if absent.
+    """
+    strategy = load_strategy(strategy_path)
+
+    new_edges = {tuple(e) for e in run_record.get("futile_edges", [])}
+    strategy["futile_edges"] |= new_edges
+
+    strategy["run_history"].append({
+        "run_id": run_record["run_id"],
+        "outcome": run_record["outcome"],
+        "final_score": run_record.get("final_score"),
+    })
+
+    path = Path(strategy_path)
+    path.parent.mkdir(parents=True, exist_ok=True)
+    with open(path, "w") as f:
+        json.dump(
+            {
+                "futile_edges": [list(e) for e in sorted(strategy["futile_edges"])],
+                "run_history": strategy["run_history"],
+            },
+            f,
+            indent=2,
+        )
+    return strategy
 
 
 def classify_finding(finding, game_log):
