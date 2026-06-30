@@ -85,10 +85,10 @@
     - **Step 2:** swap `llm.py` to call a cloud API (e.g. OpenAI-compatible endpoint, Anthropic, DeepSeek) — gated behind an env var so local llama.cpp still works. Token logging from step 1 carries over automatically.
     - **Effort: Low (step 1) / Medium (step 2) | Risk: Low**
 35. ~~LLM hallucinates `added_to_inventory` on hard-failure responses such as "You don't need to use the word X" — item appeared in log entry even though inventory state was protected~~ — fixed: `extracted.pop("added_to_inventory", None)` on hard failure before log entry is written; eval case `handles_you_dont_need_to_use_the_word` added to `tests/evals/fixtures.py`; regression tests added in `tests/test_agent.py`
-36. after issuing "wear flagpole" we get a location of "current location not explicitly named" — LLM is returning a sentinel string instead of null when no room is named; prompt should instruct the LLM to leave `room` null if the response does not name a room explicitly (agent already preserves last known room when `room` is null)
-37. after issuing "examine flagpole" we get a location of "flagpole" which is not correct — same root cause as issue 36; prompt should instruct the LLM to leave `room` null if the response does not name a room explicitly
+36. ~~after issuing "wear flagpole" we get a location of "current location not explicitly named"~~ — fixed: prompt now explicitly instructs the LLM to set `room` to null if the response does not name a location; sentinel strings, item names, NPC names and direction words are all prohibited as room values
+37. ~~after issuing "examine flagpole" we get a location of "flagpole" which is not correct~~ — fixed: same prompt rule as issue 36; `room` must be null when no place is named
 38. we see a location of "propet_northeast" — LLM is hallucinating a room name from a direction or property string; prompt needs a rule that room names must be proper nouns from the game narrative, not directions or adjectives
 39. we see a location of "Denzyl" not listed as an npc — LLM is placing an NPC name in the `room` field; prompt should clarify that room must be a place, not a character name; `Denzyl` should appear in `npcs` instead
 40. add support for npcs talking to you - not sure what they say but i think sometimes denzyl says "hi"
-41. add negative failure for "Don't be silly"
+41. ~~add negative failure for "Don't be silly"~~ — fixed by user
 42. ~~`watch_run.py` does not print the run ID at startup, making it impossible to correlate a mid-run observation with the correct log file~~ — fixed: run ID printed to stderr immediately after game start so you can note `run_id + step` when logging observations

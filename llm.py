@@ -39,9 +39,10 @@ def extract_knowledge(text, action_taken, llm_instance):
     - When the action is "take <item>" and the response is a terse confirmation ("Taken.", "OK."),
       set added_to_inventory to ["<item>"] — use the item name from the action, not the response.
     - Always extract exits from phrases like "Exits: north, east" or "you can go north".
-    - Only set "room" if the game output explicitly names or describes a new location. If the
-      response is terse (e.g. "Taken.", "OK.", "You can't do that.") and contains no room name,
-      omit "room" entirely. Never infer or guess a room name from the action text or item names.
+    - Only set "room" if the game output explicitly names a location (e.g. "You are in the Great Hall",
+      "Dungeon Entrance"). If the response is terse ("Taken.", "OK.", "You can't do that.") or describes
+      an object/action without naming a place, set "room" to null. Never use an item name, NPC name,
+      direction, or vague phrase ("current location", "unknown") as the room value.
     - If examining an object reveals another distinct item (e.g. "fastened to it is a halyard",
       "inside is a key", "a note is attached"), include that item in "objects" too.
 
