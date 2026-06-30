@@ -70,6 +70,8 @@ def _detect_loop(game_log, window=10, threshold=4):
 
 def update_graph(state, room_name, exits, previous_room, action):
     """Adds the current room and its exits to the world graph."""
+    if not room_name:
+        return
     if room_name not in state["world_graph"]:
         state["world_graph"].add_node(room_name)
 
@@ -190,11 +192,17 @@ def process_agent_step(state, child, llm_instance):
 
     extracted = extract_knowledge(response, action_taken, llm_instance)
 
-    if "room" in extracted:
+    if extracted.get("room"):
         state["current_room"] = extracted["room"]
 
     if "exits" in extracted:
         update_graph(state, state["current_room"], extracted["exits"], previous_room, action_taken)
+
+    # If a goal action hard-failed, drop the anomaly so it is not re-queued
+    if _is_hard_failure(response):
+        parts = action_taken.split(" on ", 1)
+        if len(parts) == 2 and action_taken.startswith(("use ", "cast ")):
+            state["unresolved_anomalies"].pop(parts[1], None)
 
     for npc in extracted.get("npcs", []):
         if npc not in state["known_npcs"]:

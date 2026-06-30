@@ -16,6 +16,8 @@ import json
 import logging
 import os
 import sys
+from datetime import datetime
+from pathlib import Path
 
 import networkx as nx
 
@@ -35,6 +37,7 @@ logging.getLogger("streamlit.runtime.scriptrunner_utils.script_run_context").set
 INTERPRETER_PATH = os.environ.get("LEVEL9_INTERPRETER", "./tools/glklevel9")
 ROM_PATH = os.environ.get("LEVEL9_ROM", "./gamefiles/knight-orc/GAMEDAT1.DAT")
 MODEL_PATH = os.environ.get("EVAL_MODEL_PATH", "../models/Phi-3.5-mini-instruct-Q3_K_M.gguf")
+LOG_DIR = Path("logs")
 
 
 def make_initial_state():
@@ -71,6 +74,16 @@ def _step_summary(entry):
     return " | ".join(parts)
 
 
+def _write_log(game_log):
+    """Persist the full game log to logs/watch_TIMESTAMP.json and return the path."""
+    LOG_DIR.mkdir(exist_ok=True)
+    ts = datetime.now().strftime("%Y%m%d_%H%M%S")
+    log_path = LOG_DIR / f"watch_{ts}.json"
+    with open(log_path, "w") as f:
+        json.dump(game_log, f, indent=2)
+    return log_path
+
+
 def run(steps=50, verbose=False):
     child, initial_text = start_level9(INTERPRETER_PATH, ROM_PATH)
     if child is None:
@@ -87,43 +100,58 @@ def run(steps=50, verbose=False):
     state = make_initial_state()
     findings = []
 
-    for i in range(steps):
-        process_agent_step(state, child, llm)
-        last = state["game_log"][-1]
+    try:
+        for i in range(steps):
+            process_agent_step(state, child, llm)
+            last = state["game_log"][-1]
 
-        if verbose:
-            flag = ""
+            if verbose:
+                flag = ""
+                if "WARNING" in last["response"] or "CRITICAL" in last["response"]:
+                    flag = "  ⚠ TIMEOUT/ERROR"
+                elif last.get("loop_detected"):
+                    flag = f"  ✗ LOOP ({last['loop_detected']!r})"
+                print(
+                    f"[{i+1:>3}/{steps}] {last['action']:<28} {_step_summary(last)}{flag}",
+                    file=sys.stderr,
+                )
+
             if "WARNING" in last["response"] or "CRITICAL" in last["response"]:
-                flag = "  ⚠ TIMEOUT/ERROR"
-            elif last.get("loop_detected"):
-                flag = f"  ✗ LOOP ({last['loop_detected']!r})"
-            print(
-                f"[{i+1:>3}/{steps}] {last['action']:<28} {_step_summary(last)}{flag}",
-                file=sys.stderr,
-            )
+                findings.append({
+                    "step": i + 1,
+                    "type": "timeout_or_error",
+                    "action": last["action"],
+                    "response": last["response"],
+                })
 
-        if "WARNING" in last["response"] or "CRITICAL" in last["response"]:
-            findings.append({
-                "step": i,
-                "type": "timeout_or_error",
-                "action": last["action"],
-                "response": last["response"],
-            })
-
-        if last.get("loop_detected"):
-            findings.append({
-                "step": i,
-                "type": "loop",
-                "action": last["loop_detected"],
-                "recent_actions": [e["action"] for e in state["game_log"][-10:]],
-            })
-            break
-
-    if child.isalive():
-        child.close()
-
-    if verbose:
-        print(f"\nDone. {len(findings)} finding(s).", file=sys.stderr)
+            if last.get("loop_detected"):
+                recent = state["game_log"][-10:]
+                findings.append({
+                    "step": i + 1,
+                    "type": "loop",
+                    "action": last["loop_detected"],
+                    "recent_steps": [
+                        {"action": e["action"], "response": e["response"]}
+                        for e in recent
+                    ],
+                })
+                break
+    except Exception as exc:
+        findings.append({
+            "step": len(state["game_log"]),
+            "type": "crash",
+            "error": str(exc),
+            "last_action": state["game_log"][-1]["action"] if state["game_log"] else None,
+            "last_response": state["game_log"][-1]["response"] if state["game_log"] else None,
+        })
+        print(f"CRASH at step {len(state['game_log'])}: {exc}", file=sys.stderr)
+    finally:
+        if child.isalive():
+            child.close()
+        log_path = _write_log(state["game_log"])
+        if verbose:
+            print(f"\nFull log written to {log_path}", file=sys.stderr)
+            print(f"Done. {len(findings)} finding(s).", file=sys.stderr)
 
     return findings
 
