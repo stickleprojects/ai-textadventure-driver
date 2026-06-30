@@ -126,6 +126,37 @@ class TestCreatureMisclassified:
         assert not any(i["type"] == "creature_misclassified_as_object" for i in issues)
 
 
+# ── analyze_log — blocked_verb_rate ──────────────────────────────────────────
+
+class TestBlockedVerbRate:
+    def test_detects_repeated_soft_failure(self):
+        log = [
+            _entry("wear cloak", "You're already wearing armour.", {}),
+            _entry("wear cloak", "You're already wearing armour.", {}),
+            _entry("wear cloak", "You're already wearing armour.", {}),
+        ]
+        issues = analyze_log(log)
+        assert any(i["type"] == "blocked_verb_rate" for i in issues)
+
+    def test_no_false_positive_below_threshold(self):
+        log = [
+            _entry("wear cloak", "You're already wearing armour.", {}),
+            _entry("wear cloak", "You're already wearing armour.", {}),
+            _entry("examine sword", "The sword is sharp.", {"objects": ["sword"]}),
+        ]
+        issues = analyze_log(log)
+        assert not any(i["type"] == "blocked_verb_rate" for i in issues)
+
+    def test_hard_failure_not_counted(self):
+        log = [
+            _entry("read sword", "Nothing happens.", {}),
+            _entry("read sword", "Nothing happens.", {}),
+            _entry("read sword", "Nothing happens.", {}),
+        ]
+        issues = analyze_log(log)
+        assert not any(i["type"] == "blocked_verb_rate" for i in issues)
+
+
 # ── analyze_log — edge cases ──────────────────────────────────────────────────
 
 class TestEdgeCases:

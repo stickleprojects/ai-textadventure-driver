@@ -1,10 +1,21 @@
-from unittest.mock import patch
+from unittest.mock import patch, PropertyMock
 
 import pytest
 
-from agent import _detect_loop, _is_failure_response, determine_next_action, process_agent_step
+from agent import (
+    _detect_loop,
+    _is_failure_response,
+    _is_hard_failure,
+    _is_soft_failure,
+    _parse_inspection_action,
+    _record_verb_outcome,
+    determine_next_action,
+    process_agent_step,
+)
 from tests.conftest import make_state
 
+
+# ── _is_failure_response (backward compat — matches hard OR soft) ─────────────
 
 @pytest.mark.parametrize("text", [
     "You can't do that.",
@@ -28,6 +39,106 @@ def test_failure_response_not_detected(text):
     assert not _is_failure_response(text)
 
 
+# ── _is_hard_failure ──────────────────────────────────────────────────────────
+
+class TestIsHardFailure:
+    def test_cant_is_hard(self):
+        assert _is_hard_failure("You can't do that.")
+
+    def test_nothing_happens_is_hard(self):
+        assert _is_hard_failure("Nothing happens.")
+
+    def test_dont_know_word_is_hard(self):
+        assert _is_hard_failure("I don't know that word.")
+
+    def test_success_not_hard(self):
+        assert not _is_hard_failure("Taken.")
+
+    def test_not_yet_not_hard(self):
+        assert not _is_hard_failure("Not yet.")
+
+    def test_already_wearing_not_hard(self):
+        assert not _is_hard_failure("You're already wearing armour.")
+
+
+# ── _is_soft_failure ──────────────────────────────────────────────────────────
+
+class TestIsSoftFailure:
+    def test_not_right_now_is_soft(self):
+        assert _is_soft_failure("You can't do that right now.")
+
+    def test_already_wearing_is_soft(self):
+        assert _is_soft_failure("You're already wearing armour.")
+
+    def test_not_yet_is_soft(self):
+        assert _is_soft_failure("Not yet.")
+
+    def test_while_wearing_is_soft(self):
+        assert _is_soft_failure("You can't do that while you're wearing a cloak.")
+
+    def test_success_not_soft(self):
+        assert not _is_soft_failure("Taken.")
+
+    def test_nothing_happens_not_soft(self):
+        assert not _is_soft_failure("Nothing happens.")
+
+
+# ── _parse_inspection_action ──────────────────────────────────────────────────
+
+class TestParseInspectionAction:
+    def test_simple_verb(self):
+        assert _parse_inspection_action("examine sword", "sword") == "examine"
+
+    def test_multi_word_verb(self):
+        assert _parse_inspection_action("look inside chest", "chest") == "look inside"
+
+    def test_multi_word_object(self):
+        assert _parse_inspection_action("wear leather gloves", "leather gloves") == "wear"
+
+    def test_take(self):
+        assert _parse_inspection_action("take key", "key") == "take"
+
+    def test_no_match_returns_none(self):
+        assert _parse_inspection_action("go north", "sword") is None
+
+    def test_none_target_returns_none(self):
+        assert _parse_inspection_action("take sword", None) is None
+
+    def test_case_insensitive(self):
+        assert _parse_inspection_action("Examine Sword", "sword") == "Examine"
+
+
+# ── _record_verb_outcome ──────────────────────────────────────────────────────
+
+class TestRecordVerbOutcome:
+    def test_records_outcome_on_existing_entity(self):
+        state = make_state()
+        state["known_entities"]["sword"] = {"status": "held", "location": "Hall", "verb_outcomes": {}}
+        _record_verb_outcome(state, "sword", "read", "invalid")
+        assert state["known_entities"]["sword"]["verb_outcomes"]["read"] == "invalid"
+
+    def test_creates_entity_if_missing(self):
+        state = make_state()
+        _record_verb_outcome(state, "new_item", "examine", "succeeded")
+        assert "new_item" in state["known_entities"]
+        assert state["known_entities"]["new_item"]["verb_outcomes"]["examine"] == "succeeded"
+
+    def test_adds_verb_outcomes_to_entity_without_it(self):
+        state = make_state()
+        state["known_entities"]["lamp"] = {"status": "discovered", "location": "Hall"}
+        _record_verb_outcome(state, "lamp", "wear", "blocked")
+        assert state["known_entities"]["lamp"]["verb_outcomes"]["wear"] == "blocked"
+
+    def test_overwrites_existing_outcome(self):
+        state = make_state()
+        state["known_entities"]["hat"] = {"status": "held", "location": "Hall",
+                                           "verb_outcomes": {"wear": "blocked"}}
+        _record_verb_outcome(state, "hat", "wear", "succeeded")
+        assert state["known_entities"]["hat"]["verb_outcomes"]["wear"] == "succeeded"
+
+
+# ── _detect_loop ──────────────────────────────────────────────────────────────
+
 def test_detect_loop_finds_repeated_action():
     game_log = [{"action": "look"} for _ in range(10)]
     assert _detect_loop(game_log) == "look"
@@ -40,23 +151,22 @@ def test_detect_loop_ignores_varied_actions():
 
 
 def test_detect_loop_ignores_productive_navigation():
-    # "north" repeated 4 times but each time the extracted room changed — exploration, not a loop
     rooms = ["Room A", "Room B", "Room C", "Room D", "Room E"]
     game_log = [
         {"action": "north", "extracted": {"room": rooms[i + 1]}}
         if i < 4 else {"action": "look", "extracted": {"room": rooms[4]}}
         for i in range(5)
     ]
-    # Prepend a prior entry so index 0 has a previous room to diff against
     game_log = [{"action": "look", "extracted": {"room": "Room A"}}] + game_log
     assert _detect_loop(game_log, window=6, threshold=4) is None
 
 
 def test_detect_loop_catches_navigation_stuck_in_same_room():
-    # "north" repeated but extracted room never changes — genuinely stuck
     game_log = [{"action": "north", "extracted": {"room": "Dead End"}} for _ in range(10)]
     assert _detect_loop(game_log) == "north"
 
+
+# ── determine_next_action — existing priority logic ───────────────────────────
 
 def test_active_goal_in_target_room_uses_solution():
     state = make_state(
@@ -93,7 +203,7 @@ def test_anomaly_resolved_by_inventory_sets_active_goal():
 
 
 def test_inspection_sequence_continues():
-    state = make_state(current_inspection={"target": "sword", "sequence": ["take", "examine", "read", "look inside"], "step_index": 1})
+    state = make_state(current_inspection={"target": "sword", "sequence": ["examine", "read", "look inside"], "step_index": 0})
     assert determine_next_action(state) == "examine sword"
 
 
@@ -117,17 +227,117 @@ def test_fallback_to_look():
     assert determine_next_action(state) == "look"
 
 
-def test_inspection_sequence_full_order():
-    state = make_state(uninspected_objects=["sword"])
-    actions = [determine_next_action(state) for _ in range(4)]
-    assert actions == ["take sword", "examine sword", "read sword", "look inside sword"]
-    assert state["current_inspection"]["target"] is None
+# ── determine_next_action — dynamic verb sequence (issue 18) ─────────────────
+
+class TestDetermineNextActionDynamicSequence:
+    def test_invalid_verbs_skipped_in_sequence(self):
+        state = make_state()
+        state["known_entities"]["sword"] = {
+            "status": "discovered",
+            "location": "Hall",
+            "verb_outcomes": {"read": "invalid", "look inside": "invalid"},
+        }
+        state["uninspected_objects"] = ["sword"]
+        determine_next_action(state)  # take
+        seq = state["current_inspection"]["sequence"]
+        assert "read" not in seq
+        assert "look inside" not in seq
+        assert "examine" in seq
+
+    def test_blocked_verbs_included_in_sequence(self):
+        test_verbs = ["take", "examine", "wear", "eat"]
+        with patch("agent.config") as mock_cfg:
+            mock_cfg.candidate_verbs = test_verbs
+            state = make_state()
+            state["known_entities"]["cloak"] = {
+                "status": "discovered",
+                "location": "Hall",
+                "verb_outcomes": {"wear": "blocked"},
+            }
+            state["uninspected_objects"] = ["cloak"]
+            determine_next_action(state)  # take
+            seq = state["current_inspection"]["sequence"]
+            assert "wear" in seq
+
+    def test_no_prior_outcomes_uses_full_candidate_list(self):
+        from game_config import config
+        state = make_state(uninspected_objects=["lamp"])
+        determine_next_action(state)  # take
+        seq = state["current_inspection"]["sequence"]
+        expected = [v for v in config.candidate_verbs if v != "take"]
+        assert seq == expected
+
+    def test_full_inspection_exhausts_all_candidate_verbs(self):
+        test_verbs = ["take", "examine", "read", "wear"]
+        with patch("agent.config") as mock_cfg:
+            mock_cfg.candidate_verbs = test_verbs
+            state = make_state(uninspected_objects=["sword"])
+            n = len(test_verbs)  # take + 3 post-take verbs
+            actions = [determine_next_action(state) for _ in range(n)]
+        assert actions[0] == "take sword"
+        assert "examine sword" in actions
+        assert "read sword" in actions
+        assert "wear sword" in actions
+        assert state["current_inspection"]["target"] is None
 
 
-def test_npc_not_added_to_inspection_queue(stub_child):
-    state = make_state(known_npcs={"horse": {"location": "Stable", "greeted": False}})
-    with patch("agent.execute_game_command", return_value="A horse is here."), \
-         patch("agent.extract_knowledge", return_value={"room": "Stable", "objects": ["horse"]}):
-        process_agent_step(state, stub_child, None)
-    assert "horse" not in state["uninspected_objects"]
-    assert "horse" not in state["known_entities"]
+# ── process_agent_step — verb outcome recording (issue 18) ───────────────────
+
+class TestProcessAgentStepOutcomes:
+    def test_take_failure_records_invalid_and_clears_inspection(self, stub_child):
+        state = make_state(uninspected_objects=["wall"])
+        state["known_entities"]["wall"] = {"status": "discovered", "location": "Hall", "verb_outcomes": {}}
+        with patch("agent.execute_game_command", return_value="You can't take that."), \
+             patch("agent.extract_knowledge", return_value={}):
+            process_agent_step(state, stub_child, None)
+        assert state["known_entities"]["wall"]["verb_outcomes"].get("take") == "invalid"
+        assert state["current_inspection"]["target"] is None
+
+    def test_take_success_records_succeeded(self, stub_child):
+        state = make_state(uninspected_objects=["key"])
+        state["known_entities"]["key"] = {"status": "discovered", "location": "Hall", "verb_outcomes": {}}
+        with patch("agent.execute_game_command", return_value="Taken."), \
+             patch("agent.extract_knowledge", return_value={"added_to_inventory": ["key"]}):
+            process_agent_step(state, stub_child, None)
+        assert state["known_entities"]["key"]["verb_outcomes"].get("take") == "succeeded"
+        assert state["current_inspection"]["target"] == "key"
+
+    def test_hard_failure_records_invalid_does_not_clear_inspection(self, stub_child):
+        state = make_state(current_inspection={
+            "target": "sword", "sequence": ["read", "wear"], "step_index": 0,
+        })
+        state["known_entities"]["sword"] = {"status": "held", "location": "Hall", "verb_outcomes": {}}
+        with patch("agent.execute_game_command", return_value="Nothing happens."), \
+             patch("agent.extract_knowledge", return_value={}):
+            process_agent_step(state, stub_child, None)
+        assert state["known_entities"]["sword"]["verb_outcomes"].get("read") == "invalid"
+        assert state["current_inspection"]["target"] == "sword"
+
+    def test_soft_failure_records_blocked_does_not_clear_inspection(self, stub_child):
+        state = make_state(current_inspection={
+            "target": "cloak", "sequence": ["wear", "examine"], "step_index": 0,
+        })
+        state["known_entities"]["cloak"] = {"status": "held", "location": "Hall", "verb_outcomes": {}}
+        with patch("agent.execute_game_command", return_value="You're already wearing armour."), \
+             patch("agent.extract_knowledge", return_value={}):
+            process_agent_step(state, stub_child, None)
+        assert state["known_entities"]["cloak"]["verb_outcomes"].get("wear") == "blocked"
+        assert state["current_inspection"]["target"] == "cloak"
+
+    def test_success_records_succeeded(self, stub_child):
+        state = make_state(current_inspection={
+            "target": "hat", "sequence": ["wear", "examine"], "step_index": 0,
+        })
+        state["known_entities"]["hat"] = {"status": "held", "location": "Hall", "verb_outcomes": {}}
+        with patch("agent.execute_game_command", return_value="You put on the hat."), \
+             patch("agent.extract_knowledge", return_value={}):
+            process_agent_step(state, stub_child, None)
+        assert state["known_entities"]["hat"]["verb_outcomes"].get("wear") == "succeeded"
+
+    def test_npc_not_added_to_inspection_queue(self, stub_child):
+        state = make_state(known_npcs={"horse": {"location": "Stable", "greeted": False}})
+        with patch("agent.execute_game_command", return_value="A horse is here."), \
+             patch("agent.extract_knowledge", return_value={"room": "Stable", "objects": ["horse"]}):
+            process_agent_step(state, stub_child, None)
+        assert "horse" not in state["uninspected_objects"]
+        assert "horse" not in state["known_entities"]

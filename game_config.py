@@ -5,11 +5,15 @@ Override by calling config.load_from_file(path) before starting the game.
 
 JSON schema (all keys optional — missing keys keep their defaults):
 {
-    "prompt_pattern":      string  — pexpect pattern that ends every game response
-    "inspection_sequence": [str]   — action verbs applied in order to discovered objects
-    "creature_words":      [str]   — words that identify living creatures (case-insensitive)
-    "failure_patterns":    [str]   — regex fragments; a response matching any is a refusal
+    "prompt_pattern":         string  — pexpect pattern that ends every game response
+    "candidate_verbs":        [str]   — verbs to attempt on each discovered object (take first)
+    "creature_words":         [str]   — words that identify living creatures (case-insensitive)
+    "hard_failure_patterns":  [str]   — regex fragments; response matching any means verb is permanently invalid for this object
+    "soft_failure_patterns":  [str]   — regex fragments; response matching any means verb is valid but blocked by current state
 }
+
+Legacy keys still accepted: "inspection_sequence" (alias for candidate_verbs),
+"failure_patterns" (alias for hard_failure_patterns).
 """
 import json
 import re
@@ -20,7 +24,7 @@ class GameConfig:
         # Matches both the verbose prompt and the terse ">" prompt that
         # Knight Orc switches to after a few successful commands.
         self.prompt_pattern = r'What now\?|\r?\n>'
-        self.inspection_sequence = ["take", "examine", "read", "look inside"]
+        self.candidate_verbs = ["take", "examine", "read", "look inside"]
         self.creature_words = frozenset({
             "horse", "pony", "mare", "stallion",
             "knight", "orc", "guard", "soldier",
@@ -28,7 +32,7 @@ class GameConfig:
             "troll", "goblin", "dwarf", "elf",
             "creature", "beast", "monster", "demon",
         })
-        self._failure_patterns = [
+        self._hard_failure_patterns = [
             r"you can'?t",
             r"can'?t see",
             r"can'?t do that",
@@ -39,13 +43,31 @@ class GameConfig:
             r"there('?s| is) no \w+ here",
             r"i don'?t know (that word|what)",
         ]
+        self._soft_failure_patterns = [
+            r"right now",
+            r"not now",
+            r"(you'?re|you are) already (wearing|carrying|holding)",
+            r"while (you'?re|you are) (wearing|carrying|holding)",
+            r"can'?t do that yet",
+            r"not yet",
+        ]
         self._compile()
 
     def _compile(self):
+        self.hard_failure_pattern = re.compile(
+            "|".join(self._hard_failure_patterns), re.IGNORECASE)
+        self.soft_failure_pattern = re.compile(
+            "|".join(self._soft_failure_patterns), re.IGNORECASE)
+        # Union for backward compat — matches either hard or soft failure
         self.failure_pattern = re.compile(
-            "|".join(self._failure_patterns),
+            "|".join(self._hard_failure_patterns + self._soft_failure_patterns),
             re.IGNORECASE,
         )
+
+    @property
+    def inspection_sequence(self):
+        """Backward-compat alias for candidate_verbs."""
+        return self.candidate_verbs
 
     def load_from_file(self, path):
         """Load overrides from a JSON config file."""
@@ -53,12 +75,23 @@ class GameConfig:
             data = json.load(f)
         if "prompt_pattern" in data:
             self.prompt_pattern = data["prompt_pattern"]
-        if "inspection_sequence" in data:
-            self.inspection_sequence = list(data["inspection_sequence"])
+        if "candidate_verbs" in data:
+            self.candidate_verbs = list(data["candidate_verbs"])
+        elif "inspection_sequence" in data:
+            self.candidate_verbs = list(data["inspection_sequence"])
         if "creature_words" in data:
             self.creature_words = frozenset(data["creature_words"])
-        if "failure_patterns" in data:
-            self._failure_patterns = list(data["failure_patterns"])
+        recompile = False
+        if "hard_failure_patterns" in data:
+            self._hard_failure_patterns = list(data["hard_failure_patterns"])
+            recompile = True
+        elif "failure_patterns" in data:
+            self._hard_failure_patterns = list(data["failure_patterns"])
+            recompile = True
+        if "soft_failure_patterns" in data:
+            self._soft_failure_patterns = list(data["soft_failure_patterns"])
+            recompile = True
+        if recompile:
             self._compile()
 
 

@@ -1,6 +1,6 @@
 {
     "prompt_pattern": "What now\\?|\\r?\\n>",
-    "inspection_sequence": ["take", "examine", "read", "look inside"],
+    "candidate_verbs": ["take", "examine", "read", "look inside", "wear", "eat", "drink", "open", "close", "unlock", "lock", "push", "pull", "turn on", "turn off"],
     "creature_words": [
         "horse", "pony", "mare", "stallion",
         "knight", "orc", "guard", "soldier",
@@ -8,7 +8,7 @@
         "troll", "goblin", "dwarf", "elf",
         "creature", "beast", "monster", "demon"
     ],
-    "failure_patterns": [
+    "hard_failure_patterns": [
         "you can'?t",
         "can'?t see",
         "can'?t do that",
@@ -18,5 +18,13 @@
         "that'?s not something",
         "there('?s| is) no \\w+ here",
         "i don'?t know (that word|what)"
+    ],
+    "soft_failure_patterns": [
+        "right now",
+        "not now",
+        "(you'?re|you are) already (wearing|carrying|holding)",
+        "while (you'?re|you are) (wearing|carrying|holding)",
+        "can'?t do that yet",
+        "not yet"
     ]
 }

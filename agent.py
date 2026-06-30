@@ -7,6 +7,14 @@ from game_engine import execute_game_command
 from llm import extract_knowledge
 
 
+def _is_hard_failure(text):
+    return bool(config.hard_failure_pattern.search(text))
+
+
+def _is_soft_failure(text):
+    return bool(config.soft_failure_pattern.search(text))
+
+
 def _is_failure_response(text):
     return bool(config.failure_pattern.search(text))
 
@@ -16,6 +24,24 @@ _DIRECTIONS = {"north", "south", "east", "west", "up", "down", "ne", "nw", "se",
 
 def _is_creature(name):
     return bool(set(name.lower().split()) & config.creature_words)
+
+
+def _parse_inspection_action(action, target):
+    """Return the verb if action is 'verb target', else None."""
+    if not target:
+        return None
+    suffix = f" {target.lower()}"
+    if action.lower().endswith(suffix):
+        return action[:-(len(suffix))].strip()
+    return None
+
+
+def _record_verb_outcome(state, target, verb, outcome):
+    """Record that verb was attempted on target with the given outcome."""
+    entity = state["known_entities"].setdefault(
+        target, {"status": "discovered", "location": state["current_room"], "verb_outcomes": {}}
+    )
+    entity.setdefault("verb_outcomes", {})[verb] = outcome
 
 
 def _detect_loop(game_log, window=10, threshold=4):
@@ -110,8 +136,15 @@ def determine_next_action(state):
 
     if state["uninspected_objects"]:
         new_target = state["uninspected_objects"].pop(0)
+        entity_data = state["known_entities"].get(new_target, {})
+        verb_outcomes = entity_data.get("verb_outcomes", {})
+        post_take_verbs = [
+            v for v in config.candidate_verbs
+            if v != "take" and verb_outcomes.get(v) != "invalid"
+        ]
         inspection["target"] = new_target
-        inspection["step_index"] = 1
+        inspection["sequence"] = post_take_verbs
+        inspection["step_index"] = 0
         return f"take {new_target}"
 
     for _, v, data in state["world_graph"].edges(state["current_room"], data=True):
@@ -124,15 +157,36 @@ def determine_next_action(state):
 def process_agent_step(state, child, llm_instance):
     """Executes one agent cycle: decide → act → extract → update state."""
     previous_room = state["current_room"]
+
+    # Capture inspection target before determine_next_action may change it
+    pre_insp_target = state["current_inspection"]["target"]
     action_taken = determine_next_action(state)
+    post_insp_target = state["current_inspection"]["target"]
+
+    # The effective target is the one associated with this action:
+    # post_insp_target covers new takes; pre_insp_target covers ongoing inspection verbs.
+    effective_target = post_insp_target or pre_insp_target
+    insp_verb = _parse_inspection_action(action_taken, effective_target)
 
     response = execute_game_command(child, action_taken)
 
-    if _is_failure_response(response):
-        inspection = state["current_inspection"]
-        if inspection["target"]:
-            inspection["target"] = None
-            inspection["step_index"] = 0
+    # Record verb outcomes and handle take failure
+    if insp_verb and effective_target:
+        if insp_verb == "take":
+            if _is_failure_response(response):
+                _record_verb_outcome(state, effective_target, "take", "invalid")
+                state["current_inspection"]["target"] = None
+                state["current_inspection"]["step_index"] = 0
+            else:
+                _record_verb_outcome(state, effective_target, "take", "succeeded")
+        elif _is_soft_failure(response):
+            # Valid verb, blocked by current game state — retry later
+            _record_verb_outcome(state, effective_target, insp_verb, "blocked")
+        elif _is_hard_failure(response):
+            # Verb is permanently invalid for this object
+            _record_verb_outcome(state, effective_target, insp_verb, "invalid")
+        else:
+            _record_verb_outcome(state, effective_target, insp_verb, "succeeded")
 
     extracted = extract_knowledge(response, action_taken, llm_instance)
 
