@@ -72,6 +72,15 @@ def _detect_loop(game_log, window=10, threshold=4):
     return None
 
 
+_REVERSE = {
+    "north": "south", "south": "north",
+    "east": "west",   "west": "east",
+    "up": "down",     "down": "up",
+    "ne": "sw",       "sw": "ne",
+    "nw": "se",       "se": "nw",
+}
+
+
 def update_graph(state, room_name, exits, previous_room, action):
     """Adds the current room and its exits to the world graph."""
     if not room_name:
@@ -79,14 +88,29 @@ def update_graph(state, room_name, exits, previous_room, action):
     if room_name not in state["world_graph"]:
         state["world_graph"].add_node(room_name)
 
-    if (previous_room and previous_room != room_name
-            and action in ["north", "south", "east", "west", "up", "down", "ne", "nw", "se", "sw"]):
+    reverse_action = _REVERSE.get(action, "")
+    if previous_room and previous_room != room_name and reverse_action:
+        # Remove outbound placeholder from previous_room and the inbound placeholder
+        # from room_name — both are now resolved by this traversal.
+        for placeholder in (
+            f"Unknown ({action} from {previous_room})",
+            f"Unknown ({reverse_action} from {room_name})",
+        ):
+            if state["world_graph"].has_node(placeholder):
+                state["world_graph"].remove_node(placeholder)
         state["world_graph"].add_edge(previous_room, room_name, label=action)
 
     for direction in exits:
+        existing_labels = {d.get("label") for _, _, d in state["world_graph"].edges(room_name, data=True)}
+        if direction in existing_labels:
+            continue
+        # If this exit points back the way we came, wire the real return edge so
+        # the placeholder is never created (and can't be re-added on the same step).
+        if direction == reverse_action and previous_room and previous_room != room_name:
+            state["world_graph"].add_edge(room_name, previous_room, label=direction)
+            continue
         target_node = f"Unknown ({direction} from {room_name})"
-        existing_labels = {d.get('label') for _, _, d in state["world_graph"].edges(room_name, data=True)}
-        if not state["world_graph"].has_edge(room_name, target_node) and direction not in existing_labels:
+        if not state["world_graph"].has_edge(room_name, target_node):
             state["world_graph"].add_edge(room_name, target_node, label=direction)
 
 

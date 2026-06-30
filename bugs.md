@@ -4,6 +4,8 @@ Incorrect or broken behaviour observed during runs. Original issue numbers prese
 
 ## Open
 
+47. ~~`Unknown (south from B)` is removed when going north A→B, but immediately re-added when processing B's exit list in the same `update_graph` call — because "south" is not yet in B's outgoing edges at that point.~~ — fixed: when an exit direction matches the reverse of the traversal action, `update_graph` now wires the real return edge (`B --south--> A`) instead of creating an Unknown placeholder.
+
 45. maze rooms with non-unique names cause the world graph to collapse distinct locations into a single node, triggering a loop. Observed in the "alder clump" area — multiple distinct rooms share the same name but have different exits; the agent loops because it thinks it has already visited and explored the single "alder clump" node.
     - **Root cause:** `update_graph` uses the raw room name as the node ID; `state["current_room"]` is set from `extracted["room"]` before exits are known, so there is no opportunity to fingerprint at assignment time
     - **Fix:** use `room_name + sorted(exits)` as the canonical node ID (e.g. `"alder clump {E,S,SW,W}"`); resolve the fingerprinted ID after exits are extracted and use it for both `state["current_room"]` and the edge from the previous room; display label strips the suffix for readability
