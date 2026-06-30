@@ -147,6 +147,8 @@ _SYSTEM_PROMPT = """\
 You are a software engineer fixing an autonomous text-adventure agent that plays "Knight Orc" (Level 9, 1987).
 
 Project structure:
+- configs/knight_orc.json — creature words, failure phrases, prompt pattern, inspection sequence
+- game_config.py — GameConfig singleton; edit the JSON file rather than this module
 - agent.py       — decision logic, _is_creature() pre-filter, state transitions, process_agent_step()
 - llm.py         — LLM prompt and extract_knowledge() with up-to-3 retry logic
 - game_engine.py — pexpect subprocess interface, _is_failure_response()
@@ -162,7 +164,8 @@ Your job each iteration:
 6. Write a brief summary of what you changed and why.
 
 Rules:
-- Prefer prompt edits in llm.py over logic changes in agent.py where possible.
+- For creature/failure-phrase issues: edit configs/knight_orc.json, not agent.py.
+- For LLM extraction issues: prefer prompt edits in llm.py over logic changes in agent.py.
 - Do not refactor or add features beyond what the reported issues require.
 - Do not add explanatory comments about what you changed.
 - If an issue is ambiguous, make a conservative fix and note your uncertainty in the summary.\
@@ -232,9 +235,12 @@ def run_fixer_agent(analysis_md, model, verbose=True):
 
 # ── Main loop ─────────────────────────────────────────────────────────────────
 
-def _run_analysis(steps):
+def _run_analysis(steps, game_config=None):
+    cmd = [str(VENV_PYTHON), "scripts/run_and_analyze.py", str(steps)]
+    if game_config:
+        cmd += ["--config", game_config]
     result = subprocess.run(
-        [str(VENV_PYTHON), "scripts/run_and_analyze.py", str(steps)],
+        cmd,
         cwd=PROJECT_ROOT,
         capture_output=True,
         text=True,
@@ -263,10 +269,11 @@ def _run_tests():
 
 def main():
     parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
-    parser.add_argument("--steps",      type=int, default=50,                help="Game steps per run (default: 50)")
-    parser.add_argument("--iterations", type=int, default=5,                 help="Max fix iterations (default: 5)")
-    parser.add_argument("--model",      default="claude-sonnet-4-6",         help="Claude model for fixer agent")
-    parser.add_argument("--dry-run",    action="store_true",                  help="Analyze only, skip auto-fix")
+    parser.add_argument("--steps",      type=int, default=50,          help="Game steps per run (default: 50)")
+    parser.add_argument("--iterations", type=int, default=5,           help="Max fix iterations (default: 5)")
+    parser.add_argument("--model",      default="claude-sonnet-4-6",   help="Claude model for fixer agent")
+    parser.add_argument("--config",     metavar="PATH",                help="Game config JSON (default: built-in Knight Orc values)")
+    parser.add_argument("--dry-run",    action="store_true",           help="Analyze only, skip auto-fix")
     args = parser.parse_args()
 
     LOG_DIR.mkdir(exist_ok=True)
@@ -277,7 +284,7 @@ def main():
         print(f"{'='*60}\n")
 
         print(f"[1/4] Running game for {args.steps} steps...")
-        exit_code = _run_analysis(args.steps)
+        exit_code = _run_analysis(args.steps, game_config=args.config)
 
         analysis_path = LOG_DIR / "latest_analysis.md"
         if not analysis_path.exists():

@@ -2,7 +2,7 @@
 """Run the agent headlessly, save a timestamped log, and write an issue analysis.
 
 Usage:
-    python scripts/run_and_analyze.py [steps]
+    python scripts/run_and_analyze.py [steps] [--config PATH]
 
 Environment:
     LEVEL9_INTERPRETER  path to glklevel9 binary  (default: ./tools/glklevel9)
@@ -17,9 +17,9 @@ Exit code:
     0  clean run (no issues detected)
     1  issues found, or startup error
 """
+import argparse
 import json
 import os
-import re
 import sys
 from collections import Counter
 from datetime import datetime
@@ -29,6 +29,7 @@ import networkx as nx
 
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
+from game_config import config
 from agent import process_agent_step
 from game_engine import start_level9
 from llm import load_llm
@@ -37,19 +38,6 @@ INTERPRETER_PATH = os.environ.get("LEVEL9_INTERPRETER", "./tools/glklevel9")
 ROM_PATH = os.environ.get("LEVEL9_ROM", "./gamefiles/knight-orc/GAMEDAT1.DAT")
 MODEL_PATH = os.environ.get("EVAL_MODEL_PATH", "../models/Phi-3.5-mini-instruct-Q3_K_M.gguf")
 LOG_DIR = Path("logs")
-
-_FAILURE_PATTERN = re.compile(
-    r"you can'?t|can'?t see|can'?t do that|don'?t understand|you don'?t have"
-    r"|nothing happens|that'?s not something|there('?s| is) no \w+ here"
-    r"|i don'?t know (that word|what)",
-    re.IGNORECASE,
-)
-
-_CREATURE_WORDS = frozenset({
-    "horse", "pony", "mare", "stallion", "knight", "orc", "guard", "soldier",
-    "man", "woman", "person", "peasant", "troll", "goblin", "dwarf", "elf",
-    "creature", "beast", "monster", "demon",
-})
 
 
 def _make_initial_state():
@@ -62,7 +50,7 @@ def _make_initial_state():
         "uninspected_objects": [],
         "current_inspection": {
             "target": None,
-            "sequence": ["take", "examine", "read", "look inside"],
+            "sequence": config.inspection_sequence,
             "step_index": 0,
         },
         "known_npcs": {},
@@ -114,7 +102,7 @@ def analyze_log(game_log):
     misclassified = []
     for e in game_log:
         for obj in e["extracted"].get("objects", []):
-            if any(w in obj.lower().split() for w in _CREATURE_WORDS):
+            if any(w in obj.lower().split() for w in config.creature_words):
                 misclassified.append({
                     "action": e["action"],
                     "object": obj,
@@ -133,7 +121,7 @@ def analyze_log(game_log):
     for e in game_log:
         action = e["action"].lower()
         if any(action.startswith(v) for v in ("read ", "look inside ", "examine ")):
-            if _FAILURE_PATTERN.search(e["response"]):
+            if config.failure_pattern.search(e["response"]):
                 inspection_fails.append({"action": e["action"], "response": e["response"][:100]})
     if inspection_fails:
         issues.append({
@@ -211,6 +199,7 @@ def _write_report(issues, game_log, ts, log_path):
     lines += [
         "\n---",
         "## Files to edit",
+        "- `configs/knight_orc.json` — creature words, failure phrases, inspection sequence",
         "- `llm.py` — LLM prompt and `extract_knowledge()` retry logic",
         "- `agent.py` — `_is_creature()`, `determine_next_action()`, `process_agent_step()`",
         "- `game_engine.py` — pexpect interface, failure detection patterns",
@@ -223,7 +212,14 @@ def _write_report(issues, game_log, ts, log_path):
 
 
 if __name__ == "__main__":
-    steps = int(sys.argv[1]) if len(sys.argv) > 1 else 50
-    _, issues = run(steps=steps)
+    parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
+    parser.add_argument("steps", nargs="?", type=int, default=50, help="Number of game steps (default: 50)")
+    parser.add_argument("--config", metavar="PATH", help="Path to game config JSON (default: built-in Knight Orc values)")
+    args = parser.parse_args()
+
+    if args.config:
+        config.load_from_file(args.config)
+
+    _, issues = run(steps=args.steps)
     print(json.dumps(issues, indent=2))
     sys.exit(1 if issues else 0)
