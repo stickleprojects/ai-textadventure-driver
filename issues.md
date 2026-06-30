@@ -23,12 +23,19 @@
 15. ~~the map visualization doesnt word wrap the room descriptions so each box is overlapping the previous one~~ — fixed: `_display_label()` in `ui.py` abbreviates `Unknown (X from Y)` to `? X` and word-wraps long names at 20 chars; `widthConstraint: { maximum: 150 }` added as a backstop; node IDs unchanged so agent logic is unaffected
 16. ~~move all knightorc-specific code into a config file (for example, which items are npcs, unsuccessful responses, "what now?" prompt, etc.)~~ — fixed: `game_config.py` introduces a `GameConfig` singleton with `load_from_file()`; `configs/knight_orc.json` holds creature words, failure phrases, prompt pattern and inspection sequence; CLI scripts accept `--config PATH`, Streamlit uses `GAME_CONFIG` env var
 17. ~~after a few successful commands, knightorc will respond with "we wont bother with what now from now on" and the prompt changes to ">" on its own, add support for both prompts of "What now?" and ">"~~ — fixed: `prompt_pattern` in `game_config.py` and `configs/knight_orc.json` updated to `What now\?|\r?\n>` so pexpect matches both prompts
-18. the agent applies the same inspection sequence (`take → examine → read → look inside`) to every object regardless of type — it should only attempt verbs that make sense for the object (e.g. `eat` an apple, `wear` a cloak, `open` a sack, `read` a scroll, but not `read` a sword or `look inside` a ghost)
-   - **Supersedes issue 6** (wearables) — solves that and open/close/lock/unlock in one change
-   - **Fix: object typing via LLM + config-driven verb allowlists**
-     1. `configs/knight_orc.json` gains `object_type_verbs`: a dict mapping type name → ordered list of verbs. Types: `container`, `readable`, `clothing`, `lockable`, `food`, `generic` (fallback). Optionally a `type_hints` dict (type → keyword list) as a defensive pre-filter when the LLM misclassifies.
-     2. `llm.py` prompt change: `objects` field becomes a list of `{"name": str, "type": str}` dicts instead of plain strings. The LLM assigns a type from the known set at extraction time.
-     3. `agent.py` / `process_agent_step`: store `type` in `known_entities[obj]` when first discovered. `determine_next_action` looks up the type to build the per-object inspection sequence instead of using the global `config.inspection_sequence`.
-     4. `game_config.py`: `inspection_sequence` becomes the fallback for `generic`; add `object_type_verbs` field to `GameConfig` with `load_from_file` support.
-     5. `log_analyzer.py`: add detector for `type_unknown` (LLM returned an unrecognised type string).
-   - **Effort: Medium | Risk: Medium** — LLM schema change is the main risk (extraction format changes from `["name"]` to `[{"name","type"}]`); existing `known_entities` and inspection logic need updating; eval fixtures need new cases covering typed extraction. `type_hints` keyword fallback reduces dependency on LLM correctness.
+18. the agent applies the same inspection sequence (`take → examine → read → look inside`) to every object regardless of type — it should only attempt verbs that make sense for the object (e.g. `eat` an apple, `wear` a cloak, `open` a sack, `read` a scroll, but not `read` a sword or `look inside` a ghost). Wearables add a further complication: you may be able to wear a hat and gloves simultaneously but not a cloak over armour — state the game knows but we don't.
+   - **Supersedes issue 6** (wearables)
+   - **Revised approach: attempt-and-learn, not pre-classify**
+     The game is a better oracle than any static type list or LLM classification. Drop upfront object typing; instead attempt a broad candidate verb list and learn from the game's response.
+     - Game responses fall into three categories:
+       - **Hard failure** ("you can't wear an apple", "that makes no sense") → this verb is permanently invalid for this object; blacklist it in `known_entities`
+       - **Soft failure** ("you can't wear that right now", "you are already wearing armour") → verb is valid but blocked by current state; keep it queued and retry when state changes (e.g. after removing another item)
+       - **Success** → record the verb worked and what changed (item worn, container opened, etc.)
+     - **`game_config.json`** gains two pattern lists instead of one:
+       - `hard_failure_patterns` — responses meaning "never try this again on this object"
+       - `soft_failure_patterns` — responses meaning "valid verb, wrong state, retry later"
+       - Also gains `candidate_verbs`: ordered list of verbs to attempt on every newly discovered object (superset of current `inspection_sequence`, e.g. adds `wear`, `open`, `eat`, `unlock`)
+     - **`known_entities`** gains `verb_outcomes` dict per object: `{verb: "succeeded" | "blocked" | "invalid"}`. Agent skips `invalid` verbs and defers `blocked` ones.
+     - **`agent.py`** `_is_failure_response()` splits into `_is_hard_failure()` and `_is_soft_failure()`. `process_agent_step` records outcomes. `determine_next_action` uses `verb_outcomes` to skip or defer.
+     - **`log_analyzer.py`**: add detector for high `blocked` verb rate (agent repeatedly deferring the same verb suggests soft-failure state is never resolving).
+   - **Effort: Medium | Risk: Low** — the game response is the oracle so no LLM classification risk; pattern matching is already proven (`_is_failure_response`); main work is splitting failure patterns and adding `verb_outcomes` state. The optimistic attempt approach means no new objects are missed due to misclassification.
