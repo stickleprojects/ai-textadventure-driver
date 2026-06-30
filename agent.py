@@ -1,42 +1,21 @@
-import re
 from datetime import datetime
 
 import networkx as nx
 
+from game_config import config
 from game_engine import execute_game_command
 from llm import extract_knowledge
 
-_FAILURE_RE = re.compile(
-    r"you can'?t"
-    r"|can'?t see"
-    r"|can'?t do that"
-    r"|don'?t understand"
-    r"|you don'?t have"
-    r"|nothing happens"
-    r"|that'?s not something"
-    r"|there('?s| is) no \w+ here"
-    r"|i don'?t know (that word|what)",
-    re.IGNORECASE,
-)
-
 
 def _is_failure_response(text):
-    return bool(_FAILURE_RE.search(text))
+    return bool(config.failure_pattern.search(text))
 
 
 _DIRECTIONS = {"north", "south", "east", "west", "up", "down", "ne", "nw", "se", "sw"}
 
-_CREATURE_WORDS = frozenset({
-    "horse", "pony", "mare", "stallion",
-    "knight", "orc", "guard", "soldier",
-    "man", "woman", "person", "peasant",
-    "troll", "goblin", "dwarf", "elf",
-    "creature", "beast", "monster", "demon",
-})
-
 
 def _is_creature(name):
-    return bool(set(name.lower().split()) & _CREATURE_WORDS)
+    return bool(set(name.lower().split()) & config.creature_words)
 
 
 def _detect_loop(game_log, window=10, threshold=4):

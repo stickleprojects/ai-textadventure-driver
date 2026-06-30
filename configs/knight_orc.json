@@ -1,0 +1,22 @@
+{
+    "prompt_pattern": "What now\\?",
+    "inspection_sequence": ["take", "examine", "read", "look inside"],
+    "creature_words": [
+        "horse", "pony", "mare", "stallion",
+        "knight", "orc", "guard", "soldier",
+        "man", "woman", "person", "peasant",
+        "troll", "goblin", "dwarf", "elf",
+        "creature", "beast", "monster", "demon"
+    ],
+    "failure_patterns": [
+        "you can'?t",
+        "can'?t see",
+        "can'?t do that",
+        "don'?t understand",
+        "you don'?t have",
+        "nothing happens",
+        "that'?s not something",
+        "there('?s| is) no \\w+ here",
+        "i don'?t know (that word|what)"
+    ]
+}

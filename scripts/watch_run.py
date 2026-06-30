@@ -3,13 +3,15 @@
 Prints a JSON findings report; exits non-zero if a loop or timeout/error was detected.
 
 Usage:
-    python scripts/watch_run.py [steps]
+    python scripts/watch_run.py [steps] [--config configs/knight_orc.json]
     python scripts/watch_run.py 100
+    python scripts/watch_run.py 50 --config configs/my_game.json
 
 Wire into the /loop skill:
     /loop 30m run python scripts/watch_run.py 50 and summarize any findings —
     if a loop or timeout was detected, tell me which action/step and show the raw response text
 """
+import argparse
 import json
 import os
 import sys
@@ -19,6 +21,7 @@ import networkx as nx
 # Must run from project root so relative imports work
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
+from game_config import config
 from agent import process_agent_step
 from game_engine import start_level9
 from llm import load_llm
@@ -36,7 +39,7 @@ def make_initial_state():
         "known_entities": {},
         "world_graph": nx.DiGraph(),
         "uninspected_objects": [],
-        "current_inspection": {"target": None, "sequence": ["take", "examine", "read", "look inside"], "step_index": 0},
+        "current_inspection": {"target": None, "sequence": config.inspection_sequence, "step_index": 0},
         "known_npcs": {},
         "unresolved_anomalies": {},
         "active_goal": None,
@@ -82,7 +85,14 @@ def run(steps=50):
 
 
 if __name__ == "__main__":
-    steps = int(sys.argv[1]) if len(sys.argv) > 1 else 50
-    findings = run(steps=steps)
+    parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
+    parser.add_argument("steps", nargs="?", type=int, default=50, help="Number of game steps (default: 50)")
+    parser.add_argument("--config", metavar="PATH", help="Path to game config JSON (default: built-in Knight Orc values)")
+    args = parser.parse_args()
+
+    if args.config:
+        config.load_from_file(args.config)
+
+    findings = run(steps=args.steps)
     print(json.dumps(findings, indent=2))
     sys.exit(1 if findings else 0)

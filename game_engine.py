@@ -1,6 +1,8 @@
 import re
 import pexpect
 
+from game_config import config
+
 
 def clean_level9_output(raw_text):
     ansi_escape = re.compile(r'\x1B(?:[@-Z\\-_]|\[[0-?]*[ -/]*[@-~])')
@@ -17,7 +19,7 @@ def start_level9(interpreter_path, rom_path):
     """
     try:
         child = pexpect.spawn(f'{interpreter_path} "{rom_path}"', encoding='utf-8', timeout=5)
-        child.expect(r'What now\?')
+        child.expect(config.prompt_pattern)
         return child, clean_level9_output(child.before)
     except Exception as e:
         return None, f"Error starting interpreter: {str(e)}"
@@ -29,7 +31,7 @@ def execute_game_command(child, command):
         return "CRITICAL ERROR: Game process is not running. Please start the ROM."
     try:
         child.sendline(command)
-        child.expect(r'What now\?')
+        child.expect(config.prompt_pattern)
         raw_output = child.before
         if raw_output.startswith(command):
             raw_output = raw_output[len(command):]

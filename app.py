@@ -1,13 +1,19 @@
+import os
 import time
 from datetime import datetime
 
 import networkx as nx
 import streamlit as st
 
+from game_config import config
 from agent import process_agent_step, update_graph
 from game_engine import start_level9
 from llm import LLAMA_AVAILABLE, extract_knowledge, load_llm
 from ui import generate_json_log, generate_markdown_log, render_graph
+
+_config_path = os.environ.get("GAME_CONFIG")
+if _config_path:
+    config.load_from_file(_config_path)
 
 st.set_page_config(page_title="Text Adventure Autonomous OS", layout="wide", initial_sidebar_state="expanded")
 
@@ -23,7 +29,7 @@ def init_state():
             "uninspected_objects": [],
             "current_inspection": {
                 "target": None,
-                "sequence": ["take", "examine", "read", "look inside"],
+                "sequence": config.inspection_sequence,
                 "step_index": 0,
             },
             "known_npcs": {},
