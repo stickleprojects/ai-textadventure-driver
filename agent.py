@@ -250,6 +250,7 @@ def process_agent_step(state, child, llm_instance):
             _record_verb_outcome(state, effective_target, insp_verb, "succeeded")
 
     extracted = extract_knowledge(response, action_taken, llm_instance)
+    token_usage = extracted.pop("_usage", {"input_tokens": 0, "output_tokens": 0})
 
     if extracted.get("room"):
         state["current_room"] = extracted["room"]
@@ -321,6 +322,7 @@ def process_agent_step(state, child, llm_instance):
         "extracted": extracted,
         "score": state.get("current_score"),
         "utility": utility,
+        "token_usage": token_usage,
     }
     state["game_log"].append(entry)
 
