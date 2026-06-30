@@ -9,6 +9,16 @@
     ]
   },
   "hooks": {
+    "Stop": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "echo '{\"systemMessage\": \"Journal check: if any non-obvious design decisions, rejected approaches, or surprising behaviours were discussed this session, add an entry to JOURNAL.md.\"}'"
+          }
+        ]
+      }
+    ],
     "PreToolUse": [
       {
         "matcher": "Bash",
