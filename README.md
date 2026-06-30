@@ -140,6 +140,24 @@ Wire to the `/loop` skill to automate manual watching:
 /loop 30m run python scripts/watch_run.py 50 and summarize any findings
 ```
 
+### Generating a map from a saved run log
+
+`watch_run.py` saves a PNG map alongside the log automatically. To regenerate it (or produce one from an older log):
+
+```bash
+# Writes logs/watch_<run_id>_map.png by default
+python scripts/generate_map.py logs/watch_20260701_085624.json
+
+# Override the output path
+python scripts/generate_map.py logs/watch_20260701_085624.json --out map.png
+```
+
+To use the latest log without typing the filename:
+
+```bash
+python scripts/generate_map.py $(ls -t logs/watch_*.json | head -1)
+```
+
 ### Growing the eval suite from a saved game log
 
 Export a run log via the **Export Run Log (JSON)** button in the sidebar, then:
