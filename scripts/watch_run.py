@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 """Run the agent loop headlessly for N steps against the real game + LLM.
 Prints a JSON findings report; exits non-zero if a loop or timeout/error was detected.
+Ctrl-C to interrupt early; findings will still be saved.
 
 Usage:
     python scripts/watch_run.py [steps] [--config configs/knight_orc.json]
@@ -126,7 +127,7 @@ def run(steps=50, verbose=False):
         return [{"step": 0, "type": "startup_error", "message": initial_text}]
 
     if verbose:
-        print(f"Started game. Running {steps} steps...", file=sys.stderr)
+        print(f"Started game. Running {steps} steps... Ctrl-C to interrupt early; findings will still be saved.", file=sys.stderr)
 
     llm = load_llm(MODEL_PATH)
     if verbose and llm is None:

@@ -10,6 +10,68 @@
       "run_id": "watch_20260630_182818",
       "outcome": "ambiguous",
       "final_score": null
+    },
+    {
+      "run_id": "watch_20260630_225451",
+      "outcome": "ambiguous",
+      "final_score": null
+    },
+    {
+      "run_id": "watch_20260630_225738",
+      "outcome": "ambiguous",
+      "final_score": null
+    },
+    {
+      "run_id": "watch_20260701_081328",
+      "outcome": "interrupted",
+      "final_score": null
     }
-  ]
+  ],
+  "entity_verb_outcomes": {
+    "putty knife": {
+      "wear": "invalid",
+      "eat": "invalid",
+      "drink": "invalid",
+      "open": "invalid",
+      "close": "invalid",
+      "unlock": "invalid",
+      "lock": "invalid",
+      "pull": "invalid",
+      "turn on": "invalid",
+      "turn off": "invalid"
+    },
+    "hooded cloak": {
+      "eat": "invalid",
+      "drink": "invalid",
+      "open": "invalid",
+      "close": "invalid",
+      "unlock": "invalid",
+      "lock": "invalid",
+      "pull": "invalid",
+      "turn on": "invalid"
+    },
+    "garbage": {
+      "eat": "invalid",
+      "drink": "invalid",
+      "open": "invalid",
+      "close": "invalid",
+      "unlock": "invalid",
+      "lock": "invalid",
+      "pull": "invalid",
+      "turn on": "invalid",
+      "turn off": "invalid"
+    },
+    "fish-heads": {
+      "take": "invalid"
+    },
+    "brown cabbage": {
+      "take": "invalid"
+    },
+    "green beef": {
+      "take": "invalid"
+    },
+    "furry bread": {
+      "take": "invalid"
+    }
+  }
 }
