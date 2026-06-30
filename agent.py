@@ -1,3 +1,4 @@
+import re
 from datetime import datetime
 
 import networkx as nx
@@ -5,6 +6,9 @@ import networkx as nx
 from game_config import config
 from game_engine import execute_game_command
 from llm import extract_knowledge
+
+_SCORE_RE = re.compile(r"you score\s+(\d+)\s+out of\s+(\d+)", re.IGNORECASE)
+_SCORE_INTERVAL = 20
 
 
 def _is_hard_failure(text):
@@ -153,6 +157,10 @@ def determine_next_action(state):
         if v.startswith("Unknown"):
             return data["label"]
 
+    step_count = len(state["game_log"])
+    if step_count > 0 and step_count % _SCORE_INTERVAL == 0:
+        return "score"
+
     return "look"
 
 
@@ -240,11 +248,18 @@ def process_agent_step(state, child, llm_instance):
     for resolved in extracted.get("resolved_anomalies", []):
         state["unresolved_anomalies"].pop(resolved, None)
 
+    if action_taken == "score":
+        m = _SCORE_RE.search(response)
+        if m:
+            state["current_score"] = int(m.group(1))
+            state["max_score"] = int(m.group(2))
+
     entry = {
         "timestamp": datetime.now().strftime("%H:%M:%S"),
         "action": action_taken,
         "response": response,
         "extracted": extracted,
+        "score": state.get("current_score"),
     }
     state["game_log"].append(entry)
 
