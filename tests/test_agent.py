@@ -4,12 +4,14 @@ import pytest
 import networkx as nx
 
 from agent import (
+    _compute_utility,
     _detect_loop,
     _is_failure_response,
     _is_hard_failure,
     _is_soft_failure,
     _parse_inspection_action,
     _record_verb_outcome,
+    _snapshot_state,
     determine_next_action,
     process_agent_step,
     update_graph,
@@ -407,3 +409,96 @@ class TestStuckAnomalyLoop:
              patch("agent.extract_knowledge", return_value={"resolved_anomalies": ["rubbish"]}):
             process_agent_step(state, stub_child, None)
         assert "rubbish" not in state["unresolved_anomalies"]
+
+
+# ── utility tagging (_compute_utility + process_agent_step integration) ───────
+
+class TestComputeUtility:
+    def _snap(self, room="Hall", entities=0, npcs=0, inventory=0):
+        return {"room": room, "entity_count": entities, "npc_count": npcs, "inventory_count": inventory}
+
+    def test_room_change_is_productive(self):
+        before = self._snap(room="Hall")
+        after = self._snap(room="Courtyard")
+        assert _compute_utility("north", "You go north.", before, after, None, None, {}) == "productive"
+
+    def test_new_entity_is_productive(self):
+        before = self._snap(entities=0)
+        after = self._snap(entities=1)
+        assert _compute_utility("look", "You see a sword.", before, after, None, None, {}) == "productive"
+
+    def test_new_npc_is_productive(self):
+        before = self._snap(npcs=0)
+        after = self._snap(npcs=1)
+        assert _compute_utility("look", "A knight is here.", before, after, None, None, {}) == "productive"
+
+    def test_new_inventory_item_is_productive(self):
+        before = self._snap(inventory=0)
+        after = self._snap(inventory=1)
+        assert _compute_utility("take sword", "Taken.", before, after, "take", "sword", {}) == "productive"
+
+    def test_hard_failure_with_no_state_change_is_futile(self):
+        snap = self._snap()
+        assert _compute_utility("north", "You can't do that.", snap, snap, None, None, {}) == "futile"
+
+    def test_first_examine_with_no_state_change_is_informative(self):
+        snap = self._snap()
+        # verb not in pre_verb_outcomes → informative
+        assert _compute_utility("examine sword", "A fine blade.", snap, snap, "examine", "sword", {}) == "informative"
+
+    def test_repeated_examine_is_redundant(self):
+        snap = self._snap()
+        pre = {"examine": "succeeded"}
+        assert _compute_utility("examine sword", "A fine blade.", snap, snap, "examine", "sword", pre) == "redundant"
+
+    def test_look_with_no_target_is_informative(self):
+        snap = self._snap()
+        assert _compute_utility("look", "You are in the Hall.", snap, snap, None, None, {}) == "informative"
+
+    def test_productive_beats_hard_failure(self):
+        # If room changed despite a confusing failure message, still productive
+        before = self._snap(room="Hall")
+        after = self._snap(room="Courtyard")
+        assert _compute_utility("north", "Nothing happens. You stumble through.", before, after, None, None, {}) == "productive"
+
+
+class TestUtilityTaggedInLog:
+    def test_futile_direction_tagged_in_log(self, stub_child):
+        state = make_state(current_room="Hall")
+        state["world_graph"].add_node("Hall")
+        state["world_graph"].add_edge("Hall", "Unknown (north from Hall)", label="north")
+        with patch("agent.execute_game_command", return_value="You can't do that."), \
+             patch("agent.extract_knowledge", return_value={}):
+            process_agent_step(state, stub_child, None)
+        assert state["game_log"][-1]["utility"] == "futile"
+
+    def test_room_change_tagged_productive(self, stub_child):
+        state = make_state(current_room="Hall")
+        state["world_graph"].add_node("Hall")
+        state["world_graph"].add_edge("Hall", "Unknown (north from Hall)", label="north")
+        with patch("agent.execute_game_command", return_value="You go north."), \
+             patch("agent.extract_knowledge", return_value={"room": "Courtyard", "exits": []}):
+            process_agent_step(state, stub_child, None)
+        assert state["game_log"][-1]["utility"] == "productive"
+
+    def test_first_examine_tagged_informative(self, stub_child):
+        state = make_state(
+            current_room="Hall",
+            current_inspection={"target": "sword", "sequence": ["examine"], "step_index": 0},
+            known_entities={"sword": {"status": "held", "location": "Hall", "verb_outcomes": {}}},
+        )
+        with patch("agent.execute_game_command", return_value="A fine blade."), \
+             patch("agent.extract_knowledge", return_value={}):
+            process_agent_step(state, stub_child, None)
+        assert state["game_log"][-1]["utility"] == "informative"
+
+    def test_repeated_examine_tagged_redundant(self, stub_child):
+        state = make_state(
+            current_room="Hall",
+            current_inspection={"target": "sword", "sequence": ["examine"], "step_index": 0},
+            known_entities={"sword": {"status": "held", "location": "Hall", "verb_outcomes": {"examine": "succeeded"}}},
+        )
+        with patch("agent.execute_game_command", return_value="A fine blade."), \
+             patch("agent.extract_knowledge", return_value={}):
+            process_agent_step(state, stub_child, None)
+        assert state["game_log"][-1]["utility"] == "redundant"

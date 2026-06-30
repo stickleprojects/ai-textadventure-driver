@@ -164,6 +164,31 @@ def determine_next_action(state):
     return "look"
 
 
+def _snapshot_state(state):
+    return {
+        "room": state["current_room"],
+        "entity_count": len(state["known_entities"]),
+        "npc_count": len(state["known_npcs"]),
+        "inventory_count": len(state["inventory"]),
+    }
+
+
+def _compute_utility(action, response, snap_before, snap_after, insp_verb, effective_target, pre_verb_outcomes):
+    """Classify action utility from state diff. No LLM — deterministic."""
+    if (
+        snap_before["room"] != snap_after["room"]
+        or snap_after["entity_count"] > snap_before["entity_count"]
+        or snap_after["npc_count"] > snap_before["npc_count"]
+        or snap_after["inventory_count"] > snap_before["inventory_count"]
+    ):
+        return "productive"
+    if _is_hard_failure(response):
+        return "futile"
+    if insp_verb and effective_target and insp_verb in pre_verb_outcomes:
+        return "redundant"
+    return "informative"
+
+
 def process_agent_step(state, child, llm_instance):
     """Executes one agent cycle: decide → act → extract → update state."""
     previous_room = state["current_room"]
@@ -177,6 +202,12 @@ def process_agent_step(state, child, llm_instance):
     # post_insp_target covers new takes; pre_insp_target covers ongoing inspection verbs.
     effective_target = post_insp_target or pre_insp_target
     insp_verb = _parse_inspection_action(action_taken, effective_target)
+
+    snap_before = _snapshot_state(state)
+    pre_verb_outcomes = (
+        state["known_entities"].get(effective_target, {}).get("verb_outcomes", {}).copy()
+        if effective_target else {}
+    )
 
     response = execute_game_command(child, action_taken)
 
@@ -254,12 +285,18 @@ def process_agent_step(state, child, llm_instance):
             state["current_score"] = int(m.group(1))
             state["max_score"] = int(m.group(2))
 
+    utility = _compute_utility(
+        action_taken, response, snap_before, _snapshot_state(state),
+        insp_verb, effective_target, pre_verb_outcomes,
+    )
+
     entry = {
         "timestamp": datetime.now().strftime("%H:%M:%S"),
         "action": action_taken,
         "response": response,
         "extracted": extracted,
         "score": state.get("current_score"),
+        "utility": utility,
     }
     state["game_log"].append(entry)
 
