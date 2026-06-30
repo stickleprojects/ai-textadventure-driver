@@ -67,6 +67,15 @@ The app is split into four modules plus a thin Streamlit entry point:
 - Wearable items / disguises (e.g. hood) not handled
 - "You can't do that" responses are not fed back to correct the inspection queue
 
+## Journal
+
+`JOURNAL.md` in the project root records non-obvious findings, rejected approaches, and design decisions. Add an entry whenever:
+- An approach was considered and rejected (and why)
+- A surprising behaviour was observed in the game or LLM
+- A non-obvious architectural decision was made
+
+Format: `## YYYY-MM-DD` heading, short subheading, 2–4 paragraphs covering what was observed, why it matters, and what was decided. Do not journal routine fixes — only things that would surprise a future reader.
+
 ## Game Files
 
 `gamefiles/knight-orc/` contains the original Level 9 ROM files. `GAMEDAT1.DAT` is the primary entry point. `tools/glklevel9` is the dumb-GLK Level 9 interpreter binary (Linux x86-64).
