@@ -22,6 +22,7 @@ def make_state(**overrides):
         "is_running": False,
         "current_score": None,
         "max_score": None,
+        "futile_edges": set(),
     }
     state.update(overrides)
     return state

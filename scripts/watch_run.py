@@ -56,6 +56,7 @@ def make_initial_state():
         "is_running": False,
         "current_score": None,
         "max_score": None,
+        "futile_edges": set(),
     }
 
 

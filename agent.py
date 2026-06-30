@@ -154,7 +154,7 @@ def determine_next_action(state):
         return f"take {new_target}"
 
     for _, v, data in state["world_graph"].edges(state["current_room"], data=True):
-        if v.startswith("Unknown"):
+        if v.startswith("Unknown") and not data.get("futile"):
             return data["label"]
 
     step_count = len(state["game_log"])
@@ -162,6 +162,15 @@ def determine_next_action(state):
         return "score"
 
     return "look"
+
+
+def _mark_edge_futile(state, from_room, direction):
+    """Mark a direction from a room as permanently futile — skip in future unknown-exit scans."""
+    state["futile_edges"].add((from_room, direction))
+    for _, _, data in state["world_graph"].edges(from_room, data=True):
+        if data.get("label") == direction:
+            data["futile"] = True
+            break
 
 
 def _snapshot_state(state):
@@ -289,6 +298,9 @@ def process_agent_step(state, child, llm_instance):
         action_taken, response, snap_before, _snapshot_state(state),
         insp_verb, effective_target, pre_verb_outcomes,
     )
+
+    if utility == "futile" and action_taken in _DIRECTIONS:
+        _mark_edge_futile(state, previous_room, action_taken)
 
     entry = {
         "timestamp": datetime.now().strftime("%H:%M:%S"),
