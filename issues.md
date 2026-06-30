@@ -93,6 +93,13 @@
 40. add support for npcs talking to you - not sure what they say but i think sometimes denzyl says "hi"
 41. ~~add negative failure for "Don't be silly"~~ — fixed by user
 42. ~~`watch_run.py` does not print the run ID at startup, making it impossible to correlate a mid-run observation with the correct log file~~ — fixed: run ID printed to stderr immediately after game start so you can note `run_id + step` when logging observations
+44. generate thumbnail images for each map location based on accumulated room descriptions
+    - The game log already captures raw `response` text and `extracted.room` per step; all the source material exists
+    - **Step 1:** post-process the game log to aggregate all responses per room name into a single description string
+    - **Step 2:** send each description to an image generation API (DALL-E, Stable Diffusion, etc.) with a style prompt (e.g. "pixel art top-down RPG view of: {description}")
+    - **Step 3:** display thumbnails on the map node or in a hover tooltip in the pyvis graph
+    - **Dependency:** requires a cloud image API — new external dependency not currently in the project
+    - **Effort: Medium | Risk: Low** — description aggregation is straightforward; image API integration is the main new work
 43. the world map does not represent elevation (up/down connections) or interior zones — all rooms are rendered flat on a single cardinal plane regardless of vertical relationships
     - **Option A (do first):** layered single map — extend `_compute_cardinal_positions` BFS in `ui.py` to track a Z-level per room (`up` edge = +1, `down` edge = -1, ground = 0). Map Z to a vertical Y-band in the pyvis view: ground in the middle, upper floors above, basements below. Cardinal X placement stays as-is within each band. Colour-code nodes by level (e.g. ground=green, upper=blue, lower=brown). No zone detection needed; low risk; immediately useful.
     - **Option B (later):** zone clustering — detect interiors as room clusters reachable from the main graph only via a single chokepoint node (a door, gate, named entrance). Render each zone as a separate Streamlit tab with its own layered map. Requires a sufficiently explored graph to form recognisable clusters; detection heuristic will misfire on sparse graphs. The Z-level data from Option A feeds directly into this.
