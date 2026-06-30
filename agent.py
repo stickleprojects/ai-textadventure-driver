@@ -277,11 +277,12 @@ def process_agent_step(state, child, llm_instance):
                 state["uninspected_objects"].append(obj)
                 state["known_entities"][obj] = {"status": "discovered", "location": state["current_room"]}
 
-    for item in extracted.get("added_to_inventory", []):
-        if item not in state["inventory"]:
-            state["inventory"].append(item)
-        if item in state["known_entities"]:
-            state["known_entities"][item]["status"] = "held"
+    if not _is_hard_failure(response):
+        for item in extracted.get("added_to_inventory", []):
+            if item not in state["inventory"]:
+                state["inventory"].append(item)
+            if item in state["known_entities"]:
+                state["known_entities"][item]["status"] = "held"
 
     for spell in extracted.get("learned_spells", []):
         if spell not in state["spellbook"]:
