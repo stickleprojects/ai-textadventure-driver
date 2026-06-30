@@ -3,6 +3,8 @@ from unittest.mock import MagicMock
 import networkx as nx
 import pytest
 
+from game_config import config
+
 
 def make_state(**overrides):
     state = {
@@ -14,7 +16,7 @@ def make_state(**overrides):
         "unresolved_anomalies": {},
         "world_graph": nx.DiGraph(),
         "uninspected_objects": [],
-        "current_inspection": {"target": None, "sequence": ["take", "examine", "read", "look inside"], "step_index": 0},
+        "current_inspection": {"target": None, "sequence": config.inspection_sequence, "step_index": 0},
         "active_goal": None,
         "game_log": [],
         "is_running": False,
