@@ -344,20 +344,29 @@ class TestProcessAgentStepOutcomes:
         assert state["known_entities"]["hat"]["verb_outcomes"].get("wear") == "succeeded"
 
     def test_hard_failure_does_not_add_to_inventory(self, stub_child):
-        # LLM hallucinates added_to_inventory from the command echo when the game
-        # says "You don't need to use the word X" — inventory must not be updated.
         state = make_state(uninspected_objects=["fish-heads"])
         state["known_entities"]["fish-heads"] = {"status": "discovered", "location": "Hall", "verb_outcomes": {}}
-        response = "Take fish-heads\nYou don't need to use the word \"fish-heads\" to finish this part of the game."
+        response = "You don't need to use the word \"fish-heads\" to finish this part of the game."
         with patch("agent.execute_game_command", return_value=response), \
              patch("agent.extract_knowledge", return_value={"added_to_inventory": ["fish-heads"]}):
             process_agent_step(state, stub_child, None)
         assert "fish-heads" not in state["inventory"]
 
+    def test_hard_failure_clears_added_to_inventory_from_log(self, stub_child):
+        # LLM hallucination must not appear in the log entry — log should reflect
+        # what was actually applied to state, not what the LLM erroneously extracted.
+        state = make_state(uninspected_objects=["fish-heads"])
+        state["known_entities"]["fish-heads"] = {"status": "discovered", "location": "Hall", "verb_outcomes": {}}
+        response = "You don't need to use the word \"fish-heads\" to finish this part of the game."
+        with patch("agent.execute_game_command", return_value=response), \
+             patch("agent.extract_knowledge", return_value={"added_to_inventory": ["fish-heads"]}):
+            process_agent_step(state, stub_child, None)
+        assert "added_to_inventory" not in state["game_log"][-1]["extracted"]
+
     def test_hard_failure_with_hallucinated_inventory_is_futile(self, stub_child):
         state = make_state(uninspected_objects=["fish-heads"])
         state["known_entities"]["fish-heads"] = {"status": "discovered", "location": "Hall", "verb_outcomes": {}}
-        response = "Take fish-heads\nYou don't need to use the word \"fish-heads\" to finish this part of the game."
+        response = "You don't need to use the word \"fish-heads\" to finish this part of the game."
         with patch("agent.execute_game_command", return_value=response), \
              patch("agent.extract_knowledge", return_value={"added_to_inventory": ["fish-heads"]}):
             process_agent_step(state, stub_child, None)

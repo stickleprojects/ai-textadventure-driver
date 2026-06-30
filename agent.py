@@ -278,7 +278,11 @@ def process_agent_step(state, child, llm_instance):
                 state["uninspected_objects"].append(obj)
                 state["known_entities"][obj] = {"status": "discovered", "location": state["current_room"]}
 
-    if not _is_hard_failure(response):
+    if _is_hard_failure(response):
+        # Suppress LLM inventory hallucinations on failure responses so the log
+        # reflects what was actually applied to state.
+        extracted.pop("added_to_inventory", None)
+    else:
         for item in extracted.get("added_to_inventory", []):
             if item not in state["inventory"]:
                 state["inventory"].append(item)
