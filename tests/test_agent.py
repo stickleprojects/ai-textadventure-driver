@@ -637,3 +637,54 @@ class TestActiveGoalNavigation:
     def test_active_goal_falls_back_to_graph_step_when_no_template(self):
         with patch.object(config, "fast_nav_command", None):
             assert determine_next_action(self._goal_state()) == "north"
+
+
+# ── pending_npc_tasks ─────────────────────────────────────────────────────────
+
+class TestPendingNpcTasks:
+    def test_wait_command_emitted_when_task_pending_and_nothing_else(self):
+        state = make_state(
+            pending_npc_tasks=[
+                {"npc": "Denzyl", "task_description": "fetch the spear", "wait_command": "wait for denzyl"},
+            ]
+        )
+        assert determine_next_action(state) == "wait for denzyl"
+
+    def test_first_task_wait_command_used_when_multiple_pending(self):
+        state = make_state(
+            pending_npc_tasks=[
+                {"npc": "Denzyl", "task_description": "fetch spear", "wait_command": "wait for denzyl"},
+                {"npc": "Gripper", "task_description": "find key", "wait_command": "wait for gripper"},
+            ]
+        )
+        assert determine_next_action(state) == "wait for denzyl"
+
+    def test_empty_pending_tasks_falls_through_to_look(self):
+        assert determine_next_action(make_state()) == "look"
+
+    def test_inspection_takes_priority_over_pending_task(self):
+        state = make_state(
+            current_inspection={"target": "sword", "sequence": ["examine"], "step_index": 0},
+            known_entities={"sword": {"status": "held", "location": "Hall", "verb_outcomes": {}}},
+            pending_npc_tasks=[
+                {"npc": "Denzyl", "task_description": "fetch spear", "wait_command": "wait for denzyl"},
+            ],
+        )
+        assert determine_next_action(state) == "examine sword"
+
+    def test_unknown_exit_takes_priority_over_pending_task(self):
+        state = make_state(current_room="Hall")
+        state["world_graph"].add_node("Hall")
+        state["world_graph"].add_edge("Hall", "Unknown (north from Hall)", label="north")
+        state["pending_npc_tasks"] = [
+            {"npc": "Denzyl", "task_description": "fetch spear", "wait_command": "wait for denzyl"},
+        ]
+        assert determine_next_action(state) == "north"
+
+    def test_config_loads_wait_for_command(self, tmp_path):
+        cfg_file = tmp_path / "game.json"
+        cfg_file.write_text('{"npc_commands": {"wait_for_command": "wait for {npc}"}}')
+        from game_config import GameConfig
+        cfg = GameConfig()
+        cfg.load_from_file(cfg_file)
+        assert cfg.wait_for_command == "wait for {npc}"

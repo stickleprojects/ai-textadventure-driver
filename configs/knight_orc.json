@@ -36,5 +36,8 @@
     "navigation": {
         "fast_nav_command": "run to {target}",
         "full_nav_command": "go to {target}"
+    },
+    "npc_commands": {
+        "wait_for_command": "wait for {npc}"
     }
 }

@@ -40,6 +40,7 @@ def init_state():
             "current_score": None,
             "max_score": None,
             "futile_edges": set(),
+            "pending_npc_tasks": [],
         }
     if 'level9_process' not in st.session_state:
         st.session_state.level9_process = None

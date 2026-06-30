@@ -23,6 +23,7 @@ def make_state(**overrides):
         "current_score": None,
         "max_score": None,
         "futile_edges": set(),
+        "pending_npc_tasks": [],
     }
     state.update(overrides)
     return state

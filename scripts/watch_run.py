@@ -57,6 +57,7 @@ def make_initial_state():
         "current_score": None,
         "max_score": None,
         "futile_edges": set(),
+        "pending_npc_tasks": [],
     }
 
 

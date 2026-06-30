@@ -169,6 +169,9 @@ def determine_next_action(state):
     if step_count > 0 and step_count % _SCORE_INTERVAL == 0:
         return "score"
 
+    if state["pending_npc_tasks"]:
+        return state["pending_npc_tasks"][0]["wait_command"]
+
     return "look"
 
 

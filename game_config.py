@@ -18,6 +18,9 @@ JSON schema (all keys optional — missing keys keep their defaults):
     "navigation": {
         "fast_nav_command":   string  — template for fast navigation (e.g. "run to {target}"); omit to use graph-based step-by-step
         "full_nav_command":   string  — template for full navigation showing intermediate rooms (e.g. "go to {target}"); omit to use graph-based
+    },
+    "npc_commands": {
+        "wait_for_command":   string  — template to wait for a specific NPC (e.g. "wait for {npc}"); omit if game has no such command
     }
 }
 
@@ -71,8 +74,9 @@ class GameConfig:
             k: [re.compile(p, re.IGNORECASE) for p in patterns]
             for k, patterns in self._DEFAULT_END_STATE_PATTERNS.items()
         }
-        self.fast_nav_command = None  # e.g. "run to {target}"
-        self.full_nav_command = None  # e.g. "go to {target}"
+        self.fast_nav_command = None   # e.g. "run to {target}"
+        self.full_nav_command = None   # e.g. "go to {target}"
+        self.wait_for_command = None   # e.g. "wait for {npc}"
         self._compile()
 
     def _compile(self):
@@ -126,6 +130,10 @@ class GameConfig:
                 self.fast_nav_command = nav["fast_nav_command"]
             if "full_nav_command" in nav:
                 self.full_nav_command = nav["full_nav_command"]
+        if "npc_commands" in data:
+            npc = data["npc_commands"]
+            if "wait_for_command" in npc:
+                self.wait_for_command = npc["wait_for_command"]
 
 
 config = GameConfig()
