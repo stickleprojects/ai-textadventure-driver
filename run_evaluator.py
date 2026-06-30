@@ -6,6 +6,7 @@ finished        — "congratulations" / "you have finished" matched
 game_ended      — other end_state_pattern matched (death, score summary)
 score_improved  — final_score > 0 and score was recorded during the run
 agent_failure   — loop_detected, crash, or timeout_or_error finding present
+interrupted     — user pressed Ctrl+C; logs saved, run ended early
 ambiguous       — hit max steps, no score change, no error, no end state
 
 Crash sub-classification (classify_finding)
@@ -40,7 +41,7 @@ def _scan_for_end_state(game_log):
 
 
 def classify_run(game_log, findings, final_score=None):
-    """Return one of the five outcome strings for this run.
+    """Return one of the six outcome strings for this run.
 
     Parameters
     ----------
@@ -49,6 +50,9 @@ def classify_run(game_log, findings, final_score=None):
     final_score : int|None  — state["current_score"] at run end, or None
     """
     finding_types = {f.get("type") for f in findings}
+
+    if "interrupted" in finding_types:
+        return "interrupted"
 
     end_category, _ = _scan_for_end_state(game_log)
 
