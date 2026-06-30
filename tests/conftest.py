@@ -20,6 +20,8 @@ def make_state(**overrides):
         "active_goal": None,
         "game_log": [],
         "is_running": False,
+        "current_score": None,
+        "max_score": None,
     }
     state.update(overrides)
     return state

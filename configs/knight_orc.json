@@ -27,5 +27,10 @@
         "while (you'?re|you are) (wearing|carrying|holding)",
         "can'?t do that yet",
         "not yet"
-    ]
+    ],
+    "end_state_patterns": {
+        "death": ["you have died", "you are dead", "killed"],
+        "finished": ["congratulations", "you have finished", "the end"],
+        "score": ["you score \\d+ out of \\d+"]
+    }
 }

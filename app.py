@@ -37,6 +37,8 @@ def init_state():
             "active_goal": None,
             "game_log": [],
             "is_running": False,
+            "current_score": None,
+            "max_score": None,
         }
     if 'level9_process' not in st.session_state:
         st.session_state.level9_process = None

@@ -10,6 +10,11 @@ JSON schema (all keys optional — missing keys keep their defaults):
     "creature_words":         [str]   — words that identify living creatures (case-insensitive)
     "hard_failure_patterns":  [str]   — regex fragments; response matching any means verb is permanently invalid for this object
     "soft_failure_patterns":  [str]   — regex fragments; response matching any means verb is valid but blocked by current state
+    "end_state_patterns":     {       — regex fragments keyed by category for run outcome detection
+        "death":    [str],
+        "finished": [str],
+        "score":    [str]
+    }
 }
 
 Legacy keys still accepted: "inspection_sequence" (alias for candidate_verbs),
@@ -20,6 +25,12 @@ import re
 
 
 class GameConfig:
+    _DEFAULT_END_STATE_PATTERNS = {
+        "death": [r"you have died", r"you are dead", r"killed"],
+        "finished": [r"congratulations", r"you have finished", r"the end"],
+        "score": [r"you score \d+ out of \d+"],
+    }
+
     def __init__(self):
         # Matches both the verbose prompt and the terse ">" prompt that
         # Knight Orc switches to after a few successful commands.
@@ -52,6 +63,10 @@ class GameConfig:
             r"can'?t do that yet",
             r"not yet",
         ]
+        self.end_state_patterns = {
+            k: [re.compile(p, re.IGNORECASE) for p in patterns]
+            for k, patterns in self._DEFAULT_END_STATE_PATTERNS.items()
+        }
         self._compile()
 
     def _compile(self):
@@ -94,6 +109,11 @@ class GameConfig:
             recompile = True
         if recompile:
             self._compile()
+        if "end_state_patterns" in data:
+            self.end_state_patterns = {
+                k: [re.compile(p, re.IGNORECASE) for p in patterns]
+                for k, patterns in data["end_state_patterns"].items()
+            }
 
 
 config = GameConfig()

@@ -21,14 +21,17 @@ def _jaccard(expected, actual):
     return len(expected_set & actual_set) / len(union)
 
 
-@pytest.fixture(scope="module")
+@pytest.fixture(scope="session")
 def llm_instance():
+    import multiprocessing
+    from llama_cpp import Llama
     if not LLAMA_AVAILABLE:
         pytest.skip("llama-cpp-python not installed")
     if not os.path.exists(MODEL_PATH):
         pytest.skip(f"model not found at {MODEL_PATH}; set EVAL_MODEL_PATH")
-    from llama_cpp import Llama
-    return Llama(model_path=MODEL_PATH, n_ctx=2048, n_threads=4, use_mlock=False, verbose=False)
+    n_threads = int(os.environ.get("EVAL_N_THREADS", str(multiprocessing.cpu_count())))
+    verbose = os.environ.get("EVAL_VERBOSE", "0") == "1"
+    return Llama(model_path=MODEL_PATH, n_ctx=2048, n_threads=n_threads, use_mlock=False, verbose=verbose)
 
 
 @pytest.mark.parametrize("case", EVAL_CASES, ids=[c["id"] for c in EVAL_CASES])
