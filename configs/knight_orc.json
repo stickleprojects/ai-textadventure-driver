@@ -26,7 +26,8 @@
         "(you'?re|you are) already (wearing|carrying|holding)",
         "while (you'?re|you are) (wearing|carrying|holding)",
         "can'?t do that yet",
-        "not yet"
+        "not yet",
+        "can'?t[^.\\n]{0,80}because"
     ],
     "end_state_patterns": {
         "death": ["you have died", "you are dead", "killed"],

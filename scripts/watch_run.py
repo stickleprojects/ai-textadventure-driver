@@ -16,6 +16,7 @@ import json
 import logging
 import os
 import sys
+import time
 from datetime import datetime
 from pathlib import Path
 
@@ -45,11 +46,15 @@ STRATEGY_PATH = os.environ.get("GAME_STRATEGY", "configs/knight_orc_strategy.jso
 
 def make_initial_state(strategy_path=STRATEGY_PATH):
     strategy = load_strategy(strategy_path)
+    known_entities = {
+        name: {"status": "discovered", "location": None, "verb_outcomes": dict(verbs)}
+        for name, verbs in strategy.get("entity_verb_outcomes", {}).items()
+    }
     return {
         "current_room": "Unknown Location",
         "inventory": [],
         "spellbook": [],
-        "known_entities": {},
+        "known_entities": known_entities,
         "world_graph": nx.DiGraph(),
         "uninspected_objects": [],
         "current_inspection": {"target": None, "sequence": config.inspection_sequence, "step_index": 0},
@@ -63,6 +68,17 @@ def make_initial_state(strategy_path=STRATEGY_PATH):
         "futile_edges": strategy["futile_edges"],
         "pending_npc_tasks": [],
     }
+
+
+def _fmt_duration(secs):
+    """Format a duration in seconds as a compact human-readable string."""
+    if secs < 60:
+        return f"{secs:.0f}s"
+    if secs < 3600:
+        m, s = divmod(int(secs), 60)
+        return f"{m}m{s:02d}s"
+    h, rem = divmod(int(secs), 3600)
+    return f"{h}h{rem // 60:02d}m"
 
 
 def _step_summary(entry):
@@ -116,10 +132,14 @@ def run(steps=50, verbose=False):
     run_id = f"watch_{datetime.now().strftime('%Y%m%d_%H%M%S')}"
     state = make_initial_state()
     findings = []
+    run_start = time.monotonic()
+    step_times = []
 
     try:
         for i in range(steps):
+            step_start = time.monotonic()
             process_agent_step(state, child, llm)
+            step_times.append(time.monotonic() - step_start)
             last = state["game_log"][-1]
 
             if verbose:
@@ -128,8 +148,12 @@ def run(steps=50, verbose=False):
                     flag = "  ⚠ TIMEOUT/ERROR"
                 elif last.get("loop_detected"):
                     flag = f"  ✗ LOOP ({last['loop_detected']!r})"
+                elapsed = time.monotonic() - run_start
+                avg_step = sum(step_times) / len(step_times)
+                eta = (steps - (i + 1)) * avg_step
+                timing = f"[elapsed {_fmt_duration(elapsed)} | {avg_step:.1f}s/step | remaining {_fmt_duration(eta)}]"
                 print(
-                    f"[{i+1:>3}/{steps}] {last['action']:<28} {_step_summary(last)}{flag}",
+                    f"[{i+1:>3}/{steps}] {last['action']:<28} {_step_summary(last)}{flag}  {timing}",
                     file=sys.stderr,
                 )
 
@@ -167,6 +191,11 @@ def run(steps=50, verbose=False):
             child.close()
         steps_run = len(state["game_log"])
         outcome = classify_run(state["game_log"], findings, state.get("current_score"))
+        entity_verb_outcomes = {
+            name: {v: o for v, o in data.get("verb_outcomes", {}).items() if o == "invalid"}
+            for name, data in state.get("known_entities", {}).items()
+            if any(o == "invalid" for o in data.get("verb_outcomes", {}).values())
+        }
         run_record = {
             "run_id": run_id,
             "outcome": outcome,
@@ -174,6 +203,7 @@ def run(steps=50, verbose=False):
             "max_score": state.get("max_score"),
             "steps": steps_run,
             "futile_edges": [list(e) for e in sorted(state.get("futile_edges", set()))],
+            "entity_verb_outcomes": entity_verb_outcomes,
         }
         log_path = _write_log(state["game_log"], run_id)
         run_path = _write_run_record(run_record)
