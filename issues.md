@@ -93,3 +93,7 @@
 40. add support for npcs talking to you - not sure what they say but i think sometimes denzyl says "hi"
 41. ~~add negative failure for "Don't be silly"~~ — fixed by user
 42. ~~`watch_run.py` does not print the run ID at startup, making it impossible to correlate a mid-run observation with the correct log file~~ — fixed: run ID printed to stderr immediately after game start so you can note `run_id + step` when logging observations
+43. the world map does not represent elevation (up/down connections) or interior zones — all rooms are rendered flat on a single cardinal plane regardless of vertical relationships
+    - **Option A (do first):** layered single map — extend `_compute_cardinal_positions` BFS in `ui.py` to track a Z-level per room (`up` edge = +1, `down` edge = -1, ground = 0). Map Z to a vertical Y-band in the pyvis view: ground in the middle, upper floors above, basements below. Cardinal X placement stays as-is within each band. Colour-code nodes by level (e.g. ground=green, upper=blue, lower=brown). No zone detection needed; low risk; immediately useful.
+    - **Option B (later):** zone clustering — detect interiors as room clusters reachable from the main graph only via a single chokepoint node (a door, gate, named entrance). Render each zone as a separate Streamlit tab with its own layered map. Requires a sufficiently explored graph to form recognisable clusters; detection heuristic will misfire on sparse graphs. The Z-level data from Option A feeds directly into this.
+    - **Effort: Low (A) / High (B) | Risk: Low (A) / Medium (B)**
