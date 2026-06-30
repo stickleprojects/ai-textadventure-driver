@@ -140,6 +140,23 @@ def analyze_log(game_log):
             "examples": inspection_fails[:5],
         })
 
+    # ── Blocked verb rate ─────────────────────────────────────────────────────
+    soft_counts = Counter(
+        e["action"] for e in game_log if config.soft_failure_pattern.search(e["response"])
+    )
+    persistently_blocked = {action: count for action, count in soft_counts.items() if count >= 3}
+    if persistently_blocked:
+        issues.append({
+            "type": "blocked_verb_rate",
+            "count": len(persistently_blocked),
+            "description": (
+                "Verbs repeatedly blocked by game state — "
+                "the blocking state may never be resolving"
+            ),
+            "examples": [{"action": a, "count": c}
+                         for a, c in list(persistently_blocked.items())[:5]],
+        })
+
     # ── Stuck in a single room ────────────────────────────────────────────────
     rooms = [e["extracted"].get("room") for e in game_log if e["extracted"].get("room")]
     if rooms:
