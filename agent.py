@@ -317,6 +317,7 @@ def process_agent_step(state, child, llm_instance):
 
     extracted = extract_knowledge(response, action_taken, llm_instance)
     token_usage = extracted.pop("_usage", {"input_tokens": 0, "output_tokens": 0})
+    llm_trace = extracted.pop("_trace", None)
 
     if extracted.get("room"):
         state["current_room"] = _resolve_room_name(state["world_graph"], extracted["room"])
@@ -394,6 +395,8 @@ def process_agent_step(state, child, llm_instance):
         "utility": utility,
         "token_usage": token_usage,
     }
+    if llm_trace:
+        entry["llm_trace"] = llm_trace
     state["game_log"].append(entry)
 
     loop_action = _detect_loop(state["game_log"])

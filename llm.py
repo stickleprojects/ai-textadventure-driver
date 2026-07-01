@@ -78,19 +78,25 @@ def extract_knowledge(text, action_taken, llm_instance):
 
     total_input = 0
     total_output = 0
+    trace = {"prompt": prompt, "attempts": []}
     for _ in range(3):
         response = llm_instance(prompt, max_tokens=250, stop=["\n\n"], echo=False)
         usage = response.get("usage", {})
         total_input += usage.get("prompt_tokens", 0)
         total_output += usage.get("completion_tokens", 0)
         output_text = response['choices'][0]['text'].strip()
+        attempt = {"output": output_text, "parsed": False}
         try:
             json_match = re.search(r'\{.*\}', output_text, re.DOTALL)
             if json_match:
                 result = json.loads(json_match.group(0))
                 if result:
+                    attempt["parsed"] = True
+                    trace["attempts"].append(attempt)
                     result["_usage"] = {"input_tokens": total_input, "output_tokens": total_output}
+                    result["_trace"] = trace
                     return result
         except json.JSONDecodeError:
             pass
+        trace["attempts"].append(attempt)
     return {}
