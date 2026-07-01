@@ -32,12 +32,12 @@ class TestHintsInjectedIntoPrompt:
 
         captured = {}
 
-        def fake_llm(prompt, **kwargs):
-            captured["prompt"] = prompt
+        def fake_llm(system_prompt, user_message):
+            captured["system"] = system_prompt
             return {"choices": [{"text": "{}"}], "usage": {}}
 
         extract_knowledge("You are in the Forest.", "look", fake_llm)
-        return captured.get("prompt", "")
+        return captured.get("system", "")
 
     def test_no_hints_block_when_empty(self, monkeypatch):
         prompt = self._capture_prompt(monkeypatch, [])

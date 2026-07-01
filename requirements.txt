@@ -3,6 +3,7 @@ networkx
 matplotlib
 pyvis
 llama-cpp-python
+openai          # optional: cloud LLM providers (DeepSeek, OpenAI)
 pexpect
 pytest
 pytest-timeout

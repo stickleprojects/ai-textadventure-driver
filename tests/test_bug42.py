@@ -7,7 +7,7 @@ _LIST_FIELDS = ("exits", "objects", "npcs", "added_to_inventory",
 
 def _make_fake_llm(json_text):
     """Return a callable that mimics llama_cpp returning json_text."""
-    def fake_llm(prompt, **kwargs):
+    def fake_llm(system_prompt, user_message):
         return {"choices": [{"text": json_text}], "usage": {}}
     return fake_llm
 
