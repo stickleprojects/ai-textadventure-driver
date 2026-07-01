@@ -175,8 +175,11 @@ def merge_run_record(run_record, strategy_path):
         existing = known_edges.get((u, v))
         if existing is None:
             known_edges[(u, v)] = label
-        elif label not in existing.split("/"):
-            known_edges[(u, v)] = existing + "/" + label
+        else:
+            existing_parts = set(existing.split("/"))
+            new_parts = set(label.split("/"))
+            merged = existing_parts | new_parts
+            known_edges[(u, v)] = "/".join(sorted(merged))
     acc["edges"] = [[u, v, label] for (u, v), label in sorted(known_edges.items())]
 
     path = Path(strategy_path)
