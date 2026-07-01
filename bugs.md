@@ -4,6 +4,12 @@ Incorrect or broken behaviour observed during runs. Original issue numbers prese
 
 ## Open
 
+51. ~~Map layout placed diagonal-direction rooms (ne/nw/se/sw) in wrong positions — two causes: (1) LLM extracts "northeast" instead of "ne", which has no vector in `_CARDINAL_VECTORS` and falls back to (0,0); (2) collision avoidance always shifted +x, breaking 45° geometry for diagonals.~~ — fixed: `_DIRECTION_NORMALIZE` in `agent.py` maps full names to abbreviated forms in `update_graph` before placeholder nodes are created; `_free_cell` helper in BFS shifts along the edge vector for diagonals.
+
+52. ~~Map PNG used dark theme (dark background, purple edges, purple labels) making it hard to read when printed or shared.~~ — fixed: `save_graph_image` now uses white background, black edges, black edge labels on transparent background.
+
+53. ~~Unknown placeholder nodes ("? west", "? south" etc.) used full box shape and size, cluttering the map equally with explored rooms.~~ — fixed: Unknown nodes now render as small grey circles (`_MAP_UNKNOWN_SIZE = 300`) with label `"?"` only; `_display_label` simplified to return `"?"` for all Unknown nodes.
+
 47. ~~`Unknown (south from B)` is removed when going north A→B, but immediately re-added when processing B's exit list in the same `update_graph` call — because "south" is not yet in B's outgoing edges at that point.~~ — fixed: when an exit direction matches the reverse of the traversal action, `update_graph` now wires the real return edge (`B --south--> A`) instead of creating an Unknown placeholder.
 
 50. ~~LLM returns slight article variations for the same room name ("cave in juniper scrubland" vs "cave in a juniper scrubland"), creating duplicate nodes on the graph.~~ — fixed: `_resolve_room_name` normalises by stripping articles and lowercasing before comparing against existing nodes; if a match is found the existing node name is reused. Called at the `state["current_room"]` assignment in `process_agent_step` and in the `rebuild_graph` replay script.

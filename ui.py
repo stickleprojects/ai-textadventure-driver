@@ -1,4 +1,5 @@
 import json
+import textwrap
 from collections import deque
 
 import networkx as nx
@@ -18,10 +19,36 @@ _Z_BAND = 600        # pixels between elevation bands
 # PNG export tweaks — adjust after inspecting the first output image
 _MAP_FIG_SIZE = (16, 10)   # minimum figure size in inches (width, height)
 _MAP_PX_PER_CELL = 120     # pixels allocated per grid cell; drives auto figure sizing
-_MAP_NODE_SIZE = 1800       # matplotlib scatter area units; increase if labels clip
+_MAP_NODE_SIZE = 1800       # matplotlib scatter area units for real rooms
+_MAP_UNKNOWN_SIZE = 300     # smaller circle for Unknown placeholder nodes
 _MAP_FONT_SIZE = 7          # node label font size in points
 _MAP_EDGE_FONT_SIZE = 6     # edge label font size in points
 _MAP_DPI = 120              # output resolution
+_LABEL_WRAP_WIDTH = 12      # chars per line; matches ~11-char node box at _MAP_NODE_SIZE=1800
+
+
+_BFS_REVERSE = {
+    "north": "south", "south": "north", "east": "west", "west": "east",
+    "up": "down", "down": "up", "ne": "sw", "sw": "ne", "nw": "se", "se": "nw",
+    "in": "out", "out": "in",
+}
+
+
+def _free_cell(gx, gy, dx, dy, grid, levels, gz):
+    """Return the nearest unoccupied grid cell starting at (gx+dx, gy+dy).
+
+    For diagonals (dx≠0 and dy≠0) collision shifts along the diagonal so the
+    45° geometry is preserved.  For cardinal moves or unknown directions the
+    fallback shift is always +x (east) to keep the row tidy.
+    """
+    cx, cy = gx + dx, gy + dy
+    occupied = {grid[n] for n in grid if levels.get(n, 0) == gz}
+    sx = dx if (dx != 0 and dy != 0) else 1
+    sy = dy if (dx != 0 and dy != 0) else 0
+    while (cx, cy) in occupied:
+        cx += sx
+        cy += sy
+    return cx, cy
 
 
 def _compute_positions_and_levels(graph):
@@ -65,20 +92,11 @@ def _compute_positions_and_levels(graph):
                     levels[neighbor] = gz - 1
                 else:
                     dx, dy = _CARDINAL_VECTORS.get(label, (0, 0))
-                    cx, cy = gx + dx, gy + dy
-                    occupied = {grid[n] for n in grid if levels.get(n, 0) == gz}
-                    while (cx, cy) in occupied:
-                        cx += 1
-                    grid[neighbor] = (cx, cy)
+                    grid[neighbor] = _free_cell(gx, gy, dx, dy, grid, levels, gz)
                     levels[neighbor] = gz
                 component_max_x = max(component_max_x, grid[neighbor][0])
                 queue.append(neighbor)
             # Follow incoming edges so nodes only reachable via reverse edges get positions
-            _BFS_REVERSE = {
-                "north": "south", "south": "north", "east": "west", "west": "east",
-                "up": "down", "down": "up", "ne": "sw", "sw": "ne", "nw": "se", "se": "nw",
-                "in": "out", "out": "in",
-            }
             for predecessor, _, data in graph.in_edges(node, data=True):
                 if predecessor in grid:
                     continue
@@ -92,11 +110,7 @@ def _compute_positions_and_levels(graph):
                     levels[predecessor] = gz - 1
                 else:
                     dx, dy = _CARDINAL_VECTORS.get(rev_label, (0, 0))
-                    cx, cy = gx + dx, gy + dy
-                    occupied = {grid[n] for n in grid if levels.get(n, 0) == gz}
-                    while (cx, cy) in occupied:
-                        cx += 1
-                    grid[predecessor] = (cx, cy)
+                    grid[predecessor] = _free_cell(gx, gy, dx, dy, grid, levels, gz)
                     levels[predecessor] = gz
                 component_max_x = max(component_max_x, grid[predecessor][0])
                 queue.append(predecessor)
@@ -127,23 +141,10 @@ def _node_color(z, is_current, is_unknown):
 
 
 def _display_label(node_id):
-    """Short, word-wrapped label for graph nodes (node IDs are unchanged)."""
-    if node_id.startswith("Unknown (") and node_id.endswith(")"):
-        inner = node_id[len("Unknown ("):-1]
-        direction = inner.split(" from ")[0] if " from " in inner else inner[:20]
-        return f"? {direction}"
-    words = node_id.split()
-    lines, line, length = [], [], 0
-    for w in words:
-        if length + len(w) + (1 if line else 0) > 20:
-            lines.append(" ".join(line))
-            line, length = [w], len(w)
-        else:
-            line.append(w)
-            length += len(w) + (1 if len(line) > 1 else 0)
-    if line:
-        lines.append(" ".join(line))
-    return "\n".join(lines)
+    """Word-wrapped label for graph nodes. Unknown placeholders show as '?'."""
+    if node_id.startswith("Unknown ("):
+        return "?"
+    return "\n".join(textwrap.wrap(node_id, width=_LABEL_WRAP_WIDTH) or [node_id])
 
 
 def render_graph(state):
@@ -206,26 +207,22 @@ def save_graph_image(graph, current_room, output_path):
     pos = {node: (gx * 2, -(gy * 2 + levels.get(node, 0) * 6))
            for node, (gx, gy) in grid.items()}
 
-    node_colors = []
-    for node in graph.nodes:
+    real_nodes = [n for n in graph.nodes if not n.startswith("Unknown")]
+    unknown_nodes = [n for n in graph.nodes if n.startswith("Unknown")]
+
+    real_colors = []
+    for node in real_nodes:
         z = levels.get(node, 0)
         if node == current_room:
-            node_colors.append("#f59e0b")
-        elif node.startswith("Unknown"):
-            node_colors.append("#2a2a4a")
+            real_colors.append("#f59e0b")
         elif z > 0:
-            node_colors.append("#1d4ed8")
+            real_colors.append("#1d4ed8")
         elif z < 0:
-            node_colors.append("#78350f")
+            real_colors.append("#78350f")
         else:
-            node_colors.append("#7c3aed")
+            real_colors.append("#7c3aed")
 
-    labels = {n: _display_label(n) for n in graph.nodes}
-    edge_labels = {(u, v): d.get("label", "") for u, v, d in graph.edges(data=True)}
-
-    # Size the figure from the actual grid bounding box so the layout fills
-    # the image regardless of how many rooms there are.  Each grid cell gets
-    # _MAP_PX_PER_CELL pixels; figure size is clamped to _MAP_FIG_SIZE minimum.
+    # Size figure from actual grid bounding box
     if grid:
         xs = [gx for gx, gy in grid.values()]
         ys = [gy + levels.get(n, 0) * 3 for n, (gx, gy) in grid.items()]
@@ -236,30 +233,49 @@ def save_graph_image(graph, current_room, output_path):
     fig_w = max(_MAP_FIG_SIZE[0], x_span * _MAP_PX_PER_CELL / _MAP_DPI)
     fig_h = max(_MAP_FIG_SIZE[1], y_span * _MAP_PX_PER_CELL / _MAP_DPI)
 
-    fig, ax = plt.subplots(figsize=(fig_w, fig_h), facecolor="#1a1a2e")
-    ax.set_facecolor("#1a1a2e")
+    fig, ax = plt.subplots(figsize=(fig_w, fig_h), facecolor="white")
+    ax.set_facecolor("white")
 
-    nx.draw_networkx(
+    # Real rooms — coloured squares with white labels
+    if real_nodes:
+        nx.draw_networkx_nodes(
+            graph, pos=pos, ax=ax, nodelist=real_nodes,
+            node_color=real_colors, node_size=_MAP_NODE_SIZE, node_shape="s",
+        )
+        nx.draw_networkx_labels(
+            graph, pos=pos, ax=ax,
+            labels={n: _display_label(n) for n in real_nodes},
+            font_color="white", font_size=_MAP_FONT_SIZE,
+        )
+
+    # Unknown placeholders — small grey circles with "?" label
+    if unknown_nodes:
+        nx.draw_networkx_nodes(
+            graph, pos=pos, ax=ax, nodelist=unknown_nodes,
+            node_color="#aaaaaa", node_size=_MAP_UNKNOWN_SIZE, node_shape="o",
+        )
+        nx.draw_networkx_labels(
+            graph, pos=pos, ax=ax,
+            labels={n: "?" for n in unknown_nodes},
+            font_color="black", font_size=_MAP_FONT_SIZE - 1,
+        )
+
+    # Edges — black lines, black labels on transparent background
+    nx.draw_networkx_edges(
         graph, pos=pos, ax=ax,
-        labels=labels,
-        node_color=node_colors,
-        node_size=_MAP_NODE_SIZE,
-        node_shape="s",
-        font_color="white",
-        font_size=_MAP_FONT_SIZE,
-        edge_color="#4a4a6a",
-        arrows=True,
-        arrowsize=12,
+        edge_color="black", arrows=True, arrowsize=12,
     )
+    edge_labels = {(u, v): d.get("label", "") for u, v, d in graph.edges(data=True)}
     nx.draw_networkx_edge_labels(
         graph, pos=pos, edge_labels=edge_labels, ax=ax,
-        font_color="#a78bfa", font_size=_MAP_EDGE_FONT_SIZE,
+        font_color="black", font_size=_MAP_EDGE_FONT_SIZE,
+        bbox={"facecolor": "none", "edgecolor": "none"},
     )
 
-    ax.set_title(f"World Map — {len(graph.nodes)} rooms", color="white", fontsize=12)
+    ax.set_title(f"World Map — {len(graph.nodes)} rooms", color="black", fontsize=12)
     ax.axis("off")
     plt.tight_layout()
-    plt.savefig(output_path, dpi=_MAP_DPI, bbox_inches="tight", facecolor="#1a1a2e")
+    plt.savefig(output_path, dpi=_MAP_DPI, bbox_inches="tight", facecolor="white")
     plt.close(fig)
 
 
