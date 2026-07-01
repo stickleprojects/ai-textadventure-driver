@@ -4,6 +4,8 @@ Incorrect or broken behaviour observed during runs. Original issue numbers prese
 
 ## Open
 
+55. ~~agent still falls back to `look` when graph is pre-seeded from strategy — pre-seeded graph contains only real edges (no Unknown placeholders), so `determine_next_action` sees no unexplored exits anywhere and falls through immediately. Also, no reasoning was logged so the cause was undiagnosable.~~ — fixed: (1) `determine_next_action` now returns `(action, reason)` stored in every log entry as `"reason"`; (2) `state["visited_rooms"]` tracks rooms seen this run; after exhausting Unknown exits, agent navigates to the nearest unvisited known room before falling back to `look`.
+
 51. ~~Map layout placed diagonal-direction rooms (ne/nw/se/sw) in wrong positions — two causes: (1) LLM extracts "northeast" instead of "ne", which has no vector in `_CARDINAL_VECTORS` and falls back to (0,0); (2) collision avoidance always shifted +x, breaking 45° geometry for diagonals.~~ — fixed: `_DIRECTION_NORMALIZE` in `agent.py` maps full names to abbreviated forms in `update_graph` before placeholder nodes are created; `_free_cell` helper in BFS shifts along the edge vector for diagonals.
 
 52. ~~Map PNG used dark theme (dark background, purple edges, purple labels) making it hard to read when printed or shared.~~ — fixed: `save_graph_image` now uses white background, black edges, black edge labels on transparent background.

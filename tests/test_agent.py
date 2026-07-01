@@ -183,7 +183,7 @@ def test_active_goal_in_target_room_uses_solution():
         inventory=["key"],
         active_goal={"room": "Throne Room", "target": "chest", "solution": "key"},
     )
-    assert determine_next_action(state) == "use key on chest"
+    assert determine_next_action(state)[0] == "use key on chest"
     assert state["active_goal"] is None
 
 
@@ -193,7 +193,7 @@ def test_active_goal_in_target_room_casts_spell():
         spellbook=["fireball"],
         active_goal={"room": "Throne Room", "target": "chest", "solution": "fireball"},
     )
-    assert determine_next_action(state) == "cast fireball on chest"
+    assert determine_next_action(state)[0] == "cast fireball on chest"
 
 
 def test_anomaly_resolved_by_inventory_sets_active_goal():
@@ -206,19 +206,19 @@ def test_anomaly_resolved_by_inventory_sets_active_goal():
         unresolved_anomalies={"dark cave": {"room": "Cave", "reason": "too dark", "potential_solution": "torch"}},
         world_graph=g,
     )
-    action = determine_next_action(state)
+    action, _ = determine_next_action(state)
     assert action == "north"
     assert state["active_goal"] == {"room": "Cave", "target": "dark cave", "solution": "torch"}
 
 
 def test_inspection_sequence_continues():
     state = make_state(current_inspection={"target": "sword", "sequence": ["examine", "read", "look inside"], "step_index": 0})
-    assert determine_next_action(state) == "examine sword"
+    assert determine_next_action(state)[0] == "examine sword"
 
 
 def test_uninspected_objects_starts_inspection():
     state = make_state(uninspected_objects=["sword", "key"])
-    assert determine_next_action(state) == "take sword"
+    assert determine_next_action(state)[0] == "take sword"
     assert state["current_inspection"]["target"] == "sword"
     assert state["uninspected_objects"] == ["key"]
 
@@ -228,12 +228,12 @@ def test_unknown_exit_explored():
     g = nx.DiGraph()
     g.add_edge("Forest", "Unknown (north from Forest)", label="north")
     state = make_state(current_room="Forest", world_graph=g)
-    assert determine_next_action(state) == "north"
+    assert determine_next_action(state)[0] == "north"
 
 
 def test_fallback_to_look():
     state = make_state()
-    assert determine_next_action(state) == "look"
+    assert determine_next_action(state)[0] == "look"
 
 
 # ── determine_next_action — dynamic verb sequence (issue 18) ─────────────────
@@ -282,7 +282,7 @@ class TestDetermineNextActionDynamicSequence:
             mock_cfg.candidate_verbs = test_verbs
             state = make_state(uninspected_objects=["sword"])
             n = len(test_verbs)  # take + 3 post-take verbs
-            actions = [determine_next_action(state) for _ in range(n)]
+            actions = [determine_next_action(state)[0] for _ in range(n)]
         assert actions[0] == "take sword"
         assert "examine sword" in actions
         assert "read sword" in actions
@@ -683,14 +683,14 @@ class TestFutileEdgesInNavigation:
         state["world_graph"].add_edge("Hall", "Unknown (north from Hall)", label="north", futile=True)
         state["world_graph"].add_edge("Hall", "Unknown (east from Hall)", label="east")
         state["futile_edges"].add(("Hall", "north"))
-        assert determine_next_action(state) == "east"
+        assert determine_next_action(state)[0] == "east"
 
     def test_all_exits_futile_falls_through_to_look(self):
         state = make_state(current_room="Hall")
         state["world_graph"].add_node("Hall")
         state["world_graph"].add_edge("Hall", "Unknown (north from Hall)", label="north", futile=True)
         state["futile_edges"].add(("Hall", "north"))
-        assert determine_next_action(state) == "look"
+        assert determine_next_action(state)[0] == "look"
 
     def test_known_room_exit_never_skipped(self):
         state = make_state(current_room="Hall")
@@ -699,7 +699,7 @@ class TestFutileEdgesInNavigation:
         state["world_graph"].add_edge("Hall", "Courtyard", label="north")
         # Even if we incorrectly mark it futile, it won't be picked by the Unknown scan
         # (it's not an Unknown node — this tests the Unknown filter still works)
-        assert determine_next_action(state) == "look"
+        assert determine_next_action(state)[0] == "look"
 
 
 class TestFutileEdgesMarkedOnStep:
@@ -776,11 +776,11 @@ class TestActiveGoalNavigation:
 
     def test_active_goal_emits_fast_nav_when_configured(self):
         with patch.object(config, "fast_nav_command", "run to {target}"):
-            assert determine_next_action(self._goal_state()) == "run to Courtyard"
+            assert determine_next_action(self._goal_state())[0] == "run to Courtyard"
 
     def test_active_goal_falls_back_to_graph_step_when_no_template(self):
         with patch.object(config, "fast_nav_command", None):
-            assert determine_next_action(self._goal_state()) == "north"
+            assert determine_next_action(self._goal_state())[0] == "north"
 
 
 # ── pending_npc_tasks ─────────────────────────────────────────────────────────
@@ -792,7 +792,7 @@ class TestPendingNpcTasks:
                 {"npc": "Denzyl", "task_description": "fetch the spear", "wait_command": "wait for denzyl"},
             ]
         )
-        assert determine_next_action(state) == "wait for denzyl"
+        assert determine_next_action(state)[0] == "wait for denzyl"
 
     def test_first_task_wait_command_used_when_multiple_pending(self):
         state = make_state(
@@ -801,10 +801,10 @@ class TestPendingNpcTasks:
                 {"npc": "Gripper", "task_description": "find key", "wait_command": "wait for gripper"},
             ]
         )
-        assert determine_next_action(state) == "wait for denzyl"
+        assert determine_next_action(state)[0] == "wait for denzyl"
 
     def test_empty_pending_tasks_falls_through_to_look(self):
-        assert determine_next_action(make_state()) == "look"
+        assert determine_next_action(make_state())[0] == "look"
 
     def test_inspection_takes_priority_over_pending_task(self):
         state = make_state(
@@ -814,7 +814,7 @@ class TestPendingNpcTasks:
                 {"npc": "Denzyl", "task_description": "fetch spear", "wait_command": "wait for denzyl"},
             ],
         )
-        assert determine_next_action(state) == "examine sword"
+        assert determine_next_action(state)[0] == "examine sword"
 
     def test_unknown_exit_takes_priority_over_pending_task(self):
         state = make_state(current_room="Hall")
@@ -823,7 +823,7 @@ class TestPendingNpcTasks:
         state["pending_npc_tasks"] = [
             {"npc": "Denzyl", "task_description": "fetch spear", "wait_command": "wait for denzyl"},
         ]
-        assert determine_next_action(state) == "north"
+        assert determine_next_action(state)[0] == "north"
 
     def test_config_loads_wait_for_command(self, tmp_path):
         cfg_file = tmp_path / "game.json"

@@ -113,6 +113,41 @@
       "run_id": "watch_20260701_151115",
       "outcome": "agent_failure",
       "final_score": null
+    },
+    {
+      "run_id": "watch_20260701_152709",
+      "outcome": "agent_failure",
+      "final_score": null
+    },
+    {
+      "run_id": "watch_20260701_152803",
+      "outcome": "agent_failure",
+      "final_score": null
+    },
+    {
+      "run_id": "watch_20260701_152827",
+      "outcome": "agent_failure",
+      "final_score": null
+    },
+    {
+      "run_id": "watch_20260701_152940",
+      "outcome": "agent_failure",
+      "final_score": null
+    },
+    {
+      "run_id": "watch_20260701_153007",
+      "outcome": "agent_failure",
+      "final_score": null
+    },
+    {
+      "run_id": "watch_20260701_153305",
+      "outcome": "agent_failure",
+      "final_score": null
+    },
+    {
+      "run_id": "watch_20260701_153756",
+      "outcome": "agent_failure",
+      "final_score": null
     }
   ],
   "entity_verb_outcomes": {
@@ -280,6 +315,9 @@
     },
     "straw": {
       "close": "invalid"
+    },
+    "spear": {
+      "take": "invalid"
     }
   },
   "world_graph": {
@@ -296,7 +334,8 @@
       "hawthorn underbrush",
       "jousting field",
       "on a trampled field",
-      "grandstand"
+      "grandstand",
+      "huge pile of garbage, with the other rubbish thrown away after the tournament"
     ],
     "edges": [
       [
@@ -317,7 +356,7 @@
       [
         "huge pile of garbage",
         "on a trampled field, pock-marked by the feet of humans and their horses",
-        "down/down/out"
+        "down/down/out/down/down/out/down/down/out/down/down/out/down/down/out/down/down/out/down/down/out/down/down/out/down/down/out/down/down/out/down/down/out/down/down/out/down/down/out/down/down/out/down/down/out/down/down/out/down/down/out/down/down/out/down/down/out/down/down/out/down/down/out/down/down/out/down/down/out/down/down/out/down/down/out/down/down/out/down/down/out/down/down/out/down/down/out/down/down/out/down/down/out/down/down/out/down/down/out/down/down/out/down/down/out/down/down/out/down/down/out/down/down/out/down/down/out/down/down/out/down/down/out/down/down/out/down/down/out/down/down/out/down/down/out/down/down/out/down/down/out/down/down/out/down/down/out/down/down/out/down/down/out/down/down/out/down/down/out/down/down/out/down/down/out/down/down/out/down/down/out/down/down/out/down/down/out/down/down/out/down/down/out/down/down/out/down/down/out/down/down/out/down/down/out/down/down/out/down/down/out/down/down/out/down/down/out/down/down/out/down/down/out/down/down/out/down/down/out/down/down/out/down/down/out/down/down/out/down/down/out/down/down/out/down/down/out/down/down/out/down/down/out/down/down/out/down/down/out/down/down/out/down/down/out/down/down/out/down/down/out/down/down/out/down/down/out/down/down/out/down/down/out/down/down/out/down/down/out/down/down/out/down/down/out/down/down/out/down/down/out/down/down/out/down/down/out/down/down/out/down/down/out/down/down/out/down/down/out/down/down/out/down/down/out/down/down/out/down/down/out/down/down/out/down/down/out/down/down/out/down/down/out/down/down/out/down/down/out/down/down/out/down/down/out/down/down/out/down/down/out/down/down/out/down/down/out/down/down/out/down/down/out/down/down/out/down/down/out/down/down/out/down/down/out/down/down/out/down/down/out/down/down/out"
       ],
       [
         "jousting field",
@@ -368,6 +407,11 @@
         "on a jousting field",
         "grandstand",
         "south"
+      ],
+      [
+        "on a jousting field",
+        "huge pile of garbage",
+        "west"
       ],
       [
         "on a jousting field",
