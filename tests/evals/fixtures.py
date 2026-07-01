@@ -78,4 +78,10 @@ EVAL_CASES = [
         "expected": {"npcs": ["Denzyl"]},
         "absent": ["room"],
     },
+    {
+        "id": "outside_compound_description_is_valid_room",
+        "action": "north",
+        "game_output": "You go north and are outside a cave in a juniper scrubland. In the distance is a castle. Exits lead in all directions and inside.",
+        "expected": {"room": "outside a cave in a juniper scrubland"},
+    },
 ]

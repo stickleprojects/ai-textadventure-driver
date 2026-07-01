@@ -4,6 +4,20 @@ Running notes on findings, decisions, and things that surprised us during develo
 
 ---
 
+## 2026-07-01
+
+### Prompt rule blocking "outside" caused room name paraphrasing and duplicates
+
+When investigating a duplicate map node ("cave in juniper scrubland" vs "cave in a juniper scrubland"), we discovered the game text is perfectly consistent: every visit returns `"you go north and are outside a cave in a juniper scrubland"`. The LLM was stripping `"outside a"` on every visit, then inconsistently dropping the inner article `"a"`, producing two different node IDs for the same room.
+
+The root cause was a prompt rule that listed `"outside"` as a forbidden bare descriptor (alongside `"dark"`). The intent was to prevent responses like `"It is dark"` from being extracted as `room: "dark"`. The LLM correctly applied this rule but too broadly — it stripped `"outside"` even when it was part of a compound description like `"outside a cave in a juniper scrubland"`.
+
+The fix was two-part: (1) revise the prompt to distinguish bare descriptors (`"dark"`) from compound descriptions (`"outside a cave"` or `"top of the hill"`), and add an explicit verbatim-copy instruction with an example; (2) add `_resolve_room_name` as a safety net that collapses article variations into the first-seen node name, protecting the graph against future LLM paraphrasing of this kind.
+
+The lesson: prompt rules that name specific words to exclude (rather than naming a structural pattern) are fragile — the LLM applies them by surface match rather than by intent.
+
+---
+
 ## 2026-06-30
 
 ### Attempt-and-learn beats pre-classification for verb-object compatibility (issue 18)
