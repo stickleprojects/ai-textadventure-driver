@@ -131,3 +131,116 @@ class TestMakeInitialStateLoadsStrategy:
     def test_empty_futile_edges_when_no_strategy(self, tmp_path):
         state = make_initial_state(strategy_path=tmp_path / "nonexistent.json")
         assert state["futile_edges"] == set()
+
+
+# ── world graph persistence ───────────────────────────────────────────────────
+
+def _make_record_with_graph(run_id="watch_test", nodes=None, edges=None, **kwargs):
+    r = _make_record(run_id=run_id, **kwargs)
+    r["world_graph"] = {
+        "nodes": nodes or [],
+        "edges": edges or [],
+    }
+    return r
+
+
+class TestWorldGraphPersistence:
+    def test_nodes_written_to_strategy(self, tmp_path):
+        strategy_path = tmp_path / "strategy.json"
+        merge_run_record(
+            _make_record_with_graph(nodes=["Hall", "Courtyard"]),
+            strategy_path,
+        )
+        result = load_strategy(strategy_path)
+        assert set(result["world_graph"]["nodes"]) == {"Hall", "Courtyard"}
+
+    def test_edges_written_to_strategy(self, tmp_path):
+        strategy_path = tmp_path / "strategy.json"
+        merge_run_record(
+            _make_record_with_graph(
+                nodes=["Hall", "Courtyard"],
+                edges=[["Hall", "Courtyard", "south"]],
+            ),
+            strategy_path,
+        )
+        result = load_strategy(strategy_path)
+        assert ["Hall", "Courtyard", "south"] in result["world_graph"]["edges"]
+
+    def test_nodes_unioned_across_runs(self, tmp_path):
+        strategy_path = tmp_path / "strategy.json"
+        merge_run_record(_make_record_with_graph(nodes=["Hall"]), strategy_path)
+        merge_run_record(
+            _make_record_with_graph(run_id="watch_002", nodes=["Hall", "Courtyard"]),
+            strategy_path,
+        )
+        result = load_strategy(strategy_path)
+        assert set(result["world_graph"]["nodes"]) == {"Hall", "Courtyard"}
+
+    def test_no_duplicate_nodes(self, tmp_path):
+        strategy_path = tmp_path / "strategy.json"
+        merge_run_record(_make_record_with_graph(nodes=["Hall"]), strategy_path)
+        merge_run_record(
+            _make_record_with_graph(run_id="watch_002", nodes=["Hall"]),
+            strategy_path,
+        )
+        result = load_strategy(strategy_path)
+        assert result["world_graph"]["nodes"].count("Hall") == 1
+
+    def test_edge_labels_merged_on_alias(self, tmp_path):
+        strategy_path = tmp_path / "strategy.json"
+        merge_run_record(
+            _make_record_with_graph(
+                nodes=["Hall", "Cellar"],
+                edges=[["Hall", "Cellar", "south"]],
+            ),
+            strategy_path,
+        )
+        merge_run_record(
+            _make_record_with_graph(
+                run_id="watch_002",
+                nodes=["Hall", "Cellar"],
+                edges=[["Hall", "Cellar", "down"]],
+            ),
+            strategy_path,
+        )
+        result = load_strategy(strategy_path)
+        edge_labels = {(u, v): lbl for u, v, lbl in result["world_graph"]["edges"]}
+        assert "south" in edge_labels[("Hall", "Cellar")]
+        assert "down" in edge_labels[("Hall", "Cellar")]
+
+    def test_unknown_nodes_excluded_from_strategy(self, tmp_path):
+        strategy_path = tmp_path / "strategy.json"
+        merge_run_record(
+            _make_record_with_graph(
+                nodes=["Hall", "Unknown (north from Hall)"],
+                edges=[["Hall", "Unknown (north from Hall)", "north"]],
+            ),
+            strategy_path,
+        )
+        result = load_strategy(strategy_path)
+        assert not any(n.startswith("Unknown") for n in result["world_graph"]["nodes"])
+        assert not any(
+            u.startswith("Unknown") or v.startswith("Unknown")
+            for u, v, _ in result["world_graph"]["edges"]
+        )
+
+    def test_make_initial_state_seeds_world_graph(self, tmp_path):
+        strategy_file = tmp_path / "strategy.json"
+        strategy_file.write_text(json.dumps({
+            "futile_edges": [],
+            "run_history": [],
+            "world_graph": {
+                "nodes": ["Hall", "Courtyard"],
+                "edges": [["Hall", "Courtyard", "south"]],
+            },
+        }))
+        state = make_initial_state(strategy_path=strategy_file)
+        g = state["world_graph"]
+        assert "Hall" in g.nodes
+        assert "Courtyard" in g.nodes
+        assert g.has_edge("Hall", "Courtyard")
+        assert g["Hall"]["Courtyard"]["label"] == "south"
+
+    def test_make_initial_state_empty_graph_when_no_strategy(self, tmp_path):
+        state = make_initial_state(strategy_path=tmp_path / "nonexistent.json")
+        assert len(state["world_graph"].nodes) == 0

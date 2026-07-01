@@ -27,6 +27,8 @@ Incorrect or broken behaviour observed during runs. Original issue numbers prese
 38. ~~we see a location of "propet_northeast" — LLM hallucinating a direction string as room name~~ — fixed: prompt now gives concrete counter-examples: directions, character names, object names, and descriptors are all prohibited as room values; only a named place is valid
 39. ~~we see a location of "Denzyl" not listed as an npc — LLM placing NPC name in `room` field~~ — fixed: same prompt rule as 38; character names explicitly listed as invalid room values; eval case added to verify `Denzyl` appears in `npcs` and not `room`
 
+46. ~~we still see suspicious names of locations "in an alder ghostwood" vs "an alder ghostwood" "a cedar tangle" vs "cedar tangle", "an alder forest" vs "alder forest", these need harmonising to remove dups in the map~~ — fixed: `_canonicalize_room` strips leading `in (a|an|the)?` before node storage; `_resolve_room_name` returns the canonical form for new nodes so the map never stores the noisy LLM variant. `inside`/`outside` prefixes are preserved as they denote distinct locations.
+
 ## Closed
 
 1. ~~the engine is reading the horse, and looking inside the horse, it should recognize that a horse cannot be read~~ — fixed: LLM schema now separates `npcs` (living creatures) from `objects` (inanimate items); NPCs are routed to `known_npcs` state and never enter the inspection queue
