@@ -18,6 +18,7 @@ import logging
 import os
 import sys
 import time
+import traceback
 from datetime import datetime
 from pathlib import Path
 
@@ -197,10 +198,12 @@ def run(steps=50, verbose=False):
         })
         findings.append({"step": steps_done, "type": "interrupted"})
     except Exception as exc:
+        tb = traceback.format_exc()
         state["game_log"].append({
             "timestamp": datetime.now().strftime("%H:%M:%S"),
             "action": "CRASH",
             "response": str(exc),
+            "traceback": tb,
             "extracted": {},
             "score": state.get("current_score"),
             "utility": "crash",
@@ -209,10 +212,11 @@ def run(steps=50, verbose=False):
             "step": len(state["game_log"]),
             "type": "crash",
             "error": str(exc),
+            "traceback": tb,
             "last_action": state["game_log"][-2]["action"] if len(state["game_log"]) > 1 else None,
             "last_response": state["game_log"][-2]["response"] if len(state["game_log"]) > 1 else None,
         })
-        print(f"CRASH at step {len(state['game_log'])}: {exc}", file=sys.stderr)
+        print(f"CRASH at step {len(state['game_log'])}: {exc}\n{tb}", file=sys.stderr)
     finally:
         if child.isalive():
             child.close()
