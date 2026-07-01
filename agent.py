@@ -197,7 +197,7 @@ def _nav_command(state, target, fast=True):
 
 
 def determine_next_action(state):
-    """Returns the next command string based on agent priority logic."""
+    """Returns (action, reason) based on agent priority logic."""
     if state["active_goal"]:
         target_room = state["active_goal"]["room"]
         if state["current_room"] == target_room:
@@ -205,10 +205,10 @@ def determine_next_action(state):
             target = state['active_goal']['target']
             verb = "cast" if solution in state["spellbook"] else "use"
             state["active_goal"] = None
-            return f"{verb} {solution} on {target}"
+            return f"{verb} {solution} on {target}", f"goal: apply {solution} to {target}"
         move = _nav_command(state, target_room, fast=True)
         if move:
-            return move
+            return move, f"goal: navigating to {target_room}"
         state["active_goal"] = None
 
     all_capabilities = state["inventory"] + state["spellbook"]
@@ -231,7 +231,7 @@ def determine_next_action(state):
         if inspection["step_index"] >= len(inspection["sequence"]):
             inspection["target"] = None
             inspection["step_index"] = 0
-        return action
+        return action, f"inspecting {inspection['target'] or action.split()[1]}"
 
     if state["uninspected_objects"]:
         new_target = state["uninspected_objects"].pop(0)
@@ -244,11 +244,59 @@ def determine_next_action(state):
         inspection["target"] = new_target
         inspection["sequence"] = post_take_verbs
         inspection["step_index"] = 0
-        return f"take {new_target}"
+        return f"take {new_target}", f"new object: take {new_target}"
 
     for _, v, data in state["world_graph"].edges(state["current_room"], data=True):
         if v.startswith("Unknown") and not data.get("futile"):
-            return data["label"]
+            return data["label"], f"exploring exit '{data['label']}' from {state['current_room']}"
+
+    # Current room fully explored — navigate to nearest room with an Unknown exit.
+    best_target = None
+    best_len = float("inf")
+    for node in state["world_graph"].nodes:
+        if node.startswith("Unknown"):
+            continue
+        if not any(
+            v.startswith("Unknown") and not d.get("futile")
+            for _, v, d in state["world_graph"].edges(node, data=True)
+        ):
+            continue
+        try:
+            path_len = nx.shortest_path_length(
+                state["world_graph"], state["current_room"], node
+            )
+            if path_len < best_len:
+                best_len = path_len
+                best_target = node
+        except (nx.NetworkXNoPath, nx.NodeNotFound):
+            continue
+    if best_target:
+        move = _nav_command(state, best_target, fast=True)
+        if move:
+            return move, f"navigating to {best_target} (has unexplored exits)"
+
+    # No Unknown exits anywhere — navigate to nearest unvisited known room.
+    # This handles a pre-seeded graph where all edges are real but rooms haven't
+    # been visited this run (so Unknown placeholders were never generated).
+    visited = state.get("visited_rooms", set())
+    best_unvisited = None
+    best_len = float("inf")
+    for node in state["world_graph"].nodes:
+        if node.startswith("Unknown") or node in visited:
+            continue
+        try:
+            path_len = nx.shortest_path_length(
+                state["world_graph"], state["current_room"], node
+            )
+            if path_len < best_len:
+                best_len = path_len
+                best_unvisited = node
+        except (nx.NetworkXNoPath, nx.NodeNotFound):
+            continue
+    if best_unvisited:
+        move = _nav_command(state, best_unvisited, fast=True)
+        if move:
+            return move, f"navigating to unvisited room {best_unvisited}"
 
     # Current room is fully explored — navigate toward the nearest room that still
     # has an Unknown exit, so we don't fall through to "look" prematurely.
@@ -278,12 +326,13 @@ def determine_next_action(state):
 
     step_count = len(state["game_log"])
     if step_count > 0 and step_count % _SCORE_INTERVAL == 0:
-        return "score"
+        return "score", "periodic score check"
 
     if state["pending_npc_tasks"]:
-        return state["pending_npc_tasks"][0]["wait_command"]
+        cmd = state["pending_npc_tasks"][0]["wait_command"]
+        return cmd, f"npc wait: {cmd}"
 
-    return "look"
+    return "look", "fallback: no unexplored exits or unvisited rooms reachable"
 
 
 def _mark_edge_futile(state, from_room, direction):
@@ -326,7 +375,7 @@ def process_agent_step(state, child, llm_instance):
 
     # Capture inspection target before determine_next_action may change it
     pre_insp_target = state["current_inspection"]["target"]
-    action_taken = determine_next_action(state)
+    action_taken, action_reason = determine_next_action(state)
     post_insp_target = state["current_inspection"]["target"]
 
     # The effective target is the one associated with this action:
@@ -366,6 +415,7 @@ def process_agent_step(state, child, llm_instance):
 
     if extracted.get("room"):
         state["current_room"] = _resolve_room_name(state["world_graph"], extracted["room"])
+        state.setdefault("visited_rooms", set()).add(state["current_room"])
 
     if "exits" in extracted:
         update_graph(state, state["current_room"], extracted["exits"], previous_room, action_taken)
@@ -434,6 +484,7 @@ def process_agent_step(state, child, llm_instance):
     entry = {
         "timestamp": datetime.now().strftime("%H:%M:%S"),
         "action": action_taken,
+        "reason": action_reason,
         "response": response,
         "extracted": extracted,
         "score": state.get("current_score"),

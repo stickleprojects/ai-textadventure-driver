@@ -92,6 +92,7 @@ def make_initial_state(strategy_path=STRATEGY_PATH):
         "max_score": None,
         "futile_edges": strategy["futile_edges"],
         "pending_npc_tasks": [],
+        "visited_rooms": set(),
     }
 
 
