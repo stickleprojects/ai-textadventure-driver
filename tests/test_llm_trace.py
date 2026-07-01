@@ -3,7 +3,7 @@ from llm import extract_knowledge
 
 
 def _make_fake_llm(json_text):
-    def fake_llm(prompt, **kwargs):
+    def fake_llm(system_prompt, user_message):
         return {"choices": [{"text": json_text}], "usage": {}}
     return fake_llm
 
@@ -14,13 +14,14 @@ class TestTraceInResult:
         result = extract_knowledge("You are in the hall.", "look", llm)
         assert "_trace" in result
 
-    def test_trace_contains_prompt(self):
+    def test_trace_contains_system_and_user(self):
         llm = _make_fake_llm('{"exits": ["north"]}')
         result = extract_knowledge("You are in the hall.", "look", llm)
         trace = result["_trace"]
-        assert "prompt" in trace
-        assert "look" in trace["prompt"]
-        assert "You are in the hall." in trace["prompt"]
+        assert "system" in trace
+        assert "user" in trace
+        assert "look" in trace["user"]
+        assert "You are in the hall." in trace["user"]
 
     def test_trace_records_successful_attempt(self):
         llm = _make_fake_llm('{"exits": ["north"]}')
@@ -32,7 +33,7 @@ class TestTraceInResult:
 
     def test_trace_records_failed_attempt_before_success(self):
         call_count = [0]
-        def flaky_llm(prompt, **kwargs):
+        def flaky_llm(system_prompt, user_message):
             call_count[0] += 1
             text = "not json" if call_count[0] < 2 else '{"exits": ["south"]}'
             return {"choices": [{"text": text}], "usage": {}}
@@ -79,7 +80,8 @@ class TestTraceInLogEntry:
     def test_llm_trace_written_to_log_entry(self):
         entry = self._run_one_step('{"room": "Hall", "exits": ["north"]}')
         assert "llm_trace" in entry
-        assert "prompt" in entry["llm_trace"]
+        assert "system" in entry["llm_trace"]
+        assert "user" in entry["llm_trace"]
         assert entry["llm_trace"]["attempts"][0]["parsed"] is True
 
     def test_no_llm_trace_when_extraction_returns_empty(self):

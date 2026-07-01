@@ -30,7 +30,7 @@ sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 from game_config import config
 from agent import process_agent_step
 from game_engine import start_level9
-from llm import load_llm
+from llm import load_llm, load_cloud_llm
 from run_evaluator import classify_run, load_strategy, merge_run_record
 
 # Suppress Streamlit's "missing ScriptRunContext" warning — harmless outside a
@@ -47,6 +47,17 @@ STRATEGY_PATH = os.environ.get("GAME_STRATEGY", "configs/knight_orc_strategy.jso
 # Cost per million tokens — set to forecast cloud API spend; 0 = local/free
 LLM_INPUT_PRICE_PER_MILLION = float(os.environ.get("LLM_INPUT_PRICE_PER_MILLION", "0"))
 LLM_OUTPUT_PRICE_PER_MILLION = float(os.environ.get("LLM_OUTPUT_PRICE_PER_MILLION", "0"))
+
+# Cloud LLM selection — leave LLM_PROVIDER unset (or "local") to use llama.cpp.
+# DeepSeek example:
+#   export LLM_PROVIDER=deepseek LLM_API_KEY=sk-... LLM_MODEL=deepseek-chat
+# OpenAI example:
+#   export LLM_PROVIDER=openai LLM_API_KEY=sk-... LLM_MODEL=gpt-4o-mini
+LLM_PROVIDER = os.environ.get("LLM_PROVIDER", "local")
+LLM_MODEL = os.environ.get("LLM_MODEL", "deepseek-chat")
+LLM_API_KEY = os.environ.get("LLM_API_KEY", "")
+LLM_BASE_URL = os.environ.get("LLM_BASE_URL", "")   # leave blank to use provider default
+LLM_JSON_MODE = os.environ.get("LLM_JSON_MODE", "1") != "0"  # default on for cloud
 
 
 def make_initial_state(strategy_path=STRATEGY_PATH):
@@ -130,9 +141,18 @@ def run(steps=50, verbose=False):
     if verbose:
         print(f"Started game. Running {steps} steps... Ctrl-C to interrupt early; findings will still be saved.", file=sys.stderr)
 
-    llm = load_llm(MODEL_PATH)
+    if LLM_PROVIDER == "local":
+        llm = load_llm(MODEL_PATH)
+    else:
+        llm = load_cloud_llm(
+            LLM_PROVIDER, LLM_MODEL, LLM_API_KEY,
+            base_url=LLM_BASE_URL or None,
+            json_mode=LLM_JSON_MODE,
+        )
     if verbose and llm is None:
         print("WARNING: LLM not loaded — extraction will return {}.", file=sys.stderr)
+    if verbose and LLM_PROVIDER != "local":
+        print(f"Using cloud LLM: {LLM_PROVIDER} / {LLM_MODEL}", file=sys.stderr)
 
     run_id = f"watch_{datetime.now().strftime('%Y%m%d_%H%M%S')}"
     if verbose:
