@@ -27,6 +27,9 @@ import networkx as nx
 # Must run from project root so relative imports work
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
+from env_utils import load_env_file
+load_env_file()  # populate os.environ from .env before any os.environ.get calls below
+
 from game_config import config
 from agent import process_agent_step
 from game_engine import start_level9

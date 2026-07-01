@@ -5,6 +5,9 @@ from datetime import datetime
 import networkx as nx
 import streamlit as st
 
+from env_utils import load_env_file
+load_env_file()  # populate os.environ from .env before config or LLM setup
+
 from game_config import config
 from agent import process_agent_step, update_graph
 from game_engine import start_level9
