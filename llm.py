@@ -43,9 +43,13 @@ def extract_knowledge(text, action_taken, llm_instance):
       "Dungeon Entrance"). If the response is terse ("Taken.", "OK.", "You can't do that.") or describes
       an object/action without naming a place, set "room" to null. Never use an item name, NPC name,
       direction, or vague phrase ("current location", "unknown") as the room value.
+    - Copy the room description VERBATIM from the game text — do not paraphrase, drop articles, or
+      shorten it. For example: "you go north and are outside a cave in a juniper scrubland" →
+      room = "outside a cave in a juniper scrubland" (not "cave in juniper scrubland").
     - A room must be a named place: "Alder Clump", "Castle Entrance", "Dark Corridor". It must NOT be:
       a direction ("northeast", "propet_northeast"), a character name ("Denzyl", "troll"),
-      an object name ("flagpole", "rubbish"), or a descriptor ("dark", "outside"). If in doubt, set null.
+      an object name ("flagpole", "rubbish"), or a bare descriptor ("dark"). If in doubt, set null.
+      Note: compound descriptions like "outside a cave" or "top of the hill" ARE valid room names.
     - If examining an object reveals another distinct item (e.g. "fastened to it is a halyard",
       "inside is a key", "a note is attached"), include that item in "objects" too.
 
