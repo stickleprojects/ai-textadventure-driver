@@ -21,7 +21,8 @@ JSON schema (all keys optional — missing keys keep their defaults):
     },
     "npc_commands": {
         "wait_for_command":   string  — template to wait for a specific NPC (e.g. "wait for {npc}"); omit if game has no such command
-    }
+    },
+    "hints": [str]  — user-authored strategy hints injected into the LLM prompt as additional context
 }
 
 Legacy keys still accepted: "inspection_sequence" (alias for candidate_verbs),
@@ -77,6 +78,7 @@ class GameConfig:
         self.fast_nav_command = None   # e.g. "run to {target}"
         self.full_nav_command = None   # e.g. "go to {target}"
         self.wait_for_command = None   # e.g. "wait for {npc}"
+        self.hints = []
         self._compile()
 
     def _compile(self):
@@ -134,6 +136,8 @@ class GameConfig:
             npc = data["npc_commands"]
             if "wait_for_command" in npc:
                 self.wait_for_command = npc["wait_for_command"]
+        if "hints" in data:
+            self.hints = list(data["hints"])
 
 
 config = GameConfig()

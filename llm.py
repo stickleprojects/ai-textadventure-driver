@@ -3,6 +3,8 @@ import re
 
 import streamlit as st
 
+from game_config import config
+
 try:
     from llama_cpp import Llama
     LLAMA_AVAILABLE = True
@@ -22,12 +24,18 @@ def extract_knowledge(text, action_taken, llm_instance):
     if not llm_instance:
         return {}
 
+    hints_block = ""
+    if config.hints:
+        hints_lines = "\n".join(f"    - {h}" for h in config.hints)
+        hints_block = f"\n    Strategy hints from the user (apply when relevant):\n{hints_lines}"
+
     prompt = f"""
     Analyze the text adventure game output and extract environment data in strict JSON.
     Track inventory additions, learned magic, and physical/magical blockers (anomalies).
 
     Useful notes:
     - If the response has "Exits lead in all directions" or "Exits lead in every direction", treat it as a special case and set exits to ["north", "south", "east", "west", "up", "down"].
+{hints_block}
 
     IMPORTANT distinctions:
     - "objects" are inanimate items only (sword, key, stone, pool, door, chest...)
