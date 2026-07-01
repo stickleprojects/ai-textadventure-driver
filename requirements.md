@@ -13,11 +13,7 @@ Agent gameplay capabilities — things the agent must be able to do to play Knig
 10. (c) cross-run learning — **Effort: Very High | Risk: Very High** — utility tagging per step, `room_policies` / futility threshold, `runs/` persistence, `knight_orc_strategy.json` merge, startup load. See [[plan-issue10]] for full design.
     - See also requirement 21 (timed multi-step strategies) for a concrete example of what cross-run learning needs to produce
 
-20. the agent has no mechanism for user-authored strategy hints — short natural-language tips that the user has learned across runs and wants to feed back in (e.g. "NPCs only attack orcs they recognise — wear a disguise such as a hooded cloak to avoid attacks").
-    - **Approach:** add a `hints` list to `game_config.json`; inject active hints into the `extract_knowledge` prompt as additional context so the LLM can match game events to known solutions. Existing anomaly → goal → action pipeline then handles execution with no further changes.
-    - **Effort: Low | Risk: Low** — config addition + one prompt change; no new state or agent logic.
-    - **Does not cover:** multi-step timed strategies that must be discovered across runs (see requirement 21)
-    - **Dependency:** implement requirement 23 (theft detection) before adding the hint "NPCs will steal treasure — put it in a sack or box", otherwise the agent won't know the item was stolen
+20. ~~the agent has no mechanism for user-authored strategy hints — short natural-language tips that the user has learned across runs and wants to feed back in (e.g. "NPCs only attack orcs they recognise — wear a disguise such as a hooded cloak to avoid attacks").~~ — fixed: `hints` list added to `knight_orc.json` and `GameConfig`; non-empty hints are injected into the `extract_knowledge` prompt under a "Strategy hints from the user" heading so the LLM can match game events to known solutions.
 
 21. the agent cannot learn or execute timed multi-step strategies that require observing NPC behaviour across multiple turns. Canonical example: entering the troll lair requires observing the troll leave, learning that rushing in immediately fails, discovering that following the troll and dropping gold to distract it is the only approach that works.
     - **New capabilities required:**

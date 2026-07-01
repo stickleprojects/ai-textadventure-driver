@@ -51,5 +51,6 @@
     },
     "npc_commands": {
         "wait_for_command": "wait for {npc}"
-    }
+    },
+    "hints": []
 }
