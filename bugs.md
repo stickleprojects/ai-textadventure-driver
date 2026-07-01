@@ -4,6 +4,8 @@ Incorrect or broken behaviour observed during runs. Original issue numbers prese
 
 ## Open
 
+54. ~~agent loops on `look` when the current room has no direct Unknown exits — `determine_next_action` only checked outgoing edges from the current room; if all those exits were resolved it fell through to the `look` fallback on every step even though other rooms in the graph still had unexplored exits.~~ — fixed: after exhausting local Unknown exits, agent uses `nx.shortest_path_length` to find the nearest room in the graph that still has a non-futile Unknown exit and navigates there; only falls back to `look` if the graph is fully explored or the unreached portion is disconnected.
+
 51. ~~Map layout placed diagonal-direction rooms (ne/nw/se/sw) in wrong positions — two causes: (1) LLM extracts "northeast" instead of "ne", which has no vector in `_CARDINAL_VECTORS` and falls back to (0,0); (2) collision avoidance always shifted +x, breaking 45° geometry for diagonals.~~ — fixed: `_DIRECTION_NORMALIZE` in `agent.py` maps full names to abbreviated forms in `update_graph` before placeholder nodes are created; `_free_cell` helper in BFS shifts along the edge vector for diagonals.
 
 52. ~~Map PNG used dark theme (dark background, purple edges, purple labels) making it hard to read when printed or shared.~~ — fixed: `save_graph_image` now uses white background, black edges, black edge labels on transparent background.

@@ -87,7 +87,7 @@ def _record_verb_outcome(state, target, verb, outcome):
     entity.setdefault("verb_outcomes", {})[verb] = outcome
 
 
-def _detect_loop(game_log, window=10, threshold=4):
+def _detect_loop(game_log, window=10, threshold=8):
     """Returns the repeated action if any single action appears >= threshold times
     in the last `window` log entries, else None.
 
@@ -249,6 +249,32 @@ def determine_next_action(state):
     for _, v, data in state["world_graph"].edges(state["current_room"], data=True):
         if v.startswith("Unknown") and not data.get("futile"):
             return data["label"]
+
+    # Current room is fully explored — navigate toward the nearest room that still
+    # has an Unknown exit, so we don't fall through to "look" prematurely.
+    best_target = None
+    best_len = float("inf")
+    for node in state["world_graph"].nodes:
+        if node.startswith("Unknown"):
+            continue
+        if not any(
+            v.startswith("Unknown") and not d.get("futile")
+            for _, v, d in state["world_graph"].edges(node, data=True)
+        ):
+            continue
+        try:
+            path_len = nx.shortest_path_length(
+                state["world_graph"], state["current_room"], node
+            )
+            if path_len < best_len:
+                best_len = path_len
+                best_target = node
+        except (nx.NetworkXNoPath, nx.NodeNotFound):
+            continue
+    if best_target:
+        move = _nav_command(state, best_target, fast=True)
+        if move:
+            return move
 
     step_count = len(state["game_log"])
     if step_count > 0 and step_count % _SCORE_INTERVAL == 0:
