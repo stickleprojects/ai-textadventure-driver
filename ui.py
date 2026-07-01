@@ -192,7 +192,7 @@ def render_graph(state):
     components.html(net.generate_html(), height=450, scrolling=False)
 
 
-def save_graph_image(graph, current_room, output_path):
+def save_graph_image(graph, current_room, output_path, draw_unknowns=True):
     """Render the world graph to a PNG using matplotlib. Safe to call headlessly."""
     import matplotlib
     matplotlib.use("Agg")
@@ -208,7 +208,10 @@ def save_graph_image(graph, current_room, output_path):
            for node, (gx, gy) in grid.items()}
 
     real_nodes = [n for n in graph.nodes if not n.startswith("Unknown")]
-    unknown_nodes = [n for n in graph.nodes if n.startswith("Unknown")]
+    if not draw_unknowns:
+        unknown_nodes = []
+    else:
+        unknown_nodes = [n for n in graph.nodes if n.startswith("Unknown")]
 
     real_colors = []
     for node in real_nodes:
