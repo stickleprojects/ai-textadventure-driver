@@ -101,11 +101,20 @@ _REVERSE = {
     "in": "out",      "out": "in",
 }
 
+# LLM sometimes returns full direction names; normalise to the abbreviated form
+# used throughout the codebase so BFS vectors and placeholder keys stay consistent.
+_DIRECTION_NORMALIZE = {
+    "northeast": "ne", "northwest": "nw",
+    "southeast": "se", "southwest": "sw",
+    "inside": "in",    "outside": "out",
+}
+
 
 def update_graph(state, room_name, exits, previous_room, action):
     """Adds the current room and its exits to the world graph."""
     if not room_name:
         return
+    exits = [_DIRECTION_NORMALIZE.get(d.lower(), d.lower()) for d in exits]
     if room_name not in state["world_graph"]:
         state["world_graph"].add_node(room_name)
 

@@ -4,6 +4,12 @@ Incorrect or broken behaviour observed during runs. Original issue numbers prese
 
 ## Open
 
+51. ~~Map layout placed diagonal-direction rooms (ne/nw/se/sw) in wrong positions — two causes: (1) LLM extracts "northeast" instead of "ne", which has no vector in `_CARDINAL_VECTORS` and falls back to (0,0); (2) collision avoidance always shifted +x, breaking 45° geometry for diagonals.~~ — fixed: `_DIRECTION_NORMALIZE` in `agent.py` maps full names to abbreviated forms in `update_graph` before placeholder nodes are created; `_free_cell` helper in BFS shifts along the edge vector for diagonals.
+
+52. ~~Map PNG used dark theme (dark background, purple edges, purple labels) making it hard to read when printed or shared.~~ — fixed: `save_graph_image` now uses white background, black edges, black edge labels on transparent background.
+
+53. ~~Unknown placeholder nodes ("? west", "? south" etc.) used full box shape and size, cluttering the map equally with explored rooms.~~ — fixed: Unknown nodes now render as small grey circles (`_MAP_UNKNOWN_SIZE = 300`) with label `"?"` only; `_display_label` simplified to return `"?"` for all Unknown nodes.
+
 47. ~~`Unknown (south from B)` is removed when going north A→B, but immediately re-added when processing B's exit list in the same `update_graph` call — because "south" is not yet in B's outgoing edges at that point.~~ — fixed: when an exit direction matches the reverse of the traversal action, `update_graph` now wires the real return edge (`B --south--> A`) instead of creating an Unknown placeholder.
 
 50. ~~LLM returns slight article variations for the same room name ("cave in juniper scrubland" vs "cave in a juniper scrubland"), creating duplicate nodes on the graph.~~ — fixed: `_resolve_room_name` normalises by stripping articles and lowercasing before comparing against existing nodes; if a match is found the existing node name is reused. Called at the `state["current_room"]` assignment in `process_agent_step` and in the `rebuild_graph` replay script.
@@ -11,18 +17,6 @@ Incorrect or broken behaviour observed during runs. Original issue numbers prese
 48. ~~Direction aliases at the starting location — "south" and "down" lead to the same room; second traversal overwrote the edge label instead of merging.~~ — fixed: `update_graph` now checks whether an edge already exists before calling `add_edge`; if it does, the new direction label is appended (`"south/down"`). `existing_labels` extraction splits merged labels so exits listing either alias don't re-add an Unknown placeholder.
 
 49. ~~Non-cardinal directions ("in", "out") were missing from `_REVERSE`, so traversal via "in" skipped placeholder cleanup entirely — Unknown nodes were never removed and no real edge was added.~~ — fixed: "in"/"out" added to `_REVERSE`; BFS layout treats "in" as z−1 (sub-space band, same as "down") and "out" as z+1. Merged edge labels are split on "/" before taking the first token for BFS positioning.
-
-51. Map layout ignores diagonal directions (ne, nw, se, sw) — the BFS uses `_CARDINAL_VECTORS` which defines these vectors correctly, but the label parsing in `_compute_positions_and_levels` splits merged labels (e.g. `"south/down"`) and uses `.lower()`, so diagonal labels pass through. However, rooms observed to appear in random/wrong positions suggest the vector lookup is failing silently (possibly the edge label is stored as a different case or alias). Diagonal exits should place the neighbour at 45° offsets: ne → (+1, −1), nw → (−1, −1), se → (+1, +1), sw → (−1, +1).
-    - **Fix:** verify the edge label arriving in the BFS matches the key in `_CARDINAL_VECTORS` exactly after `.lower()` and split; add a regression test with a diagonal edge; confirm positions are correct in the generated PNG.
-    - **Effort: Small | Risk: Low**
-
-52. Map PNG visual style — lines (edges) should be black, edge labels should be black text on a transparent background (currently purple-on-dark), map background should be white. The dark theme makes the PNG hard to read when printed or shared outside the app.
-    - **Fix:** in `save_graph_image`, change `edge_color` to `"black"`, `font_color` on edge labels to `"black"`, `facecolor` to `"white"`, `ax.set_facecolor("white")`.
-    - **Effort: Trivial | Risk: None**
-
-53. Unknown location nodes ("? west", "? south", etc.) are too prominent — they should display as just `"?"`, rendered as a small grey circle with black text, visually subordinate to real rooms. Currently they use the same box shape and size as explored rooms.
-    - **Fix:** in `save_graph_image` and `render_graph`, detect Unknown nodes and use a circle marker (`node_shape="o"`), smaller size, grey colour, and label `"?"`.
-    - **Effort: Small | Risk: Low**
 
 45. maze rooms with non-unique names cause the world graph to collapse distinct locations into a single node, triggering a loop. Observed in the "alder clump" area — multiple distinct rooms share the same name but have different exits; the agent loops because it thinks it has already visited and explored the single "alder clump" node.
     - **Root cause:** `update_graph` uses the raw room name as the node ID; `state["current_room"]` is set from `extracted["room"]` before exits are known, so there is no opportunity to fingerprint at assignment time
