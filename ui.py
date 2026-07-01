@@ -1,4 +1,5 @@
 import json
+import textwrap
 from collections import deque
 
 import networkx as nx
@@ -126,24 +127,16 @@ def _node_color(z, is_current, is_unknown):
     return {"background": "#7c3aed", "border": "#7c3aed"}      # ground — purple
 
 
+_LABEL_WRAP_WIDTH = 12  # chars per line; matches ~11-char node box width at _MAP_NODE_SIZE=1800
+
+
 def _display_label(node_id):
     """Short, word-wrapped label for graph nodes (node IDs are unchanged)."""
     if node_id.startswith("Unknown (") and node_id.endswith(")"):
         inner = node_id[len("Unknown ("):-1]
         direction = inner.split(" from ")[0] if " from " in inner else inner[:20]
         return f"? {direction}"
-    words = node_id.split()
-    lines, line, length = [], [], 0
-    for w in words:
-        if length + len(w) + (1 if line else 0) > 20:
-            lines.append(" ".join(line))
-            line, length = [w], len(w)
-        else:
-            line.append(w)
-            length += len(w) + (1 if len(line) > 1 else 0)
-    if line:
-        lines.append(" ".join(line))
-    return "\n".join(lines)
+    return "\n".join(textwrap.wrap(node_id, width=_LABEL_WRAP_WIDTH) or [node_id])
 
 
 def render_graph(state):
