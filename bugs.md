@@ -48,3 +48,5 @@ Incorrect or broken behaviour observed during runs. Original issue numbers prese
 36. ~~after issuing "wear flagpole" we get a location of "current location not explicitly named"~~ — fixed: prompt now explicitly instructs the LLM to set `room` to null if the response does not name a location
 37. ~~after issuing "examine flagpole" we get a location of "flagpole" which is not correct~~ — fixed: same prompt rule as 36; `room` must be null when no place is named
 41. ~~add negative failure for "Don't be silly"~~ — fixed by user
+42. ~~crash at step 19 of run watch_20260701_123641: `'NoneType' object is not iterable` near "You don't need to use the word rodents…". Root cause: LLM returns `null` for list fields (e.g. `"npcs": null`); `dict.get(key, [])` returns `None` rather than `[]` when the key is present with a null value. Stack trace was also missing from the log.~~ — fixed: `extract_knowledge` normalises any non-list value for the seven list fields to `[]` after JSON parse; crash handler in `watch_run.py` now records `traceback.format_exc()` in the log entry and stderr.
+

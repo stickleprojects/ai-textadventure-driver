@@ -39,6 +39,16 @@
       "run_id": "watch_20260701_085624",
       "outcome": "agent_failure",
       "final_score": null
+    },
+    {
+      "run_id": "watch_20260701_123356",
+      "outcome": "interrupted",
+      "final_score": null
+    },
+    {
+      "run_id": "watch_20260701_123641",
+      "outcome": "agent_failure",
+      "final_score": null
     }
   ],
   "entity_verb_outcomes": {
@@ -118,6 +128,23 @@
       "pull": "invalid",
       "turn on": "invalid",
       "turn off": "invalid"
+    },
+    "pile of garbage": {
+      "eat": "invalid",
+      "drink": "invalid",
+      "open": "invalid",
+      "close": "invalid",
+      "unlock": "invalid",
+      "lock": "invalid",
+      "pull": "invalid",
+      "turn on": "invalid",
+      "turn off": "invalid"
+    },
+    "rodents": {
+      "take": "invalid"
+    },
+    "snack-worms": {
+      "take": "invalid"
     }
   }
 }

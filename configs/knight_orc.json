@@ -52,5 +52,7 @@
     "npc_commands": {
         "wait_for_command": "wait for {npc}"
     },
-    "hints": []
+    "hints": [
+        "Say hello to denzyl as he can help you with your quest."
+    ]
 }
