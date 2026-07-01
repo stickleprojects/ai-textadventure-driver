@@ -14,6 +14,10 @@ Agent gameplay capabilities — things the agent must be able to do to play Knig
     - See also requirement 21 (timed multi-step strategies) for a concrete example of what cross-run learning needs to produce
 
 20. ~~the agent has no mechanism for user-authored strategy hints — short natural-language tips that the user has learned across runs and wants to feed back in (e.g. "NPCs only attack orcs they recognise — wear a disguise such as a hooded cloak to avoid attacks").~~ — fixed: `hints` list added to `knight_orc.json` and `GameConfig`; non-empty hints are injected into the `extract_knowledge` prompt under a "Strategy hints from the user" heading so the LLM can match game events to known solutions.
+    - **Limitation — only inventory-solution hints are actionable today.** The anomaly→goal pipeline fires only when `potential_solution` matches something in `inventory + spellbook`. Three hint archetypes and their status:
+      - ✅ **NPC gift** ("the hermit likes shiny things") — LLM creates `{"target": "hermit", "potential_solution": "gold plate"}`; once agent holds gold plate it tries `use gold plate on hermit`. Works if the game accepts `use X on NPC`.
+      - ⚠️ **Discovery** ("the marrow has the cold spell") — no inventory solution; the pipeline can't navigate to a location and examine an object as a goal. Needs requirement 43.
+      - ❌ **NPC following** ("follow the ghost to find its lair") — requires multi-turn NPC tracking. Needs requirement 21.
 
 21. the agent cannot learn or execute timed multi-step strategies that require observing NPC behaviour across multiple turns. Canonical example: entering the troll lair requires observing the troll leave, learning that rushing in immediately fails, discovering that following the troll and dropping gold to distract it is the only approach that works.
     - **New capabilities required:**
@@ -43,6 +47,11 @@ Agent gameplay capabilities — things the agent must be able to do to play Knig
     - **Effort: Low | Risk: Low** — schema addition + one new branch in `process_agent_step`
 
 40. add support for npcs talking to you — Denzyl and others sometimes initiate dialogue ("hi"); agent currently has no way to detect or respond to unprompted NPC speech
+
+43. hint system only supports inventory-solution anomalies — discovery hints ("the marrow has the cold spell") and NPC greeting hints ("say hello to Denzyl") cannot be acted on by the current pipeline.
+    - **Discovery hints** need a new goal type: "navigate to a room where this object has been seen and examine/take it". The LLM could emit `{"target": "marrow", "potential_solution": "examine", "hint_driven": true}` but the agent needs a tier that routes `examine`-type solutions to the inspection queue rather than the inventory check.
+    - **NPC greeting hints** need the ungreeted-NPC priority tier from requirement 2; until then the LLM can see the hint but the agent has no action to execute.
+    - **Effort: Medium | Risk: Low** — extends the anomaly pipeline with a new solution category; does not change LLM prompt or extraction schema
 
 ## Closed
 
