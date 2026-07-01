@@ -11,25 +11,26 @@ _SCORE_RE = re.compile(r"you score\s+(\d+)\s+out of\s+(\d+)", re.IGNORECASE)
 _SCORE_INTERVAL = 20
 
 _ARTICLE_RE = re.compile(r"\b(a|an|the)\b\s*", re.IGNORECASE)
-# Strip bare "in " prefix — LLM sometimes says "in an alder ghostwood" instead of
-# "alder ghostwood".  "inside"/"outside" are NOT stripped: they denote distinct rooms.
-_LEADING_IN_RE = re.compile(r"^in\s+", re.IGNORECASE)
+# Strip leading positional prepositions — LLM says "in an alder ghostwood",
+# "on a jousting field" etc.  Two passes needed: preposition first, then article.
+# "inside"/"outside" are NOT stripped: they denote distinct rooms.
+_LEADING_PREP_RE = re.compile(r"^(in|on|at)\s+", re.IGNORECASE)
 _LEADING_ARTICLE_RE = re.compile(r"^(a|an|the)\s+", re.IGNORECASE)
 
 
 def _normalize_room(name):
-    name = _LEADING_IN_RE.sub("", name)
+    name = _LEADING_PREP_RE.sub("", name)
     return _ARTICLE_RE.sub("", name).strip().lower()
 
 
 def _canonicalize_room(name):
-    """Strip leading 'in (a|an|the)?' for clean node storage.
+    """Strip leading 'in (a|an|the|on)?' for clean node storage.
 
     Only touches the leading preposition/article so mid-string articles
     (e.g. 'cave in a juniper scrubland') and spatial prefixes like
     'inside'/'outside' are preserved.
     """
-    name = _LEADING_IN_RE.sub("", name)
+    name = _LEADING_PREP_RE.sub("", name)
     name = _LEADING_ARTICLE_RE.sub("", name)
     return name.strip()
 

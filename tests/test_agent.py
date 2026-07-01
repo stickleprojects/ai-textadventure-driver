@@ -492,6 +492,9 @@ class TestNullRoomHandling:
         # article-only variant still works
         assert _resolve_room_name(g, "a cedar tangle") == "cedar tangle"
         assert _resolve_room_name(g, "an alder forest") == "alder forest"
+
+        assert _resolve_room_name(g, "on a jousting field") == "jousting field"
+        
         # "inside" / "outside" must NOT be stripped — they are distinct locations
         g2 = nx.DiGraph()
         g2.add_node("inside a cave")

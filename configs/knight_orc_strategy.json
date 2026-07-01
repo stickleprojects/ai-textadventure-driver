@@ -93,6 +93,26 @@
       "run_id": "watch_20260701_141220",
       "outcome": "ambiguous",
       "final_score": null
+    },
+    {
+      "run_id": "watch_20260701_150557",
+      "outcome": "ambiguous",
+      "final_score": null
+    },
+    {
+      "run_id": "watch_20260701_150629",
+      "outcome": "ambiguous",
+      "final_score": null
+    },
+    {
+      "run_id": "watch_20260701_150704",
+      "outcome": "ambiguous",
+      "final_score": null
+    },
+    {
+      "run_id": "watch_20260701_151115",
+      "outcome": "agent_failure",
+      "final_score": null
     }
   ],
   "entity_verb_outcomes": {
@@ -257,6 +277,128 @@
       "open": "invalid",
       "close": "invalid",
       "unlock": "invalid"
+    },
+    "straw": {
+      "close": "invalid"
     }
+  },
+  "world_graph": {
+    "nodes": [
+      "dingy stable",
+      "huge pile of garbage",
+      "on a trampled field, pock-marked by the feet of humans and their horses",
+      "on a jousting field",
+      "on a dismal fairground in a rowan coppice",
+      "juniper underbrush",
+      "outside a cave in a juniper scrubland",
+      "juniper ghostwood",
+      "juniper coppice",
+      "hawthorn underbrush",
+      "jousting field",
+      "on a trampled field",
+      "grandstand"
+    ],
+    "edges": [
+      [
+        "dingy stable",
+        "huge pile of garbage",
+        "east"
+      ],
+      [
+        "grandstand",
+        "on a jousting field",
+        "north"
+      ],
+      [
+        "hawthorn underbrush",
+        "juniper coppice",
+        "south"
+      ],
+      [
+        "huge pile of garbage",
+        "on a trampled field, pock-marked by the feet of humans and their horses",
+        "down/down/out"
+      ],
+      [
+        "jousting field",
+        "huge pile of garbage",
+        "north"
+      ],
+      [
+        "juniper coppice",
+        "hawthorn underbrush",
+        "north"
+      ],
+      [
+        "juniper coppice",
+        "juniper ghostwood",
+        "south"
+      ],
+      [
+        "juniper ghostwood",
+        "juniper coppice",
+        "north"
+      ],
+      [
+        "juniper ghostwood",
+        "outside a cave in a juniper scrubland",
+        "south"
+      ],
+      [
+        "juniper underbrush",
+        "on a dismal fairground in a rowan coppice",
+        "south"
+      ],
+      [
+        "juniper underbrush",
+        "outside a cave in a juniper scrubland",
+        "north"
+      ],
+      [
+        "on a dismal fairground in a rowan coppice",
+        "juniper underbrush",
+        "north"
+      ],
+      [
+        "on a dismal fairground in a rowan coppice",
+        "on a jousting field",
+        "south"
+      ],
+      [
+        "on a jousting field",
+        "grandstand",
+        "south"
+      ],
+      [
+        "on a jousting field",
+        "on a dismal fairground in a rowan coppice",
+        "north"
+      ],
+      [
+        "on a jousting field",
+        "on a trampled field, pock-marked by the feet of humans and their horses",
+        "east"
+      ],
+      [
+        "on a trampled field",
+        "on a jousting field",
+        "west"
+      ],
+      [
+        "on a trampled field, pock-marked by the feet of humans and their horses",
+        "on a jousting field",
+        "west"
+      ],
+      [
+        "outside a cave in a juniper scrubland",
+        "juniper ghostwood",
+        "north"
+      ],
+      [
+        "outside a cave in a juniper scrubland",
+        "juniper underbrush",
+        "south"
+      ]
+    ]
   }
 }

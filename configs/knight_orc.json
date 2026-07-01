@@ -1,12 +1,43 @@
 {
     "prompt_pattern": "What now\\?|\\r?\\n>",
-    "candidate_verbs": ["take", "examine", "read", "look inside", "wear", "eat", "drink", "open", "close", "unlock", "lock", "push", "pull", "turn on", "turn off"],
+    "candidate_verbs": [
+        "examine",
+        "take",
+        "read",
+        "look inside",
+        "wear",
+        "eat",
+        "drink",
+        "open",
+        "close",
+        "unlock",
+        "lock",
+        "push",
+        "pull",
+        "turn on",
+        "turn off"
+    ],
     "creature_words": [
-        "horse", "pony", "mare", "stallion",
-        "knight", "orc", "guard", "soldier",
-        "man", "woman", "person", "peasant",
-        "troll", "goblin", "dwarf", "elf",
-        "creature", "beast", "monster", "demon"
+        "horse",
+        "pony",
+        "mare",
+        "stallion",
+        "knight",
+        "orc",
+        "guard",
+        "soldier",
+        "man",
+        "woman",
+        "person",
+        "peasant",
+        "troll",
+        "goblin",
+        "dwarf",
+        "elf",
+        "creature",
+        "beast",
+        "monster",
+        "demon"
     ],
     "hard_failure_patterns": [
         "you can'?t",
@@ -41,9 +72,19 @@
         "can'?t[^.\\n]{0,80}because"
     ],
     "end_state_patterns": {
-        "death": ["you have died", "you are dead", "killed"],
-        "finished": ["congratulations", "you have finished", "the end"],
-        "score": ["you score \\d+ out of \\d+"]
+        "death": [
+            "you have died",
+            "you are dead",
+            "killed"
+        ],
+        "finished": [
+            "congratulations",
+            "you have finished",
+            "the end"
+        ],
+        "score": [
+            "you score \\d+ out of \\d+"
+        ]
     },
     "navigation": {
         "fast_nav_command": "run to {target}",

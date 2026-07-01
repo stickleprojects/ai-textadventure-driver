@@ -264,11 +264,14 @@ def save_graph_image(graph, current_room, output_path, draw_unknowns=True):
         )
 
     # Edges — black lines, black labels on transparent background
+    visible_nodes = set(real_nodes) | set(unknown_nodes)
+    visible_edges = [(u, v) for u, v in graph.edges() if u in visible_nodes and v in visible_nodes]
     nx.draw_networkx_edges(
-        graph, pos=pos, ax=ax,
+        graph, pos=pos, ax=ax, edgelist=visible_edges,
         edge_color="black", arrows=True, arrowsize=12,
     )
-    edge_labels = {(u, v): d.get("label", "") for u, v, d in graph.edges(data=True)}
+    edge_labels = {(u, v): d.get("label", "") for u, v, d in graph.edges(data=True)
+                   if u in visible_nodes and v in visible_nodes}
     nx.draw_networkx_edge_labels(
         graph, pos=pos, edge_labels=edge_labels, ax=ax,
         font_color="black", font_size=_MAP_EDGE_FONT_SIZE,
