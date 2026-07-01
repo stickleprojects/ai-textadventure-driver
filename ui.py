@@ -55,11 +55,12 @@ def _compute_positions_and_levels(graph):
             for _, neighbor, data in graph.edges(node, data=True):
                 if neighbor in grid:
                     continue
-                label = data.get("label", "").lower()
-                if label == "up":
+                # Merged labels (e.g. "south/down") — use first token for positioning
+                label = data.get("label", "").lower().split("/")[0]
+                if label in ("up", "out"):
                     grid[neighbor] = (gx, gy)
                     levels[neighbor] = gz + 1
-                elif label == "down":
+                elif label in ("down", "in"):
                     grid[neighbor] = (gx, gy)
                     levels[neighbor] = gz - 1
                 else:
@@ -73,17 +74,20 @@ def _compute_positions_and_levels(graph):
                 component_max_x = max(component_max_x, grid[neighbor][0])
                 queue.append(neighbor)
             # Follow incoming edges so nodes only reachable via reverse edges get positions
+            _BFS_REVERSE = {
+                "north": "south", "south": "north", "east": "west", "west": "east",
+                "up": "down", "down": "up", "ne": "sw", "sw": "ne", "nw": "se", "se": "nw",
+                "in": "out", "out": "in",
+            }
             for predecessor, _, data in graph.in_edges(node, data=True):
                 if predecessor in grid:
                     continue
-                label = data.get("label", "").lower()
-                reverse = {"north": "south", "south": "north", "east": "west", "west": "east",
-                           "up": "down", "down": "up", "ne": "sw", "sw": "ne", "nw": "se", "se": "nw"}
-                rev_label = reverse.get(label, "")
-                if rev_label == "up":
+                label = data.get("label", "").lower().split("/")[0]
+                rev_label = _BFS_REVERSE.get(label, "")
+                if rev_label in ("up", "out"):
                     grid[predecessor] = (gx, gy)
                     levels[predecessor] = gz + 1
-                elif rev_label == "down":
+                elif rev_label in ("down", "in"):
                     grid[predecessor] = (gx, gy)
                     levels[predecessor] = gz - 1
                 else:

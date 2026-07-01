@@ -78,6 +78,7 @@ _REVERSE = {
     "up": "down",     "down": "up",
     "ne": "sw",       "sw": "ne",
     "nw": "se",       "se": "nw",
+    "in": "out",      "out": "in",
 }
 
 
@@ -98,10 +99,22 @@ def update_graph(state, room_name, exits, previous_room, action):
         ):
             if state["world_graph"].has_node(placeholder):
                 state["world_graph"].remove_node(placeholder)
-        state["world_graph"].add_edge(previous_room, room_name, label=action)
+        # If the edge already exists (direction alias, e.g. south==down at start), merge
+        # the new label rather than overwriting the existing one.
+        if state["world_graph"].has_edge(previous_room, room_name):
+            edge_data = state["world_graph"][previous_room][room_name]
+            existing = edge_data.get("label", "").split("/")
+            if action not in existing:
+                edge_data["label"] = "/".join(existing + [action])
+        else:
+            state["world_graph"].add_edge(previous_room, room_name, label=action)
 
     for direction in exits:
-        existing_labels = {d.get("label") for _, _, d in state["world_graph"].edges(room_name, data=True)}
+        # Split merged labels (e.g. "south/down") so each component is checked individually
+        existing_labels = set()
+        for _, _, d in state["world_graph"].edges(room_name, data=True):
+            for lbl in d.get("label", "").split("/"):
+                existing_labels.add(lbl)
         if direction in existing_labels:
             continue
         # If this exit points back the way we came, wire the real return edge so

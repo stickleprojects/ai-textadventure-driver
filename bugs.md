@@ -6,15 +6,9 @@ Incorrect or broken behaviour observed during runs. Original issue numbers prese
 
 47. ~~`Unknown (south from B)` is removed when going north A→B, but immediately re-added when processing B's exit list in the same `update_graph` call — because "south" is not yet in B's outgoing edges at that point.~~ — fixed: when an exit direction matches the reverse of the traversal action, `update_graph` now wires the real return edge (`B --south--> A`) instead of creating an Unknown placeholder.
 
-48. Direction aliases at the starting location — "south" and "down" lead to the same room; the graph stores both edges, producing a duplicate direction node and confusing the BFS layout which treats them as separate destinations.
-    - **Root cause:** Level 9 sometimes treats vertical and cardinal directions as equivalent at certain locations; `update_graph` stores both edges without deduplication
-    - **Fix:** after adding a traversal edge, check if any existing outgoing edge from the same room already reaches the same destination — if so, merge the two edges (keep both labels or drop the newer alias)
-    - **Effort: Small | Risk: Low**
+48. ~~Direction aliases at the starting location — "south" and "down" lead to the same room; second traversal overwrote the edge label instead of merging.~~ — fixed: `update_graph` now checks whether an edge already exists before calling `add_edge`; if it does, the new direction label is appended (`"south/down"`). `existing_labels` extraction splits merged labels so exits listing either alias don't re-add an Unknown placeholder.
 
-49. Non-cardinal directions ("in", "out") have no vector in `_CARDINAL_VECTORS` so they resolve to `(0, 0)` in the BFS layout. The collision-avoidance shift places the node arbitrarily rather than at a meaningful position (observed: "cave in juniper scrubland" appears with both an "in" and a "south" entrance, each needing correct spatial placement).
-    - **Root cause:** `_CARDINAL_VECTORS` only covers the eight compass points plus up/down; "in" and "out" fall through to the `(0, 0)` default
-    - **Fix:** treat "in" as a no-vector special direction (like up/down — separate z or cluster) or map it to the nearest cardinal from context; for now, nodes reached only via "in"/"out" can be flagged visually as non-navigable rooms
-    - **Effort: Small | Risk: Low**
+49. ~~Non-cardinal directions ("in", "out") were missing from `_REVERSE`, so traversal via "in" skipped placeholder cleanup entirely — Unknown nodes were never removed and no real edge was added.~~ — fixed: "in"/"out" added to `_REVERSE`; BFS layout treats "in" as z−1 (sub-space band, same as "down") and "out" as z+1. Merged edge labels are split on "/" before taking the first token for BFS positioning.
 
 45. maze rooms with non-unique names cause the world graph to collapse distinct locations into a single node, triggering a loop. Observed in the "alder clump" area — multiple distinct rooms share the same name but have different exits; the agent loops because it thinks it has already visited and explored the single "alder clump" node.
     - **Root cause:** `update_graph` uses the raw room name as the node ID; `state["current_room"]` is set from `extracted["room"]` before exits are known, so there is no opportunity to fingerprint at assignment time

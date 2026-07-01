@@ -444,6 +444,42 @@ class TestNullRoomHandling:
         assert not state["world_graph"].has_node("Unknown (south from Blackthorn Underbrush)")
         assert state["world_graph"].has_edge("Blackthorn Underbrush", "Hawthorn Coppice")
 
+    def test_direction_alias_merges_edge_label(self):
+        # Bug 48: south==down at starting room — second traversal should merge
+        # the label rather than overwrite.
+        state = make_state(current_room="Start")
+        update_graph(state, "Cellar", [], "Start", "south")
+        update_graph(state, "Cellar", [], "Start", "down")
+        edge = state["world_graph"].get_edge_data("Start", "Cellar")
+        assert edge is not None
+        assert "south" in edge["label"]
+        assert "down" in edge["label"]
+
+    def test_direction_alias_does_not_readd_unknown_for_merged_direction(self):
+        # Bug 48: after south/down are merged, exits listing "south" again should
+        # not create a new Unknown placeholder.
+        state = make_state(current_room="Start")
+        update_graph(state, "Cellar", [], "Start", "south")
+        update_graph(state, "Cellar", [], "Start", "down")
+        # Now revisit Start with exits that include "south" and "down"
+        update_graph(state, "Start", ["south", "down", "east"], None, "")
+        assert not state["world_graph"].has_node("Unknown (south from Start)")
+        assert not state["world_graph"].has_node("Unknown (down from Start)")
+
+    def test_in_direction_cleans_up_placeholder_and_wires_out_return(self):
+        # Bug 49: "in" was missing from _REVERSE so traversal via "in" skipped
+        # placeholder cleanup entirely.
+        state = make_state(current_room="Juniper Scrubland")
+        state["world_graph"].add_edge(
+            "Juniper Scrubland", "Unknown (in from Juniper Scrubland)", label="in"
+        )
+        update_graph(state, "Cave", ["out"], "Juniper Scrubland", "in")
+        assert not state["world_graph"].has_node("Unknown (in from Juniper Scrubland)")
+        assert state["world_graph"].has_edge("Juniper Scrubland", "Cave")
+        # The "out" exit should wire the real return edge, not create a placeholder
+        assert not state["world_graph"].has_node("Unknown (out from Cave)")
+        assert state["world_graph"].has_edge("Cave", "Juniper Scrubland")
+
 
 class TestStuckAnomalyLoop:
     def test_hard_failure_on_goal_action_removes_anomaly(self, stub_child):
