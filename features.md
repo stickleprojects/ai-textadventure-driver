@@ -30,6 +30,8 @@ Enhancements, new functionality, tooling, and infrastructure improvements.
     - **Dependency:** requires a cloud image API — new external dependency not currently in the project
     - **Effort: Medium | Risk: Low**
 
+45. Add short circuit for common responses so we dont invoke the LLM if not needed. so if the engine responds with "You cant eat that" we dont invoke the llm, if it responds with other text that we dont undersatnd then we need to invoke the LLM. We can do this via cacheing but need to be careful about "you dont need to use the word 'push' to finish the game" since the prefix is known but the word push will change each time
+
 ## Closed
 
 3. ~~the boxes for the graph dont scale and there's no zoom so you cant read the text~~ — fixed: replaced matplotlib with pyvis interactive graph (zoom, pan, drag; current room highlighted in amber)
