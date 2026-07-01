@@ -4,6 +4,7 @@
 Usage:
     python scripts/generate_map.py logs/watch_20260701_085624.json
     python scripts/generate_map.py logs/watch_20260701_085624.json --out my_map.png
+    python scripts/generate_map.py logs/watch_20260701_085624.json --no-unknowns
 """
 import argparse
 import json
@@ -44,6 +45,10 @@ def main():
     parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     parser.add_argument("log", help="Path to a run log JSON file (logs/<run_id>.json)")
     parser.add_argument("--out", metavar="PATH", help="Output PNG path (default: <log_stem>_map.png)")
+    parser.add_argument(
+        "--no-unknowns", action="store_true",
+        help="Exclude unexplored exit placeholder nodes (? north, ? up, etc.) from the map",
+    )
     args = parser.parse_args()
 
     log_path = Path(args.log)
@@ -55,6 +60,12 @@ def main():
         game_log = json.load(f)
 
     graph, current_room = rebuild_graph(game_log)
+
+    if args.no_unknowns:
+        unknowns = [n for n in list(graph.nodes) if n.startswith("Unknown (")]
+        graph.remove_nodes_from(unknowns)
+        print(f"Removed {len(unknowns)} unexplored exit nodes", file=sys.stderr)
+
     print(f"Rebuilt graph: {len(graph.nodes)} nodes, {len(graph.edges)} edges", file=sys.stderr)
 
     out_path = Path(args.out) if args.out else log_path.with_name(log_path.stem + "_map.png")
