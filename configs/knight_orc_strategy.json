@@ -5,6 +5,30 @@
       "east"
     ],
     [
+      "an alder clump",
+      "east"
+    ],
+    [
+      "an alder clump",
+      "se"
+    ],
+    [
+      "an alder heartwood",
+      "down"
+    ],
+    [
+      "an alder heartwood",
+      "up"
+    ],
+    [
+      "in an alder clump",
+      "east"
+    ],
+    [
+      "in an alder clump",
+      "se"
+    ],
+    [
       "pile of garbage",
       "north"
     ]
@@ -48,6 +72,26 @@
     {
       "run_id": "watch_20260701_123641",
       "outcome": "agent_failure",
+      "final_score": null
+    },
+    {
+      "run_id": "watch_20260701_131211",
+      "outcome": "agent_failure",
+      "final_score": null
+    },
+    {
+      "run_id": "watch_20260701_140103",
+      "outcome": "ambiguous",
+      "final_score": null
+    },
+    {
+      "run_id": "watch_20260701_140137",
+      "outcome": "agent_failure",
+      "final_score": null
+    },
+    {
+      "run_id": "watch_20260701_141220",
+      "outcome": "ambiguous",
       "final_score": null
     }
   ],
@@ -145,6 +189,74 @@
     },
     "snack-worms": {
       "take": "invalid"
+    },
+    "gold crest": {
+      "wear": "invalid",
+      "drink": "invalid",
+      "open": "invalid",
+      "close": "invalid",
+      "unlock": "invalid",
+      "lock": "invalid",
+      "pull": "invalid",
+      "turn on": "invalid",
+      "turn off": "invalid"
+    },
+    "smashed bit of something or other": {
+      "take": "invalid"
+    },
+    "gold finger": {
+      "wear": "invalid",
+      "drink": "invalid",
+      "open": "invalid",
+      "close": "invalid",
+      "unlock": "invalid",
+      "lock": "invalid",
+      "pull": "invalid",
+      "turn on": "invalid",
+      "turn off": "invalid"
+    },
+    "gold nugget": {
+      "wear": "invalid",
+      "drink": "invalid",
+      "open": "invalid",
+      "close": "invalid",
+      "unlock": "invalid",
+      "lock": "invalid",
+      "push": "invalid",
+      "pull": "invalid",
+      "turn on": "invalid",
+      "turn off": "invalid"
+    },
+    "meadow": {
+      "close": "invalid",
+      "lock": "invalid",
+      "turn on": "invalid",
+      "turn off": "invalid"
+    },
+    "fence": {
+      "close": "invalid",
+      "lock": "invalid",
+      "turn on": "invalid",
+      "turn off": "invalid"
+    },
+    "pavilions": {
+      "close": "invalid",
+      "lock": "invalid",
+      "turn on": "invalid",
+      "turn off": "invalid"
+    },
+    "grandstand": {
+      "close": "invalid",
+      "lock": "invalid",
+      "turn on": "invalid",
+      "turn off": "invalid"
+    },
+    "golden ruler": {
+      "wear": "invalid",
+      "drink": "invalid",
+      "open": "invalid",
+      "close": "invalid",
+      "unlock": "invalid"
     }
   }
 }
