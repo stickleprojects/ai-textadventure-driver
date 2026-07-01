@@ -404,6 +404,93 @@ class TestNullRoomHandling:
         update_graph(state, None, ["north"], "Hall", "north")
         assert set(state["world_graph"].nodes) == initial_nodes
 
+    def test_traversal_removes_unknown_placeholder(self):
+        state = make_state(current_room="Forest")
+        state["world_graph"].add_edge("Forest", "Unknown (north from Forest)", label="north")
+        update_graph(state, "Clearing", [], "Forest", "north")
+        assert not state["world_graph"].has_node("Unknown (north from Forest)")
+
+    def test_traversal_removes_reverse_placeholder_from_destination(self):
+        state = make_state(current_room="Clearing")
+        state["world_graph"].add_edge("Clearing", "Unknown (south from Clearing)", label="south")
+        update_graph(state, "Clearing", [], "Forest", "north")
+        assert not state["world_graph"].has_node("Unknown (south from Clearing)")
+
+    def test_traversal_does_not_remove_other_direction_placeholders(self):
+        state = make_state(current_room="Forest")
+        state["world_graph"].add_edge("Forest", "Unknown (east from Forest)", label="east")
+        update_graph(state, "Clearing", [], "Forest", "north")
+        assert state["world_graph"].has_node("Unknown (east from Forest)")
+
+    def test_reverse_exit_not_readded_as_placeholder_after_traversal(self):
+        # Bug 47: going north from A→B removes Unknown(south from B), but then
+        # processing B's exits sees "south" and re-adds the placeholder.
+        # The fix wires the real return edge instead.
+        state = make_state(current_room="Hawthorn Coppice")
+        state["world_graph"].add_node("Blackthorn Underbrush")
+        state["world_graph"].add_edge(
+            "Blackthorn Underbrush", "Unknown (south from Blackthorn Underbrush)", label="south"
+        )
+        update_graph(state, "Blackthorn Underbrush", ["north", "south", "east"], "Hawthorn Coppice", "north")
+        assert not state["world_graph"].has_node("Unknown (south from Blackthorn Underbrush)")
+        # The real return edge should exist instead
+        assert state["world_graph"].has_edge("Blackthorn Underbrush", "Hawthorn Coppice")
+
+    def test_reverse_exit_not_created_as_placeholder_when_never_existed(self):
+        # Variant: Unknown(south from B) was never added — arriving north from A
+        # should still wire B→south→A and not create the Unknown placeholder.
+        state = make_state(current_room="Hawthorn Coppice")
+        update_graph(state, "Blackthorn Underbrush", ["north", "south"], "Hawthorn Coppice", "north")
+        assert not state["world_graph"].has_node("Unknown (south from Blackthorn Underbrush)")
+        assert state["world_graph"].has_edge("Blackthorn Underbrush", "Hawthorn Coppice")
+
+    def test_direction_alias_merges_edge_label(self):
+        # Bug 48: south==down at starting room — second traversal should merge
+        # the label rather than overwrite.
+        state = make_state(current_room="Start")
+        update_graph(state, "Cellar", [], "Start", "south")
+        update_graph(state, "Cellar", [], "Start", "down")
+        edge = state["world_graph"].get_edge_data("Start", "Cellar")
+        assert edge is not None
+        assert "south" in edge["label"]
+        assert "down" in edge["label"]
+
+    def test_direction_alias_does_not_readd_unknown_for_merged_direction(self):
+        # Bug 48: after south/down are merged, exits listing "south" again should
+        # not create a new Unknown placeholder.
+        state = make_state(current_room="Start")
+        update_graph(state, "Cellar", [], "Start", "south")
+        update_graph(state, "Cellar", [], "Start", "down")
+        # Now revisit Start with exits that include "south" and "down"
+        update_graph(state, "Start", ["south", "down", "east"], None, "")
+        assert not state["world_graph"].has_node("Unknown (south from Start)")
+        assert not state["world_graph"].has_node("Unknown (down from Start)")
+
+    def test_article_variant_resolves_to_existing_node(self):
+        # LLM sometimes adds/drops articles ("cave in juniper scrubland" vs
+        # "cave in a juniper scrubland") — both should resolve to the same node.
+        from agent import _resolve_room_name
+        import networkx as nx
+        g = nx.DiGraph()
+        g.add_node("cave in juniper scrubland")
+        assert _resolve_room_name(g, "cave in a juniper scrubland") == "cave in juniper scrubland"
+        assert _resolve_room_name(g, "Cave In Juniper Scrubland") == "cave in juniper scrubland"
+        assert _resolve_room_name(g, "the cave in juniper scrubland") == "cave in juniper scrubland"
+
+    def test_in_direction_cleans_up_placeholder_and_wires_out_return(self):
+        # Bug 49: "in" was missing from _REVERSE so traversal via "in" skipped
+        # placeholder cleanup entirely.
+        state = make_state(current_room="Juniper Scrubland")
+        state["world_graph"].add_edge(
+            "Juniper Scrubland", "Unknown (in from Juniper Scrubland)", label="in"
+        )
+        update_graph(state, "Cave", ["out"], "Juniper Scrubland", "in")
+        assert not state["world_graph"].has_node("Unknown (in from Juniper Scrubland)")
+        assert state["world_graph"].has_edge("Juniper Scrubland", "Cave")
+        # The "out" exit should wire the real return edge, not create a placeholder
+        assert not state["world_graph"].has_node("Unknown (out from Cave)")
+        assert state["world_graph"].has_edge("Cave", "Juniper Scrubland")
+
 
 class TestStuckAnomalyLoop:
     def test_hard_failure_on_goal_action_removes_anomaly(self, stub_child):

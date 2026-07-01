@@ -10,6 +10,26 @@ from llm import extract_knowledge
 _SCORE_RE = re.compile(r"you score\s+(\d+)\s+out of\s+(\d+)", re.IGNORECASE)
 _SCORE_INTERVAL = 20
 
+_ARTICLE_RE = re.compile(r"\b(a|an|the)\b\s*", re.IGNORECASE)
+
+
+def _normalize_room(name):
+    return _ARTICLE_RE.sub("", name).strip().lower()
+
+
+def _resolve_room_name(graph, room_name):
+    """Return an existing graph node matching room_name after article normalisation.
+
+    Prevents the same physical room being stored twice when the LLM returns
+    slight article variations ('cave in juniper scrubland' vs 'cave in a juniper
+    scrubland').  If no match exists, room_name is returned unchanged.
+    """
+    target = _normalize_room(room_name)
+    for node in graph.nodes:
+        if not node.startswith("Unknown") and _normalize_room(node) == target:
+            return node
+    return room_name
+
 
 def _is_hard_failure(text):
     return bool(config.hard_failure_pattern.search(text))
@@ -72,6 +92,16 @@ def _detect_loop(game_log, window=10, threshold=4):
     return None
 
 
+_REVERSE = {
+    "north": "south", "south": "north",
+    "east": "west",   "west": "east",
+    "up": "down",     "down": "up",
+    "ne": "sw",       "sw": "ne",
+    "nw": "se",       "se": "nw",
+    "in": "out",      "out": "in",
+}
+
+
 def update_graph(state, room_name, exits, previous_room, action):
     """Adds the current room and its exits to the world graph."""
     if not room_name:
@@ -79,14 +109,41 @@ def update_graph(state, room_name, exits, previous_room, action):
     if room_name not in state["world_graph"]:
         state["world_graph"].add_node(room_name)
 
-    if (previous_room and previous_room != room_name
-            and action in ["north", "south", "east", "west", "up", "down", "ne", "nw", "se", "sw"]):
-        state["world_graph"].add_edge(previous_room, room_name, label=action)
+    reverse_action = _REVERSE.get(action, "")
+    if previous_room and previous_room != room_name and reverse_action:
+        # Remove outbound placeholder from previous_room and the inbound placeholder
+        # from room_name — both are now resolved by this traversal.
+        for placeholder in (
+            f"Unknown ({action} from {previous_room})",
+            f"Unknown ({reverse_action} from {room_name})",
+        ):
+            if state["world_graph"].has_node(placeholder):
+                state["world_graph"].remove_node(placeholder)
+        # If the edge already exists (direction alias, e.g. south==down at start), merge
+        # the new label rather than overwriting the existing one.
+        if state["world_graph"].has_edge(previous_room, room_name):
+            edge_data = state["world_graph"][previous_room][room_name]
+            existing = edge_data.get("label", "").split("/")
+            if action not in existing:
+                edge_data["label"] = "/".join(existing + [action])
+        else:
+            state["world_graph"].add_edge(previous_room, room_name, label=action)
 
     for direction in exits:
+        # Split merged labels (e.g. "south/down") so each component is checked individually
+        existing_labels = set()
+        for _, _, d in state["world_graph"].edges(room_name, data=True):
+            for lbl in d.get("label", "").split("/"):
+                existing_labels.add(lbl)
+        if direction in existing_labels:
+            continue
+        # If this exit points back the way we came, wire the real return edge so
+        # the placeholder is never created (and can't be re-added on the same step).
+        if direction == reverse_action and previous_room and previous_room != room_name:
+            state["world_graph"].add_edge(room_name, previous_room, label=direction)
+            continue
         target_node = f"Unknown ({direction} from {room_name})"
-        existing_labels = {d.get('label') for _, _, d in state["world_graph"].edges(room_name, data=True)}
-        if not state["world_graph"].has_edge(room_name, target_node) and direction not in existing_labels:
+        if not state["world_graph"].has_edge(room_name, target_node):
             state["world_graph"].add_edge(room_name, target_node, label=direction)
 
 
@@ -253,7 +310,7 @@ def process_agent_step(state, child, llm_instance):
     token_usage = extracted.pop("_usage", {"input_tokens": 0, "output_tokens": 0})
 
     if extracted.get("room"):
-        state["current_room"] = extracted["room"]
+        state["current_room"] = _resolve_room_name(state["world_graph"], extracted["room"])
 
     if "exits" in extracted:
         update_graph(state, state["current_room"], extracted["exits"], previous_room, action_taken)

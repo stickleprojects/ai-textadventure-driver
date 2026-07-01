@@ -4,6 +4,14 @@ Incorrect or broken behaviour observed during runs. Original issue numbers prese
 
 ## Open
 
+47. ~~`Unknown (south from B)` is removed when going north A→B, but immediately re-added when processing B's exit list in the same `update_graph` call — because "south" is not yet in B's outgoing edges at that point.~~ — fixed: when an exit direction matches the reverse of the traversal action, `update_graph` now wires the real return edge (`B --south--> A`) instead of creating an Unknown placeholder.
+
+50. ~~LLM returns slight article variations for the same room name ("cave in juniper scrubland" vs "cave in a juniper scrubland"), creating duplicate nodes on the graph.~~ — fixed: `_resolve_room_name` normalises by stripping articles and lowercasing before comparing against existing nodes; if a match is found the existing node name is reused. Called at the `state["current_room"]` assignment in `process_agent_step` and in the `rebuild_graph` replay script.
+
+48. ~~Direction aliases at the starting location — "south" and "down" lead to the same room; second traversal overwrote the edge label instead of merging.~~ — fixed: `update_graph` now checks whether an edge already exists before calling `add_edge`; if it does, the new direction label is appended (`"south/down"`). `existing_labels` extraction splits merged labels so exits listing either alias don't re-add an Unknown placeholder.
+
+49. ~~Non-cardinal directions ("in", "out") were missing from `_REVERSE`, so traversal via "in" skipped placeholder cleanup entirely — Unknown nodes were never removed and no real edge was added.~~ — fixed: "in"/"out" added to `_REVERSE`; BFS layout treats "in" as z−1 (sub-space band, same as "down") and "out" as z+1. Merged edge labels are split on "/" before taking the first token for BFS positioning.
+
 45. maze rooms with non-unique names cause the world graph to collapse distinct locations into a single node, triggering a loop. Observed in the "alder clump" area — multiple distinct rooms share the same name but have different exits; the agent loops because it thinks it has already visited and explored the single "alder clump" node.
     - **Root cause:** `update_graph` uses the raw room name as the node ID; `state["current_room"]` is set from `extracted["room"]` before exits are known, so there is no opportunity to fingerprint at assignment time
     - **Fix:** use `room_name + sorted(exits)` as the canonical node ID (e.g. `"alder clump {E,S,SW,W}"`); resolve the fingerprinted ID after exits are extracted and use it for both `state["current_room"]` and the edge from the previous room; display label strips the suffix for readability
