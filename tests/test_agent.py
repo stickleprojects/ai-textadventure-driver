@@ -477,6 +477,31 @@ class TestNullRoomHandling:
         assert _resolve_room_name(g, "Cave In Juniper Scrubland") == "cave in juniper scrubland"
         assert _resolve_room_name(g, "the cave in juniper scrubland") == "cave in juniper scrubland"
 
+    def test_leading_in_prefix_resolves_to_existing_node(self):
+        # Bug 46: LLM returns "in an alder ghostwood" / "in alder forest" when the
+        # stored node is "alder ghostwood" / "alder forest".
+        from agent import _resolve_room_name
+        import networkx as nx
+        g = nx.DiGraph()
+        g.add_node("alder ghostwood")
+        g.add_node("cedar tangle")
+        g.add_node("alder forest")
+        # "in an X" → same as "X" (leading preposition + article variant)
+        assert _resolve_room_name(g, "in an alder ghostwood") == "alder ghostwood"
+        assert _resolve_room_name(g, "an alder ghostwood") == "alder ghostwood"
+        # article-only variant still works
+        assert _resolve_room_name(g, "a cedar tangle") == "cedar tangle"
+        assert _resolve_room_name(g, "an alder forest") == "alder forest"
+        # "inside" / "outside" must NOT be stripped — they are distinct locations
+        g2 = nx.DiGraph()
+        g2.add_node("inside a cave")
+        g2.add_node("outside a cave")
+        assert _resolve_room_name(g2, "inside a cave") == "inside a cave"
+        assert _resolve_room_name(g2, "outside a cave") == "outside a cave"
+        # bare "a cave" must NOT accidentally match "inside a cave"; new node gets
+        # canonicalised name ("cave"), not the raw LLM string
+        assert _resolve_room_name(g2, "a cave") == "cave"
+
     def test_in_direction_cleans_up_placeholder_and_wires_out_return(self):
         # Bug 49: "in" was missing from _REVERSE so traversal via "in" skipped
         # placeholder cleanup entirely.

@@ -78,16 +78,23 @@ def load_strategy(strategy_path):
         futile_edges         — set of (room, direction) tuples
         run_history          — list of {run_id, outcome, final_score} dicts
         entity_verb_outcomes — {entity_name: {verb: "invalid"}} persisted hard failures
+        world_graph          — {"nodes": [...], "edges": [[src, dst, label], ...]}
     """
     path = Path(strategy_path)
     if not path.exists():
-        return {"futile_edges": set(), "run_history": [], "entity_verb_outcomes": {}}
+        return {
+            "futile_edges": set(),
+            "run_history": [],
+            "entity_verb_outcomes": {},
+            "world_graph": {"nodes": [], "edges": []},
+        }
     with open(path) as f:
         data = json.load(f)
     return {
         "futile_edges": {tuple(e) for e in data.get("futile_edges", [])},
         "run_history": data.get("run_history", []),
         "entity_verb_outcomes": data.get("entity_verb_outcomes", {}),
+        "world_graph": data.get("world_graph", {"nodes": [], "edges": []}),
     }
 
 
@@ -116,6 +123,27 @@ def merge_run_record(run_record, strategy_path):
         "final_score": run_record.get("final_score"),
     })
 
+    # Merge world graph — union nodes; merge edge labels with "/" when the same
+    # (src, dst) pair appears with a different direction alias.
+    # Unknown placeholder nodes are excluded: they are transient and re-discovered
+    # naturally each run.
+    acc = strategy["world_graph"]
+    known_nodes = set(acc["nodes"])
+    known_edges = {(u, v): label for u, v, label in acc["edges"]}
+    for node in run_record.get("world_graph", {}).get("nodes", []):
+        if not node.startswith("Unknown") and node not in known_nodes:
+            known_nodes.add(node)
+            acc["nodes"].append(node)
+    for u, v, label in run_record.get("world_graph", {}).get("edges", []):
+        if u.startswith("Unknown") or v.startswith("Unknown"):
+            continue
+        existing = known_edges.get((u, v))
+        if existing is None:
+            known_edges[(u, v)] = label
+        elif label not in existing.split("/"):
+            known_edges[(u, v)] = existing + "/" + label
+    acc["edges"] = [[u, v, label] for (u, v), label in sorted(known_edges.items())]
+
     path = Path(strategy_path)
     path.parent.mkdir(parents=True, exist_ok=True)
     with open(path, "w") as f:
@@ -124,6 +152,7 @@ def merge_run_record(run_record, strategy_path):
                 "futile_edges": [list(e) for e in sorted(strategy["futile_edges"])],
                 "run_history": strategy["run_history"],
                 "entity_verb_outcomes": strategy["entity_verb_outcomes"],
+                "world_graph": acc,
             },
             f,
             indent=2,

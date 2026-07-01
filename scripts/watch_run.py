@@ -35,6 +35,7 @@ from agent import process_agent_step
 from game_engine import start_level9
 from llm import load_llm, load_cloud_llm
 from run_evaluator import classify_run, load_strategy, merge_run_record
+from ui import save_graph_image
 
 # Suppress Streamlit's "missing ScriptRunContext" warning — harmless outside a
 # Streamlit session; @st.cache_resource just runs without caching.
@@ -69,12 +70,17 @@ def make_initial_state(strategy_path=STRATEGY_PATH):
         name: {"status": "discovered", "location": None, "verb_outcomes": dict(verbs)}
         for name, verbs in strategy.get("entity_verb_outcomes", {}).items()
     }
+    wg_data = strategy.get("world_graph", {"nodes": [], "edges": []})
+    world_graph = nx.DiGraph()
+    world_graph.add_nodes_from(wg_data.get("nodes", []))
+    for u, v, label in wg_data.get("edges", []):
+        world_graph.add_edge(u, v, label=label)
     return {
         "current_room": "Unknown Location",
         "inventory": [],
         "spellbook": [],
         "known_entities": known_entities,
-        "world_graph": nx.DiGraph(),
+        "world_graph": world_graph,
         "uninspected_objects": [],
         "current_inspection": {"target": None, "sequence": config.inspection_sequence, "step_index": 0},
         "known_npcs": {},
@@ -250,6 +256,15 @@ def run(steps=50, verbose=False):
             for name, data in state.get("known_entities", {}).items()
             if any(o == "invalid" for o in data.get("verb_outcomes", {}).values())
         }
+        g = state["world_graph"]
+        world_graph_record = {
+            "nodes": [n for n in g.nodes if not n.startswith("Unknown")],
+            "edges": [
+                [u, v, d.get("label", "")]
+                for u, v, d in g.edges(data=True)
+                if not u.startswith("Unknown") and not v.startswith("Unknown")
+            ],
+        }
         run_record = {
             "run_id": run_id,
             "outcome": outcome,
@@ -258,6 +273,7 @@ def run(steps=50, verbose=False):
             "steps": steps_run,
             "futile_edges": [list(e) for e in sorted(state.get("futile_edges", set()))],
             "entity_verb_outcomes": entity_verb_outcomes,
+            "world_graph": world_graph_record,
         }
         total_input = sum(e.get("token_usage", {}).get("input_tokens", 0) for e in state["game_log"])
         total_output = sum(e.get("token_usage", {}).get("output_tokens", 0) for e in state["game_log"])
@@ -266,6 +282,8 @@ def run(steps=50, verbose=False):
         log_path = _write_log(state["game_log"], run_id)
         run_path = _write_run_record(run_record)
         merge_run_record(run_record, STRATEGY_PATH)
+        map_path = LOG_DIR / f"{run_id}_map.png"
+        save_graph_image(state["world_graph"], state.get("current_room", ""), map_path)
         if verbose:
             print(f"\nOutcome: {outcome}", file=sys.stderr)
             print(f"Tokens: {total_input:,} in / {total_output:,} out", file=sys.stderr)
@@ -275,6 +293,7 @@ def run(steps=50, verbose=False):
                 print(f"Estimated cost: ${cost:.4f}", file=sys.stderr)
             print(f"Full log written to {log_path}", file=sys.stderr)
             print(f"Run record written to {run_path}", file=sys.stderr)
+            print(f"Map written to {map_path}", file=sys.stderr)
             print(f"Done. {len(findings)} finding(s).", file=sys.stderr)
 
     return findings

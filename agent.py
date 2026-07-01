@@ -11,10 +11,27 @@ _SCORE_RE = re.compile(r"you score\s+(\d+)\s+out of\s+(\d+)", re.IGNORECASE)
 _SCORE_INTERVAL = 20
 
 _ARTICLE_RE = re.compile(r"\b(a|an|the)\b\s*", re.IGNORECASE)
+# Strip bare "in " prefix — LLM sometimes says "in an alder ghostwood" instead of
+# "alder ghostwood".  "inside"/"outside" are NOT stripped: they denote distinct rooms.
+_LEADING_IN_RE = re.compile(r"^in\s+", re.IGNORECASE)
+_LEADING_ARTICLE_RE = re.compile(r"^(a|an|the)\s+", re.IGNORECASE)
 
 
 def _normalize_room(name):
+    name = _LEADING_IN_RE.sub("", name)
     return _ARTICLE_RE.sub("", name).strip().lower()
+
+
+def _canonicalize_room(name):
+    """Strip leading 'in (a|an|the)?' for clean node storage.
+
+    Only touches the leading preposition/article so mid-string articles
+    (e.g. 'cave in a juniper scrubland') and spatial prefixes like
+    'inside'/'outside' are preserved.
+    """
+    name = _LEADING_IN_RE.sub("", name)
+    name = _LEADING_ARTICLE_RE.sub("", name)
+    return name.strip()
 
 
 def _resolve_room_name(graph, room_name):
@@ -22,13 +39,14 @@ def _resolve_room_name(graph, room_name):
 
     Prevents the same physical room being stored twice when the LLM returns
     slight article variations ('cave in juniper scrubland' vs 'cave in a juniper
-    scrubland').  If no match exists, room_name is returned unchanged.
+    scrubland').  If no match exists, returns the canonicalised form of room_name
+    so new nodes are stored without noisy leading prepositions/articles.
     """
     target = _normalize_room(room_name)
     for node in graph.nodes:
         if not node.startswith("Unknown") and _normalize_room(node) == target:
             return node
-    return room_name
+    return _canonicalize_room(room_name)
 
 
 def _is_hard_failure(text):
