@@ -16,7 +16,7 @@ import networkx as nx
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
-from agent import update_graph
+from agent import update_graph, _resolve_room_name
 from ui import save_graph_image
 
 
@@ -33,7 +33,7 @@ def rebuild_graph(game_log):
         exits = extracted.get("exits") or []
 
         if room:
-            state["current_room"] = room
+            state["current_room"] = _resolve_room_name(state["world_graph"], room)
 
         update_graph(state, state["current_room"], exits, previous_room, action)
         previous_room = state["current_room"]

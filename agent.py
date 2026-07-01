@@ -10,6 +10,26 @@ from llm import extract_knowledge
 _SCORE_RE = re.compile(r"you score\s+(\d+)\s+out of\s+(\d+)", re.IGNORECASE)
 _SCORE_INTERVAL = 20
 
+_ARTICLE_RE = re.compile(r"\b(a|an|the)\b\s*", re.IGNORECASE)
+
+
+def _normalize_room(name):
+    return _ARTICLE_RE.sub("", name).strip().lower()
+
+
+def _resolve_room_name(graph, room_name):
+    """Return an existing graph node matching room_name after article normalisation.
+
+    Prevents the same physical room being stored twice when the LLM returns
+    slight article variations ('cave in juniper scrubland' vs 'cave in a juniper
+    scrubland').  If no match exists, room_name is returned unchanged.
+    """
+    target = _normalize_room(room_name)
+    for node in graph.nodes:
+        if not node.startswith("Unknown") and _normalize_room(node) == target:
+            return node
+    return room_name
+
 
 def _is_hard_failure(text):
     return bool(config.hard_failure_pattern.search(text))
@@ -290,7 +310,7 @@ def process_agent_step(state, child, llm_instance):
     token_usage = extracted.pop("_usage", {"input_tokens": 0, "output_tokens": 0})
 
     if extracted.get("room"):
-        state["current_room"] = extracted["room"]
+        state["current_room"] = _resolve_room_name(state["world_graph"], extracted["room"])
 
     if "exits" in extracted:
         update_graph(state, state["current_room"], extracted["exits"], previous_room, action_taken)

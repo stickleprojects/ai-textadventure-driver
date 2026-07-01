@@ -466,6 +466,17 @@ class TestNullRoomHandling:
         assert not state["world_graph"].has_node("Unknown (south from Start)")
         assert not state["world_graph"].has_node("Unknown (down from Start)")
 
+    def test_article_variant_resolves_to_existing_node(self):
+        # LLM sometimes adds/drops articles ("cave in juniper scrubland" vs
+        # "cave in a juniper scrubland") — both should resolve to the same node.
+        from agent import _resolve_room_name
+        import networkx as nx
+        g = nx.DiGraph()
+        g.add_node("cave in juniper scrubland")
+        assert _resolve_room_name(g, "cave in a juniper scrubland") == "cave in juniper scrubland"
+        assert _resolve_room_name(g, "Cave In Juniper Scrubland") == "cave in juniper scrubland"
+        assert _resolve_room_name(g, "the cave in juniper scrubland") == "cave in juniper scrubland"
+
     def test_in_direction_cleans_up_placeholder_and_wires_out_return(self):
         # Bug 49: "in" was missing from _REVERSE so traversal via "in" skipped
         # placeholder cleanup entirely.
