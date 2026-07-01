@@ -91,6 +91,10 @@ def extract_knowledge(text, action_taken, llm_instance):
             if json_match:
                 result = json.loads(json_match.group(0))
                 if result:
+                    for field in ("exits", "objects", "npcs", "added_to_inventory",
+                                  "learned_spells", "anomalies", "resolved_anomalies"):
+                        if field in result and not isinstance(result[field], list):
+                            result[field] = []
                     attempt["parsed"] = True
                     trace["attempts"].append(attempt)
                     result["_usage"] = {"input_tokens": total_input, "output_tokens": total_output}
