@@ -74,11 +74,11 @@ class TestIndirectExpansion:
         assert os.environ["TEST_INDIRECT"] == "$UNDEFINED_VAR_XYZ"
 
     def test_api_key_pattern(self, tmp_path, monkeypatch):
+        monkeypatch.delenv("LLM_API_KEY", raising=False)  # clear any value leaked by module-level load_env_file() calls in other tests
         monkeypatch.setenv("DEEPSEEK_API_KEY", "sk-realkey")
         path = _write_env(tmp_path, "LLM_API_KEY=$DEEPSEEK_API_KEY\n")
         load_env_file(path)
         assert os.environ["LLM_API_KEY"] == "sk-realkey"
-        monkeypatch.delenv("LLM_API_KEY", raising=False)
 
 
 class TestPrecedence:

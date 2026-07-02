@@ -1,0 +1,34 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "Knight Orc strategy store",
+  "type": "object",
+  "required": ["futile_edges", "run_history"],
+  "additionalProperties": false,
+  "properties": {
+    "futile_edges": {
+      "type": "array",
+      "items": {
+        "type": "array",
+        "items": { "type": "string" },
+        "minItems": 2,
+        "maxItems": 2
+      }
+    },
+    "run_history": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["run_id", "outcome"],
+        "additionalProperties": true,
+        "properties": {
+          "run_id": { "type": "string", "minLength": 1 },
+          "outcome": {
+            "type": "string",
+            "enum": ["score_improved", "ambiguous", "interrupted", "completed", "death", "agent_failure", "game_ended"]
+          },
+          "final_score": { "type": ["number", "null"] }
+        }
+      }
+    }
+  }
+}

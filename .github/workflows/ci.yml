@@ -1,0 +1,46 @@
+name: CI
+
+on:
+  push:
+    branches: [main, develop]
+  pull_request:
+    branches: [main, develop]
+
+jobs:
+  lint:
+    name: Lint (ruff)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Install ruff
+        run: pip install ruff
+      - name: Run ruff
+        run: ruff check .
+
+  test:
+    name: Tests
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Install dependencies
+        run: |
+          pip install \
+            networkx \
+            matplotlib \
+            pyvis \
+            streamlit \
+            pexpect \
+            pytest \
+            pytest-timeout \
+            jsonschema \
+            openai \
+            anthropic
+        # llama-cpp-python omitted — binary build; llm-marked tests skipped in CI
+      - name: Run tests
+        run: pytest -m "not llm and not integration and not slow" -v

@@ -287,10 +287,10 @@ def run(steps=50, verbose=False):
         merge_run_record(run_record, STRATEGY_PATH)
         map_path = LOG_DIR / f"{run_id}_map.png"
         save_graph_image(state["world_graph"], state.get("current_room", ""), map_path, draw_unknowns=False)
-        
+
         full_map_path = LOG_DIR / f"{run_id}_full_map.png"
         save_graph_image(state["world_graph"], state.get("current_room", ""), full_map_path, draw_unknowns=True)
-        
+
         if verbose:
             print(f"\nOutcome: {outcome}", file=sys.stderr)
             print(f"Tokens: {total_input:,} in / {total_output:,} out", file=sys.stderr)

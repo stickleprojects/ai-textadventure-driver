@@ -8,3 +8,5 @@ pexpect
 pytest
 pytest-timeout
 anthropic
+ruff
+jsonschema

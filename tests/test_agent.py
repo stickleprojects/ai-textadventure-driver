@@ -1,4 +1,4 @@
-from unittest.mock import MagicMock, patch, PropertyMock
+from unittest.mock import MagicMock, patch
 
 import pytest
 import networkx as nx
@@ -15,7 +15,6 @@ from agent import (
     _parse_inspection_action,
     _parse_inventory_response,
     _record_verb_outcome,
-    _snapshot_state,
     determine_next_action,
     process_agent_step,
     update_graph,
@@ -511,7 +510,7 @@ class TestNullRoomHandling:
         assert _resolve_room_name(g, "an alder forest") == "alder forest"
 
         assert _resolve_room_name(g, "on a jousting field") == "jousting field"
-        
+
         # "inside" / "outside" must NOT be stripped — they are distinct locations
         g2 = nx.DiGraph()
         g2.add_node("inside a cave")

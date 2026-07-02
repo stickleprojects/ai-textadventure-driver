@@ -1,0 +1,19 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "Fix plan document",
+  "type": "object",
+  "required": ["schema", "anomaly_id", "root_cause_hypothesis", "target_files", "change_summary", "acceptance_criteria", "status", "plan_id"],
+  "additionalProperties": true,
+  "properties": {
+    "schema":                 { "type": "string", "pattern": "^fix_plan/v\\d+$" },
+    "anomaly_id":             { "type": "string", "minLength": 1 },
+    "root_cause_hypothesis":  { "type": "string", "minLength": 1 },
+    "target_files":           { "type": "array", "items": { "type": "string" }, "minItems": 1 },
+    "change_summary":         { "type": "string", "minLength": 1 },
+    "acceptance_criteria":    { "type": "array", "items": { "type": "string" }, "minItems": 1 },
+    "risk_notes":             { "type": "string" },
+    "status":                 { "type": "string", "enum": ["open", "deferred", "fixed", "in_progress"] },
+    "plan_id":                { "type": "string", "pattern": "^P\\d+$" },
+    "deferred_reason":        { "type": "string" }
+  }
+}

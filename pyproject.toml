@@ -1,0 +1,15 @@
+[tool.ruff]
+line-length = 120
+exclude = [".venv", "__pycache__", "*.orig"]
+
+[tool.ruff.lint]
+select = ["E", "F", "W"]
+ignore = ["E501"]  # line-length: not enforced yet; add once codebase is reformatted
+
+[tool.ruff.lint.per-file-ignores]
+# load_env_file() must run before project imports to populate os.environ
+"app.py" = ["E402"]
+"scripts/*.py" = ["E402"]
+# sys.path manipulation before project imports is intentional in these tests
+"tests/test_issue10c.py" = ["E402"]
+"tests/test_issue27.py" = ["E402"]

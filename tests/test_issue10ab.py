@@ -1,8 +1,6 @@
 """Tests for issue 10.a (death/end detection) and 10.b (score tracking)."""
-import re
 from unittest.mock import MagicMock, patch
 
-import pytest
 
 from agent import _SCORE_INTERVAL, _SCORE_RE, determine_next_action, process_agent_step
 from game_config import config

@@ -4,7 +4,6 @@ These tests are pure Python — no LLM, no game process. Each test constructs
 a minimal synthetic log and asserts that the right issue type is (or isn't)
 detected. Add a new test here whenever you add a new detector to log_analyzer.py.
 """
-import pytest
 
 from log_analyzer import analyze_log, _is_suspicious_room
 
