@@ -41,6 +41,10 @@ def main():
 
     log_path = LOG_DIR / f"{args.run_id}.json"
     run_path = RUNS_DIR / f"{args.run_id}.json"
+    for path in (log_path, run_path):
+        if not path.exists() or path.stat().st_size == 0:
+            print(f"ERROR: {path} is missing or empty — run was likely interrupted before it could write.", file=sys.stderr)
+            sys.exit(2)
     game_log = json.loads(log_path.read_text())
     run_record = json.loads(run_path.read_text())
     strategy = load_strategy(args.strategy)
