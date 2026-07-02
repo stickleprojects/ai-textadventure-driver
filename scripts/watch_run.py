@@ -107,12 +107,13 @@ def _fmt_duration(secs):
     return f"{h}h{rem // 60:02d}m"
 
 
-def _step_summary(entry):
+def _step_summary(entry, current_room=None):
     """One-line summary of what happened in a step, for progress output."""
     ex = entry.get("extracted") or {}
     parts = []
-    if ex.get("room"):
-        parts.append(ex["room"])
+    room = current_room or ex.get("room")
+    if room:
+        parts.append(room)
     if ex.get("objects"):
         parts.append(f"objects: {', '.join(ex['objects'][:3])}")
     if ex.get("npcs"):
@@ -190,7 +191,7 @@ def run(steps=50, verbose=False):
                 eta = (steps - (i + 1)) * avg_step
                 timing = f"[elapsed {_fmt_duration(elapsed)} | {avg_step:.1f}s/step | remaining {_fmt_duration(eta)}]"
                 print(
-                    f"[{i+1:>3}/{steps}] {last['action']:<28} {_step_summary(last)}{flag}  {timing}",
+                    f"[{i+1:>3}/{steps}] {last['action']:<28} {_step_summary(last, state.get('current_room'))}{flag}  {timing}",
                     file=sys.stderr,
                 )
 
