@@ -1,0 +1,17 @@
+{
+  "schema": "fix_plan/v1",
+  "anomaly_id": "a4",
+  "root_cause_hypothesis": "The unknown-exit exploration loop in determine_next_action generates Unknown placeholder edges for directions the LLM never listed among the room's exits, so the agent probes 'up'/'down' that have no basis in the described environment.",
+  "target_files": [
+    "agent.py"
+  ],
+  "change_summary": "In update_graph, only create 'Unknown (<direction> from <room>)' placeholder edges for directions that actually appear in the room's extracted exits list, rather than any direction. Since update_graph already iterates over the extracted `exits`, the fix is to ensure no placeholder is manufactured for a direction not present in `exits`; verify the exit-generation loop is the sole source of Unknown edges and that reverse-direction wiring never invents an unlisted exit. This confines direction probing to exits the environment actually reports, eliminating blind 'up'/'down' attempts in flat scrublands. No LLM calls are added to the hot path.",
+  "acceptance_criteria": [
+    "In a future run log, no step in a cedar-scrubland-type room issues an 'up' or 'down' action whose reason is \"exploring exit 'up'/'down'\" when the preceding room's extracted.exits did not include up/down.",
+    "For any world_graph node, every outbound edge whose target starts with 'Unknown' has a label matching a direction that was present in that room's extracted exits at the step it was created (verifiable by cross-referencing game_log extracted.exits).",
+    "The step_range [127,128] scenario (consecutive up then down in a scrubland) does not recur: at most one direction is probed per room and only if it was listed as an exit."
+  ],
+  "risk_notes": "Rooms where the LLM under-reports exits (misses a real 'up'/'down') will no longer be probed, potentially leaving a genuine exit unexplored; mitigate by relying on later re-visits/look refreshing the exits list. Ensure reverse-edge wiring for previous_room still functions when the return direction is legitimately absent from the current room's exits, so back-navigation is not broken.",
+  "status": "fixed",
+  "plan_id": "P003"
+}

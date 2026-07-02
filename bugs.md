@@ -2,6 +2,11 @@
 
 Incorrect or broken behaviour observed during runs. Original issue numbers preserved for git/PR reference.
 
+> **Architect-generated plans** (from anomaly detection pipeline) are tracked separately in [plans.md](plans.md)
+> with canonical plan files in `plans/`. Each entry there references the run(s) that triggered it and deduplicates
+> by anomaly type — if a new run surfaces the same type, the run is added to the existing entry rather than
+> creating a duplicate.
+
 ## Open
 
 60. ~~When the LLM fails to extract the room name after a successful movement (e.g., the game says "You go north and are in a cedar glade" but `extracted["room"]` is None), `state["current_room"]` is not updated. The agent still believes it is at the previous room and on the next step re-issues the same direction from stale position. If that direction fails from the new room ("You can't go that way"), the game leaves the agent at the unrecognised location. Subsequent navigation decisions are made from the wrong room, causing the agent to oscillate through a small cluster of rooms while the log shows the same direction repeated and subtly different room descriptions for what should be the same rooms.~~ — fixed: `process_agent_step` now sets `state["position_lost"] = True` when the action was a direction, `extracted["room"]` is None, and the response was not a hard/soft failure (i.e., movement appeared to succeed). `determine_next_action` checks this flag first and returns `("look", "re-establishing position after lost room extraction")`, clearing the flag before returning.
