@@ -196,7 +196,8 @@ def get_next_move_to_target(state, target_room):
         path = nx.shortest_path(state["world_graph"], source=state["current_room"], target=target_room)
         if len(path) > 1:
             edge_data = state["world_graph"].get_edge_data(state["current_room"], path[1])
-            return edge_data['label']
+            # Edge label may store multiple aliases ("down/out") — only the first is needed.
+            return edge_data['label'].split("/")[0]
     except (nx.NetworkXNoPath, nx.NodeNotFound):
         return None
 
@@ -266,7 +267,8 @@ def determine_next_action(state):
 
     for _, v, data in state["world_graph"].edges(state["current_room"], data=True):
         if v.startswith("Unknown") and not data.get("futile"):
-            return data["label"], f"exploring exit '{data['label']}' from {state['current_room']}"
+            direction = data["label"].split("/")[0]
+            return direction, f"exploring exit '{direction}' from {state['current_room']}"
 
     # Current room fully explored — navigate to nearest room with an Unknown exit.
     best_target = None
