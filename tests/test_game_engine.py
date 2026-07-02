@@ -1,6 +1,14 @@
 import pexpect
+import pytest
 
 from game_engine import clean_level9_output, execute_game_command
+
+
+@pytest.fixture(autouse=True)
+def _no_drain(monkeypatch):
+    # drain_game_buffer loops until pexpect.TIMEOUT; stub_child never raises it.
+    # Patch it out here — drain behaviour is tested separately if needed.
+    monkeypatch.setattr("game_engine.drain_game_buffer", lambda child, timeout=0.3: None)
 
 
 def test_timeout_includes_partial_output(stub_child):

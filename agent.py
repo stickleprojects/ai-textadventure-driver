@@ -18,18 +18,31 @@ _LEADING_PREP_RE = re.compile(r"^(in|on|at)\s+", re.IGNORECASE)
 _LEADING_ARTICLE_RE = re.compile(r"^(a|an|the)\s+", re.IGNORECASE)
 
 
+def _short_room_name(name):
+    """Truncate at the first comma or semicolon and strip trailing period.
+
+    Knight Orc room names follow the pattern '<short name>[, | ; <description>]'.
+    The LLM sometimes returns the full description, sometimes just the short name.
+    Truncating at the first separator and stripping trailing punctuation gives a
+    stable short form that matches across variants.
+    """
+    return re.split(r"[,;]", name, maxsplit=1)[0].rstrip(".")
+
+
 def _normalize_room(name):
+    name = _short_room_name(name)
     name = _LEADING_PREP_RE.sub("", name)
     return _ARTICLE_RE.sub("", name).strip().lower()
 
 
 def _canonicalize_room(name):
-    """Strip leading 'in (a|an|the|on)?' for clean node storage.
+    """Return a clean short node name for storage.
 
-    Only touches the leading preposition/article so mid-string articles
-    (e.g. 'cave in a juniper scrubland') and spatial prefixes like
-    'inside'/'outside' are preserved.
+    Truncates at the first comma/semicolon (bug 57), strips leading
+    prepositions and articles.  Mid-string articles and spatial prefixes
+    like 'inside'/'outside' are preserved.
     """
+    name = _short_room_name(name)
     name = _LEADING_PREP_RE.sub("", name)
     name = _LEADING_ARTICLE_RE.sub("", name)
     return name.strip()
@@ -189,9 +202,14 @@ def get_next_move_to_target(state, target_room):
 
 
 def _nav_command(state, target, fast=True):
-    """Return a navigation command using the game's native nav if configured, else graph-based."""
+    """Return a navigation command using the game's native nav if configured, else graph-based.
+
+    Fast/full nav templates are only used when the target is in visited_rooms —
+    the game only accepts 'run to X' / 'go to X' for rooms it has already seen
+    the player enter. Unvisited targets fall back to graph-based step navigation.
+    """
     template = config.fast_nav_command if fast else config.full_nav_command
-    if template:
+    if template and target in state.get("visited_rooms", set()):
         return template.format(target=target)
     return get_next_move_to_target(state, target)
 
