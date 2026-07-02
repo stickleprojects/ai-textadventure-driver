@@ -121,27 +121,10 @@ Reply with ONLY the raw JSON object, no markdown fences, no commentary.
 """
 
 
-def architect(run_id, anomaly_id=None, model="claude-opus-4-8"):
-    report_path = ORCHESTRATOR_DIR / run_id / "anomaly_report.json"
-    if not report_path.exists():
-        print(f"ERROR: {report_path} not found — run detect_anomalies.py first", file=sys.stderr)
-        sys.exit(1)
-
-    report = json.loads(report_path.read_text())
-    if not report["anomalies"]:
-        print("No anomalies in report — nothing to plan.", file=sys.stderr)
-        sys.exit(0)
-
-    anomaly = _pick_anomaly(report["anomalies"], anomaly_id)
+def _call_api(client, model, anomaly):
+    """Call the API for a single anomaly and return the parsed plan dict."""
     files = _pick_files(anomaly["type"])
     sources = _read_sources(files)
-
-    api_key = os.environ.get("ANTHROPIC_API_KEY")
-    if not api_key:
-        print("ERROR: ANTHROPIC_API_KEY is not set in the environment.", file=sys.stderr)
-        sys.exit(1)
-
-    client = anthropic.Anthropic(api_key=api_key)
     print(f"Calling {model} for anomaly {anomaly['id']} ({anomaly['type']}) …")
     try:
         message = client.messages.create(
@@ -165,29 +148,67 @@ def architect(run_id, anomaly_id=None, model="claude-opus-4-8"):
         sys.exit(1)
 
     raw = message.content[0].text.strip()
-
     try:
-        plan = json.loads(raw)
+        return json.loads(raw)
     except json.JSONDecodeError:
-        print(f"ERROR: model returned non-JSON:\n{raw}", file=sys.stderr)
+        print(f"ERROR: model returned non-JSON for {anomaly['id']}:\n{raw}", file=sys.stderr)
         sys.exit(1)
 
-    out_path = (ORCHESTRATOR_DIR / run_id / "fix_plan.json").resolve()
-    out_path.write_text(json.dumps(plan, indent=2))
-    print(f"Wrote {out_path}")
-    print(f"Root cause: {plan.get('root_cause_hypothesis', '?')}")
-    print(f"Files:      {plan.get('target_files', [])}")
-    print()
-    print(f"Review {out_path} before passing to the Dev stage.")
+
+def architect(run_id, anomaly_id=None, model="claude-opus-4-8"):
+    """Produce fix plans for one anomaly (anomaly_id) or all anomalies (anomaly_id=None).
+
+    Writes fix_plan_<id>.json for each anomaly processed. Returns list of output paths.
+    """
+    report_path = ORCHESTRATOR_DIR / run_id / "anomaly_report.json"
+    if not report_path.exists():
+        print(f"ERROR: {report_path} not found — run detect_anomalies.py first", file=sys.stderr)
+        sys.exit(1)
+
+    report = json.loads(report_path.read_text())
+    if not report["anomalies"]:
+        print("No anomalies in report — nothing to plan.", file=sys.stderr)
+        sys.exit(0)
+
+    if anomaly_id is None:
+        targets = report["anomalies"]
+    elif isinstance(anomaly_id, list):
+        targets = [_pick_anomaly(report["anomalies"], aid) for aid in anomaly_id]
+    else:
+        targets = [_pick_anomaly(report["anomalies"], anomaly_id)]
+
+    api_key = os.environ.get("ANTHROPIC_API_KEY")
+    if not api_key:
+        print("ERROR: ANTHROPIC_API_KEY is not set in the environment.", file=sys.stderr)
+        sys.exit(1)
+
+    client = anthropic.Anthropic(api_key=api_key)
+    out_dir = ORCHESTRATOR_DIR / run_id
+    out_paths = []
+
+    for anomaly in targets:
+        plan = _call_api(client, model, anomaly)
+        out_path = (out_dir / f"fix_plan_{anomaly['id']}.json").resolve()
+        out_path.write_text(json.dumps(plan, indent=2))
+        print(f"Wrote {out_path}")
+        print(f"  Root cause: {plan.get('root_cause_hypothesis', '?')}")
+        print(f"  Files:      {plan.get('target_files', [])}")
+        out_paths.append(out_path)
+
+    print(f"\n{len(out_paths)} fix plan(s) written. Review before passing to the Dev stage.")
+    return out_paths
 
 
 def main():
     parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     parser.add_argument("run_id", help="Run ID matching an existing anomaly_report.json")
-    parser.add_argument("--anomaly-id", help="Specific anomaly id (default: highest severity)")
+    group = parser.add_mutually_exclusive_group()
+    group.add_argument("--anomaly-id", help="Specific anomaly id, e.g. a1 (default: highest severity)")
+    group.add_argument("--all", action="store_true", help="Produce fix plans for all anomalies in the report")
     parser.add_argument("--model", default="claude-opus-4-8", help="Claude model to use (default: %(default)s)")
     args = parser.parse_args()
-    architect(args.run_id, args.anomaly_id, args.model)
+    anomaly_id = None if args.all else args.anomaly_id
+    architect(args.run_id, anomaly_id, args.model)
 
 
 if __name__ == "__main__":
