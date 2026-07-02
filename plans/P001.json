@@ -1,0 +1,19 @@
+{
+  "schema": "fix_plan/v1",
+  "anomaly_id": "redundant_object_inspection",
+  "root_cause_hypothesis": "The post-take inspection sequence blindly runs every candidate verb (examine, read, look inside) on an object without checking whether a prior verb already returned identical output, so redundant verbs are executed and wasted.",
+  "target_files": [
+    "agent.py"
+  ],
+  "change_summary": "In process_agent_step, when an inspection verb outcome is recorded, capture a normalized hash/signature of the response text on the entity's verb_outcomes so identical responses can be detected. In determine_next_action, when building the inspection sequence for a taken object and when advancing step_index, skip any remaining verb whose expected response would duplicate one already seen for that object (i.e. once a verb returns a response matching a previously-recorded response signature for the same target, prune the rest of the sequence). This uses only deterministic string comparison of already-captured responses \u2014 no new LLM calls on the hot path.",
+  "acceptance_criteria": [
+    "In a future run log, after taking an object like 'golden ball', at most one of {examine, read, look inside} that produces a given response text is executed; subsequent verbs yielding an identical response are not emitted as actions.",
+    "The game_log entries for the object's inspection verbs show distinct 'response' values, or the inspection sequence terminates early (inspection['target'] cleared) once a duplicate response signature is detected.",
+    "The step range that previously showed 3 identical successive responses (steps 41-44) shrinks to a single informative step plus at most one distinct follow-up when replayed on the same scenario.",
+    "known_entities[target]['verb_outcomes'] records enough signal (e.g. a response signature) to demonstrate duplicate detection was the reason for pruning."
+  ],
+  "risk_notes": "Must not persist response signatures or 'blocked' outcomes to strategy JSON, since responses are state-dependent; keep signatures in-memory on the run state only. Response normalization must ignore volatile substrings (timestamps, score lines) to avoid false-negatives. Pruning too aggressively could skip a verb that legitimately reveals new info in a different game state, so only prune within the same object's current inspection pass, not permanently.",
+  "status": "deferred",
+  "plan_id": "P001",
+  "deferred_reason": "Identical response to examine does not prove drop/throw/wear would also be redundant. Re-evaluate if a future run shows this causing meaningful progress loss."
+}

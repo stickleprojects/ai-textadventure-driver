@@ -1,0 +1,18 @@
+{
+  "schema": "fix_plan/v1",
+  "anomaly_id": "a3",
+  "root_cause_hypothesis": "The nearest-unexplored-room navigation repeatedly re-selects a target reached via a sw/east edge pair whose 'Unknown' exits keep re-appearing (or never clear), so the agent oscillates between two rooms without ever exhausting or de-prioritizing that oscillating pair.",
+  "target_files": [
+    "agent.py"
+  ],
+  "change_summary": "Extend the existing deterministic _detect_loop to recognize alternating two-action cycles (e.g. sw,east,sw,east...) in addition to single-action repetition, and use that detection in determine_next_action to mark the oscillating direction's target edge futile so it is skipped in subsequent unknown-exit scans. This breaks the zigzag by forcing the navigation logic to pick a genuinely different target once a non-productive A/B alternation is observed, without adding any LLM call to the hot path. The alternation must only be flagged when neither leg produces net room progress (reuse the productive-move check already in _detect_loop).",
+  "acceptance_criteria": [
+    "In a future run log, no window of 10 consecutive game_log entries between steps 40-100 contains an alternating two-action pattern (A,B,A,B,...) of directional moves with unchanged extracted.room across the pair.",
+    "When such an alternation is detected, the corresponding game_log entry contains a 'loop_detected' (or new 'zigzag_detected') field naming the two actions.",
+    "After a detected zigzag, at least one edge gains data['futile']=True and the pair (from_room, direction) appears in state['futile_edges'] / the strategy JSON futile_edges list.",
+    "The subsequent action after detection is a move toward a different target room (different action string than either leg of the zigzag), observable in the next game_log entry's action/reason."
+  ],
+  "risk_notes": "Marking an oscillating edge futile risks pruning a legitimately needed corridor if the two rooms genuinely connect to distinct unexplored areas whose Unknown placeholders simply weren't cleared; guard by only marking futile after the alternation exceeds a threshold and both legs show no room-count/entity gains. Ensure the new logic treats direction aliases (sw==southwest) consistently via _DIRECTION_NORMALIZE, and confirm futile edges here are direction-invalid-for-navigation state, not a permanent verb 'invalid' \u2014 only (room,direction) navigation futility should be persisted, never a 'blocked' state-dependent outcome.",
+  "status": "fixed",
+  "plan_id": "P002"
+}
