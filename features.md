@@ -32,6 +32,9 @@ Enhancements, new functionality, tooling, and infrastructure improvements.
 
 45. Add short circuit for common responses so we dont invoke the LLM if not needed. so if the engine responds with "You cant eat that" we dont invoke the llm, if it responds with other text that we dont understand then we need to invoke the LLM. We can do this via caching but need to be careful about "you dont need to use the word 'push' to finish the game" since the prefix is known but the word push will change each time
 
+56. Dev-loop orchestrator — replace the manual "run watch_run.py, eyeball the log, spot a bug, ask Claude to fix it, re-run" cycle with a scripted detector -> architect -> dev -> verify pipeline (Claude Agent SDK, JSON handoff files on disk). Detector is plain Python (no LLM) built on the existing `run_evaluator` outcome/finding vocabulary plus new streak detection over `game_log[i]["utility"]`. Architect/dev/verify are separate role-scoped agent calls. Plan and JSON contract: see project memory `plan_dev_orchestrator` (also available at `.claude/plan_dev_orchestrator.md` if synced).
+    - **Effort: Medium (detector alone) / High (full pipeline) | Risk: Low (detector) / Medium (unattended dev/verify stages)**
+
 ## Closed
 
 3. ~~the boxes for the graph dont scale and there's no zoom so you cant read the text~~ — fixed: replaced matplotlib with pyvis interactive graph (zoom, pan, drag; current room highlighted in amber)
