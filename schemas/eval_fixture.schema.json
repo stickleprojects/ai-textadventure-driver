@@ -1,0 +1,31 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "LLM eval fixture list",
+  "type": "array",
+  "items": {
+    "type": "object",
+    "required": ["id", "action", "game_output"],
+    "additionalProperties": false,
+    "properties": {
+      "id":          { "type": "string", "minLength": 1 },
+      "action":      { "type": "string" },
+      "game_output": { "type": "string" },
+      "expected":    { "$ref": "#/definitions/extraction_fields" },
+      "absent":      { "type": "array", "items": { "type": "string" } },
+      "must_not":    { "$ref": "#/definitions/extraction_fields" }
+    }
+  },
+  "definitions": {
+    "extraction_fields": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "room":              { "type": "string" },
+        "objects":           { "type": "array", "items": { "type": "string" } },
+        "npcs":              { "type": "array", "items": { "type": "string" } },
+        "exits":             { "type": "array", "items": { "type": "string" } },
+        "added_to_inventory":{ "type": "array", "items": { "type": "string" } }
+      }
+    }
+  }
+}

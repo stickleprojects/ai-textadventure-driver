@@ -1,0 +1,13 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "Knight Orc entity verb outcomes (items sidecar)",
+  "type": "object",
+  "additionalProperties": {
+    "type": "object",
+    "description": "Maps verb -> outcome for a named entity",
+    "additionalProperties": {
+      "type": "string",
+      "enum": ["invalid", "blocked", "productive"]
+    }
+  }
+}

@@ -1,5 +1,4 @@
 """Tests for requirement 20 — user-authored strategy hints."""
-import pytest
 from game_config import GameConfig
 from llm import extract_knowledge
 

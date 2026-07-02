@@ -1,16 +1,15 @@
 """Tests for issue 10c — cross-run learning: runs/ persistence, strategy merge, startup load."""
 import json
 
-import pytest
 
 # Import via sys.path manipulation that watch_run itself uses
-import sys, os
+import sys
+import os
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", "scripts"))
 
-from scripts.watch_run import _write_run_record, make_initial_state, RUNS_DIR
+from scripts.watch_run import _write_run_record, make_initial_state
 from run_evaluator import load_strategy, merge_run_record
-from tests.conftest import make_state
 
 
 # ── _write_run_record ─────────────────────────────────────────────────────────

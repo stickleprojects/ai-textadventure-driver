@@ -10,12 +10,11 @@ Enhancements, new functionality, tooling, and infrastructure improvements.
     - Add `item_commands` block: `drop_command`, `give_command`
     - **Effort: Low | Risk: Low**
 
-26. add pipeline and quality gates to ensure the docs are good standard and the python tests pass
+26. ~~add pipeline and quality gates to ensure the docs are good standard and the python tests pass~~ — fixed: GitHub Actions CI (lint + test jobs), ruff config in `pyproject.toml`, JSON schemas for all config/plan/eval files, `tests/test_json_schemas.py` (PR #48)
 
-34. add support for cloud LLM instead of llama.cpp
+34. ~~add support for cloud LLM instead of llama.cpp~~ — done
     - ~~**Step 1:** instrument token usage — accumulate per-step in `watch_run.py`, print final summary with configurable price env vars~~ — done
-    - **Step 2:** swap `llm.py` to call a cloud API (OpenAI-compatible endpoint, Anthropic, DeepSeek) — gated behind an env var so local llama.cpp still works
-    - **Effort: Medium | Risk: Low**
+    - ~~**Step 2:** swap `llm.py` to call a cloud API (OpenAI-compatible endpoint, Anthropic, DeepSeek) — gated behind an env var so local llama.cpp still works~~ — done: `llm.py` exposes `load_cloud_llm()`; `watch_run.py` selects provider via `LLM_PROVIDER`/`LLM_API_KEY`/`LLM_MODEL` env vars. Streamlit UI does not yet expose provider selection.
 
 43. the world map does not represent elevation (up/down connections) or interior zones — all rooms are rendered flat on a single cardinal plane
     - **Option A (do first):** layered single map — extend `_compute_cardinal_positions` BFS in `ui.py` to track a Z-level per room (`up` edge = +1, `down` edge = -1, ground = 0). Map Z to a vertical Y-band in the pyvis view; colour-code nodes by level. No zone detection needed; low risk; immediately useful.
