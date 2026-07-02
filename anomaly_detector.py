@@ -9,14 +9,39 @@ This module reuses that wholesale and adds only what it doesn't cover:
   whether the action text repeats. loop_detected (exact-repeat based) and
   blocked_verb_rate (same-action-repeated based) both miss an agent that bounces
   between different failing verbs/targets without making progress.
+- productive_thrash: agent visits only a small set of rooms over a long window,
+  all tagged `productive` because the room does change each step. Not caught by
+  loop_detected (actions differ) or utility streaks (utility is productive).
 - regression: this run's final_score is below the best score in the accumulated
   strategy file's run_history.
 
 Imported by scripts/detect_anomalies.py and tested in tests/test_anomaly_detector.py.
 """
+import re
+
 _STREAK_THRESHOLD = 4
+_THRASH_WINDOW = 20       # sliding window size in steps
+_THRASH_UNIQUE_ROOMS = 4  # ≤ this many distinct rooms in a window = thrash
+
+def _norm_room(entry):
+    """Normalise extracted room name for thrash detection.
+
+    Mirrors the bug-57 fix in agent._short_room_name: truncate at the first
+    comma/semicolon, strip trailing period, strip leading preposition/article.
+    Applied here so the detector works correctly on both old (fragmented) and
+    new (already-canonicalised) logs.
+    """
+    room = (entry.get("extracted") or {}).get("room")
+    if not room:
+        return None
+    room = re.split(r"[,;]", room, maxsplit=1)[0].rstrip(".")
+    room = re.sub(r"^(in|on|at)\s+", "", room, flags=re.IGNORECASE)
+    room = re.sub(r"^(a|an|the)\s+", "", room, flags=re.IGNORECASE)
+    return room.strip().lower() or None
+
 
 _SEVERITY = {
+    "productive_thrash": "medium",
     "loop_detected": "high",
     "command_timeout_or_error": "high",
     "no_steps": "high",
@@ -89,6 +114,66 @@ def _utility_streaks(game_log, kind, threshold=_STREAK_THRESHOLD):
     return anomalies
 
 
+def _productive_thrash(game_log):
+    """Detect windows where the agent visits only a small set of rooms repeatedly.
+
+    Each step is `productive` (room changes), so utility streaks and loop_detected
+    both miss this. Uses a sliding window: if ≤ _THRASH_UNIQUE_ROOMS distinct rooms
+    appear across _THRASH_WINDOW consecutive steps, those steps are in thrash.
+    Only reports sustained regions (≥ _THRASH_WINDOW steps) so brief transits
+    through a small area don't trigger. Skips runs where the whole map is genuinely
+    small (total distinct rooms ≤ _THRASH_UNIQUE_ROOMS).
+    """
+    if len(game_log) < _THRASH_WINDOW:
+        return []
+
+    all_rooms = {_norm_room(e) for e in game_log} - {None}
+    if len(all_rooms) <= _THRASH_UNIQUE_ROOMS:
+        return []  # map is genuinely small — oscillation is unavoidable
+
+    # Mark every step that falls inside a triggering window
+    in_thrash = [False] * len(game_log)
+    for i in range(_THRASH_WINDOW, len(game_log) + 1):
+        window = game_log[i - _THRASH_WINDOW:i]
+        rooms = {_norm_room(e) for e in window} - {None}
+        if len(rooms) <= _THRASH_UNIQUE_ROOMS:
+            for j in range(i - _THRASH_WINDOW, i):
+                in_thrash[j] = True
+
+    # Collect contiguous thrash regions that are long enough to report
+    anomalies = []
+    start = None
+    for i, flagged in enumerate(in_thrash):
+        if flagged and start is None:
+            start = i
+        elif not flagged and start is not None:
+            if i - start >= _THRASH_WINDOW:
+                anomalies.append(_thrash_anomaly(game_log, start, i - 1))
+            start = None
+    if start is not None and len(game_log) - start >= _THRASH_WINDOW:
+        anomalies.append(_thrash_anomaly(game_log, start, len(game_log) - 1))
+    return anomalies
+
+
+def _thrash_anomaly(game_log, start, end):
+    slice_ = game_log[start:end + 1]
+    rooms = sorted({_norm_room(e) for e in slice_} - {None})
+    label = ", ".join(rooms[:3]) + ("…" if len(rooms) > 3 else "")
+    return {
+        "type": "productive_thrash",
+        "severity": "medium",
+        "step_range": [start + 1, end + 1],
+        "summary": (
+            f"{end - start + 1} steps visiting only {len(rooms)} room(s) "
+            f"(steps {start + 1}–{end + 1}): {label}"
+        ),
+        "evidence": {
+            "unique_rooms": rooms,
+            "room_count": len(rooms),
+        },
+    }
+
+
 def _regression(run_record, strategy):
     scored = [h for h in strategy.get("run_history", []) if h.get("final_score") is not None]
     if not scored or run_record.get("final_score") is None:
@@ -113,6 +198,7 @@ def detect_anomalies(game_log, run_record, strategy):
     anomalies = _from_log_analyzer(game_log)
     anomalies += _utility_streaks(game_log, "futile")
     anomalies += _utility_streaks(game_log, "redundant")
+    anomalies += _productive_thrash(game_log)
     anomalies += _regression(run_record, strategy)
     for idx, anomaly in enumerate(anomalies, start=1):
         anomaly["id"] = f"a{idx}"

@@ -67,3 +67,23 @@ The core objection: if we hardcode "wait 4 times at the start", we're encoding d
 Built `scripts/agent_dev_loop.py`: run game headlessly → analyze log for issue patterns → feed analysis to a Claude fixer agent (Anthropic API, tool use: bash/read_file/edit_file) → run pytest → repeat. The fixer agent is directed to `configs/knight_orc.json` first for creature/failure-phrase issues, then `llm.py` for prompt issues, then `agent.py` for logic issues. This ordering matters: most issues can be fixed in config without touching code, keeping the core game-agnostic.
 
 `log_analyzer.py` is the detection layer — pure Python, no LLM, unit-tested — so the agentic fixer gets a structured list of issue types rather than raw logs to interpret. Pattern for adding detectors: write the check, write a test that fires on a synthetic bad log entry and a test that passes on a clean one.
+
+---
+
+## 2026-07-02
+
+### `productive_thrash` is a blind spot for every prior detector
+
+When reviewing `watch_20260702_124917`, the agent spent 116 of 150 steps bouncing between stable → jousting field → fairground → stable, yet no anomaly was detected. Every step was tagged `productive` (the room did change each step), so utility streaks didn't fire. The action text varied each step (directions changed because the agent tried different nav strategies each time), so `loop_detected` didn't fire either.
+
+The core issue is that "productive" only means the room changed — it says nothing about whether the agent is making forward progress in the map. A pure oscillation between N rooms is indistinguishable from exploration until you look at the *density* of unique rooms visited over a window of time.
+
+Added `_productive_thrash()` to `anomaly_detector.py`: sliding 20-step window; if ≤ 4 distinct rooms appear in a window (and the total run has visited more than that, ruling out genuinely small maps), all steps in the window are flagged. Contiguous flagged regions of ≥ 20 steps are reported as one anomaly. This caught the real run's thrash from step 35 onwards. Room names are normalised inline (split at first comma/semicolon, strip leading preposition/article) so the detector works correctly on both old fragmented logs and new canonicalised ones.
+
+### `drain_game_buffer` infinite loop in test suite
+
+`drain_game_buffer()` runs `while True: child.expect(...)` and exits only when `pexpect.TIMEOUT` is raised. A `MagicMock` child's `expect()` never raises `TIMEOUT` by default, so the test suite hung — on a developer's machine this triggered the OS "process not responding" popup. Fixed with an `autouse` fixture in `test_game_engine.py` that patches `drain_game_buffer` to a no-op. Pattern for future net I/O helpers: any function with a `while True` loop must either (a) have a dedicated test with the TIMEOUT path exercised, or (b) be patched out at the test module level.
+
+### Fast-nav to undiscovered rooms caused engine-level failures
+
+The `run to <room>` template was being emitted for rooms that hadn't been physically entered yet. Knight Orc rejects this immediately with an error message ("You don't know where that is" or similar). The first draft fix plan from the architect proposed retrying a few times before giving up and marking the room as `blocked`; a human reviewer caught that this was wrong on two counts: (1) the game's rejection is immediate and deterministic, not a transient state issue, so retrying accomplishes nothing; (2) marking the room `blocked` in the strategy store would be harmful, because the constraint is structural (agent hasn't been there yet) not permanent. The actual fix was to gate the fast-nav template on `target in state["visited_rooms"]` — a one-line structural filter. Lesson: the architect's first draft should be reviewed by a human before implementation starts; prompt it to distinguish structural constraints from state-dependent ones.
