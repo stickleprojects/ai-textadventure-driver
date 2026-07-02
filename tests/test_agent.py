@@ -505,6 +505,37 @@ class TestNullRoomHandling:
         # canonicalised name ("cave"), not the raw LLM string
         assert _resolve_room_name(g2, "a cave") == "cave"
 
+    def test_description_suffix_resolves_to_existing_short_node(self):
+        # Bug 57: LLM sometimes appends the full room description after the short name,
+        # separated by comma or semicolon. Both forms must resolve to the same node.
+        from agent import _resolve_room_name
+        import networkx as nx
+        g = nx.DiGraph()
+        g.add_node("jousting field")
+        g.add_node("dingy stable")
+        g.add_node("dismal fairground in a rowan coppice")
+        # semicolon-separated description variant
+        assert _resolve_room_name(g, "on a jousting field; an acre of firm meadow, divided by a fence") == "jousting field"
+        # trailing period variant
+        assert _resolve_room_name(g, "on a jousting field; an acre of firm meadow.") == "jousting field"
+        # comma-separated description variant
+        assert _resolve_room_name(g, "a dingy stable, a temporary building with canvas walls") == "dingy stable"
+        # short form still works
+        assert _resolve_room_name(g, "a dingy stable") == "dingy stable"
+        # no separator — unchanged
+        assert _resolve_room_name(g, "on a dismal fairground in a rowan coppice") == "dismal fairground in a rowan coppice"
+
+    def test_new_node_stored_under_short_name(self):
+        # Bug 57: when the LLM returns a long-form name for a room not yet in the graph,
+        # the new node should be stored under the short name, not the full description.
+        from agent import _resolve_room_name
+        import networkx as nx
+        g = nx.DiGraph()
+        result = _resolve_room_name(g, "a dingy stable, a temporary building with canvas walls")
+        assert result == "dingy stable"
+        result2 = _resolve_room_name(g, "on a jousting field; an acre of firm meadow")
+        assert result2 == "jousting field"
+
     def test_in_direction_cleans_up_placeholder_and_wires_out_return(self):
         # Bug 49: "in" was missing from _REVERSE so traversal via "in" skipped
         # placeholder cleanup entirely.
