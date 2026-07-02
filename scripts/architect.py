@@ -30,13 +30,16 @@ ORCHESTRATOR_DIR = RUNS_DIR / "orchestrator"
 # Which source files to include per anomaly type. More specific types first;
 # the fallback key "" is always appended.
 _FILE_ROUTES = {
-    "loop_detected":        ["agent.py", "game_config.py"],
-    "futile_streak":        ["agent.py", "game_config.py"],
-    "redundant_streak":     ["agent.py"],
-    "malformed_extraction": ["llm.py", "game_engine.py"],
-    "regression":           ["run_evaluator.py", "agent.py"],
-    "agent_failure_finding":["agent.py", "game_config.py"],
-    "":                     ["agent.py"],  # fallback
+    "loop_detected":           ["agent.py", "game_config.py"],
+    "futile_streak":           ["agent.py", "game_config.py"],
+    "redundant_streak":        ["agent.py"],
+    "malformed_extraction":    ["llm.py", "game_engine.py"],
+    "regression":              ["run_evaluator.py", "agent.py"],
+    "agent_failure_finding":   ["agent.py", "game_config.py"],
+    "futile_direction_probing":["agent.py", "llm.py"],  # may be extraction or decision layer
+    "repetitive_zigzag_navigation": ["agent.py"],
+    "redundant_object_inspection":  ["agent.py"],
+    "":                        ["agent.py"],  # fallback
 }
 
 _SEVERITY_ORDER = {"high": 0, "medium": 1, "low": 2}
@@ -61,6 +64,24 @@ Key design constraints:
 - do not propose changes that add LLM calls to the hot path (process_agent_step).
 - acceptance_criteria must be concretely observable in a future run or log file,
   not just "tests pass".
+
+Before proposing any fix, apply these three checks:
+
+1. CODE AUDIT — read the relevant source files and confirm whether the guard or
+   check you are about to propose already exists. State explicitly in root_cause_hypothesis
+   whether existing code already enforces this. If it does, your fix must target a
+   different layer.
+
+2. PRODUCTIVITY CHECK — if the anomaly involves a repeated or alternating action
+   pattern, check whether each step is util=productive (new room, new entity, new
+   inventory). If steps are productive, futile-edge marking and loop-break logic
+   are contraindicated. The fix must change the *selection policy* (e.g. navigation
+   scoring, priority ordering), not the edge state.
+
+3. DATA ORIGIN LAYER — identify which layer produces the bad data:
+   (a) game engine response  (b) LLM extraction  (c) graph/state update  (d) decision logic
+   The fix must target the *origin layer*. A guard at a downstream consumer is
+   fragile and may mask the same data entering via a different code path.
 """
 
 
@@ -106,10 +127,17 @@ def _user_message(anomaly, sources):
 
 ## Task
 
-Produce a fix_plan.json object (schema: fix_plan/v1) with these fields:
+Before writing the plan, work through the three pre-checks from your instructions:
+1. Does the code already enforce the guard you are about to propose? (Code audit)
+2. Are the anomalous steps util=productive? If so, futile-edge marking is off the table. (Productivity check)
+3. Which layer — (a) game engine, (b) LLM extraction, (c) graph/state update, (d) decision logic — originates the bad data? (Data origin layer)
+
+Then produce a fix_plan.json object (schema: fix_plan/v1) with these fields:
 - schema: "fix_plan/v1"
 - anomaly_id: the anomaly's id string
-- root_cause_hypothesis: one concise sentence
+- data_origin_layer: one of "game_engine", "llm_extraction", "graph_state", "decision_logic"
+- productivity_check: "productive" if repeated steps are util=productive (fix must not mark edges futile), else "non_productive"
+- root_cause_hypothesis: one concise sentence — must name the origin layer and confirm whether the guard already exists
 - target_files: list of files to change
 - change_summary: what to change and why (2-4 sentences)
 - acceptance_criteria: list of 2-4 strings, each concretely observable in
@@ -121,27 +149,10 @@ Reply with ONLY the raw JSON object, no markdown fences, no commentary.
 """
 
 
-def architect(run_id, anomaly_id=None, model="claude-opus-4-8"):
-    report_path = ORCHESTRATOR_DIR / run_id / "anomaly_report.json"
-    if not report_path.exists():
-        print(f"ERROR: {report_path} not found — run detect_anomalies.py first", file=sys.stderr)
-        sys.exit(1)
-
-    report = json.loads(report_path.read_text())
-    if not report["anomalies"]:
-        print("No anomalies in report — nothing to plan.", file=sys.stderr)
-        sys.exit(0)
-
-    anomaly = _pick_anomaly(report["anomalies"], anomaly_id)
+def _call_api(client, model, anomaly):
+    """Call the API for a single anomaly and return the parsed plan dict."""
     files = _pick_files(anomaly["type"])
     sources = _read_sources(files)
-
-    api_key = os.environ.get("ANTHROPIC_API_KEY")
-    if not api_key:
-        print("ERROR: ANTHROPIC_API_KEY is not set in the environment.", file=sys.stderr)
-        sys.exit(1)
-
-    client = anthropic.Anthropic(api_key=api_key)
     print(f"Calling {model} for anomaly {anomaly['id']} ({anomaly['type']}) …")
     try:
         message = client.messages.create(
@@ -165,29 +176,67 @@ def architect(run_id, anomaly_id=None, model="claude-opus-4-8"):
         sys.exit(1)
 
     raw = message.content[0].text.strip()
-
     try:
-        plan = json.loads(raw)
+        return json.loads(raw)
     except json.JSONDecodeError:
-        print(f"ERROR: model returned non-JSON:\n{raw}", file=sys.stderr)
+        print(f"ERROR: model returned non-JSON for {anomaly['id']}:\n{raw}", file=sys.stderr)
         sys.exit(1)
 
-    out_path = (ORCHESTRATOR_DIR / run_id / "fix_plan.json").resolve()
-    out_path.write_text(json.dumps(plan, indent=2))
-    print(f"Wrote {out_path}")
-    print(f"Root cause: {plan.get('root_cause_hypothesis', '?')}")
-    print(f"Files:      {plan.get('target_files', [])}")
-    print()
-    print(f"Review {out_path} before passing to the Dev stage.")
+
+def architect(run_id, anomaly_id=None, model="claude-opus-4-8"):
+    """Produce fix plans for one anomaly (anomaly_id) or all anomalies (anomaly_id=None).
+
+    Writes fix_plan_<id>.json for each anomaly processed. Returns list of output paths.
+    """
+    report_path = ORCHESTRATOR_DIR / run_id / "anomaly_report.json"
+    if not report_path.exists():
+        print(f"ERROR: {report_path} not found — run detect_anomalies.py first", file=sys.stderr)
+        sys.exit(1)
+
+    report = json.loads(report_path.read_text())
+    if not report["anomalies"]:
+        print("No anomalies in report — nothing to plan.", file=sys.stderr)
+        sys.exit(0)
+
+    if anomaly_id is None:
+        targets = report["anomalies"]
+    elif isinstance(anomaly_id, list):
+        targets = [_pick_anomaly(report["anomalies"], aid) for aid in anomaly_id]
+    else:
+        targets = [_pick_anomaly(report["anomalies"], anomaly_id)]
+
+    api_key = os.environ.get("ANTHROPIC_API_KEY")
+    if not api_key:
+        print("ERROR: ANTHROPIC_API_KEY is not set in the environment.", file=sys.stderr)
+        sys.exit(1)
+
+    client = anthropic.Anthropic(api_key=api_key)
+    out_dir = ORCHESTRATOR_DIR / run_id
+    out_paths = []
+
+    for anomaly in targets:
+        plan = _call_api(client, model, anomaly)
+        out_path = (out_dir / f"fix_plan_{anomaly['id']}.json").resolve()
+        out_path.write_text(json.dumps(plan, indent=2))
+        print(f"Wrote {out_path}")
+        print(f"  Root cause: {plan.get('root_cause_hypothesis', '?')}")
+        print(f"  Files:      {plan.get('target_files', [])}")
+        out_paths.append(out_path)
+
+    print(f"\n{len(out_paths)} fix plan(s) written. Review before passing to the Dev stage.")
+    return out_paths
 
 
 def main():
     parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     parser.add_argument("run_id", help="Run ID matching an existing anomaly_report.json")
-    parser.add_argument("--anomaly-id", help="Specific anomaly id (default: highest severity)")
+    group = parser.add_mutually_exclusive_group()
+    group.add_argument("--anomaly-id", help="Specific anomaly id, e.g. a1 (default: highest severity)")
+    group.add_argument("--all", action="store_true", help="Produce fix plans for all anomalies in the report")
     parser.add_argument("--model", default="claude-opus-4-8", help="Claude model to use (default: %(default)s)")
     args = parser.parse_args()
-    architect(args.run_id, args.anomaly_id, args.model)
+    anomaly_id = None if args.all else args.anomaly_id
+    architect(args.run_id, anomaly_id, args.model)
 
 
 if __name__ == "__main__":

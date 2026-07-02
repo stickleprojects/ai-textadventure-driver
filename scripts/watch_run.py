@@ -107,12 +107,13 @@ def _fmt_duration(secs):
     return f"{h}h{rem // 60:02d}m"
 
 
-def _step_summary(entry):
+def _step_summary(entry, current_room=None):
     """One-line summary of what happened in a step, for progress output."""
     ex = entry.get("extracted") or {}
     parts = []
-    if ex.get("room"):
-        parts.append(ex["room"])
+    room = current_room or ex.get("room")
+    if room:
+        parts.append(room)
     if ex.get("objects"):
         parts.append(f"objects: {', '.join(ex['objects'][:3])}")
     if ex.get("npcs"):
@@ -146,7 +147,7 @@ def run(steps=50, verbose=False):
     child, initial_text = start_level9(INTERPRETER_PATH, ROM_PATH)
     if child is None:
         print(f"ERROR: {initial_text}", file=sys.stderr)
-        return [{"step": 0, "type": "startup_error", "message": initial_text}]
+        return [{"step": 0, "type": "startup_error", "message": initial_text}], None
 
     if verbose:
         print(f"Started game. Running {steps} steps... Ctrl-C to interrupt early; findings will still be saved.", file=sys.stderr)
@@ -190,7 +191,7 @@ def run(steps=50, verbose=False):
                 eta = (steps - (i + 1)) * avg_step
                 timing = f"[elapsed {_fmt_duration(elapsed)} | {avg_step:.1f}s/step | remaining {_fmt_duration(eta)}]"
                 print(
-                    f"[{i+1:>3}/{steps}] {last['action']:<28} {_step_summary(last)}{flag}  {timing}",
+                    f"[{i+1:>3}/{steps}] {last['action']:<28} {_step_summary(last, state.get('current_room'))}{flag}  {timing}",
                     file=sys.stderr,
                 )
 
@@ -301,18 +302,35 @@ def run(steps=50, verbose=False):
             print(f"Map written to {map_path}", file=sys.stderr)
             print(f"Done. {len(findings)} finding(s).", file=sys.stderr)
 
-    return findings
+    return findings, run_id
 
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     parser.add_argument("steps", nargs="?", type=int, default=50, help="Number of game steps (default: 50)")
     parser.add_argument("--config", metavar="PATH", help="Path to game config JSON (default: built-in Knight Orc values)")
+    parser.add_argument("--detect", action="store_true", help="Run anomaly detection after the run")
+    parser.add_argument("--review", action="store_true", help="Run LLM log review after detection (implies --detect; requires ANTHROPIC_API_KEY)")
+    parser.add_argument("--architect", action="store_true", help="Run architect to produce a fix plan if anomalies found (implies --detect)")
     args = parser.parse_args()
 
     if args.config:
         config.load_from_file(args.config)
 
-    findings = run(steps=args.steps, verbose=True)
+    findings, run_id = run(steps=args.steps, verbose=True)
     print(json.dumps(findings, indent=2))
+
+    if run_id and (args.detect or args.review or args.architect):
+        _scripts_dir = os.path.dirname(os.path.abspath(__file__))
+        if _scripts_dir not in sys.path:
+            sys.path.insert(0, _scripts_dir)
+        from detect_anomalies import detect
+        report = detect(run_id, STRATEGY_PATH)
+        if args.review or args.architect:
+            from llm_review import llm_review
+            llm_review(run_id)
+        if args.architect and report["anomalies"]:
+            from architect import architect
+            architect(run_id)
+
     sys.exit(1 if findings else 0)

@@ -33,34 +33,44 @@ RUNS_DIR = Path("runs")
 STRATEGY_PATH = "configs/knight_orc_strategy.json"
 
 
-def main():
-    parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
-    parser.add_argument("run_id", help="Run ID, e.g. watch_20260702_143000 (matches logs/<run_id>.json)")
-    parser.add_argument("--strategy", default=STRATEGY_PATH, help="Path to strategy JSON (default: %(default)s)")
-    args = parser.parse_args()
+def detect(run_id, strategy_path=STRATEGY_PATH):
+    """Run anomaly detection for run_id and write anomaly_report.json.
 
-    log_path = LOG_DIR / f"{args.run_id}.json"
-    run_path = RUNS_DIR / f"{args.run_id}.json"
+    Returns the report dict. Raises SystemExit(2) if log/run files are missing.
+    Callable from other scripts (e.g. watch_run --pipeline).
+    """
+    log_path = LOG_DIR / f"{run_id}.json"
+    run_path = RUNS_DIR / f"{run_id}.json"
     for path in (log_path, run_path):
         if not path.exists() or path.stat().st_size == 0:
             print(f"ERROR: {path} is missing or empty — run was likely interrupted before it could write.", file=sys.stderr)
             sys.exit(2)
     game_log = json.loads(log_path.read_text())
     run_record = json.loads(run_path.read_text())
-    strategy = load_strategy(args.strategy)
+    strategy = load_strategy(strategy_path)
 
-    report = build_report(args.run_id, log_path, run_path, game_log, run_record, strategy)
+    report = build_report(run_id, log_path, run_path, game_log, run_record, strategy)
 
-    out_dir = RUNS_DIR / "orchestrator" / args.run_id
+    out_dir = RUNS_DIR / "orchestrator" / run_id
     out_dir.mkdir(parents=True, exist_ok=True)
     out_path = out_dir / "anomaly_report.json"
     out_path.write_text(json.dumps(report, indent=2))
 
-    print(f"Wrote {out_path}")
-    print(f"{len(report['anomalies'])} anomaly(ies) found.")
+    print(f"Wrote {out_path}", file=sys.stderr)
+    print(f"{len(report['anomalies'])} anomaly(ies) found.", file=sys.stderr)
     for a in report["anomalies"]:
-        print(f"  [{a['severity']}] {a['id']} {a['type']}: {a['summary']}")
+        print(f"  [{a['severity']}] {a['id']} {a['type']}: {a['summary']}", file=sys.stderr)
 
+    return report
+
+
+def main():
+    parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
+    parser.add_argument("run_id", help="Run ID, e.g. watch_20260702_143000 (matches logs/<run_id>.json)")
+    parser.add_argument("--strategy", default=STRATEGY_PATH, help="Path to strategy JSON (default: %(default)s)")
+    args = parser.parse_args()
+
+    report = detect(args.run_id, args.strategy)
     sys.exit(1 if report["anomalies"] else 0)
 
 
