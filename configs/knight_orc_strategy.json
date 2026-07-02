@@ -21,6 +21,14 @@
       "up"
     ],
     [
+      "dismal fairground in a rowan coppice",
+      "down"
+    ],
+    [
+      "dismal fairground in a rowan coppice",
+      "up"
+    ],
+    [
       "in an alder clump",
       "east"
     ],
@@ -148,301 +156,26 @@
       "run_id": "watch_20260701_153756",
       "outcome": "agent_failure",
       "final_score": null
+    },
+    {
+      "run_id": "watch_20260702_140033",
+      "outcome": "interrupted",
+      "final_score": null
+    },
+    {
+      "run_id": "watch_20260702_140538",
+      "outcome": "interrupted",
+      "final_score": null
+    },
+    {
+      "run_id": "watch_20260702_140749",
+      "outcome": "interrupted",
+      "final_score": null
+    },
+    {
+      "run_id": "watch_20260702_141020",
+      "outcome": "ambiguous",
+      "final_score": null
     }
-  ],
-  "entity_verb_outcomes": {
-    "putty knife": {
-      "wear": "invalid",
-      "eat": "invalid",
-      "drink": "invalid",
-      "open": "invalid",
-      "close": "invalid",
-      "unlock": "invalid",
-      "lock": "invalid",
-      "pull": "invalid",
-      "turn on": "invalid",
-      "turn off": "invalid"
-    },
-    "hooded cloak": {
-      "eat": "invalid",
-      "drink": "invalid",
-      "open": "invalid",
-      "close": "invalid",
-      "unlock": "invalid",
-      "lock": "invalid",
-      "pull": "invalid",
-      "turn on": "invalid"
-    },
-    "garbage": {
-      "eat": "invalid",
-      "drink": "invalid",
-      "open": "invalid",
-      "close": "invalid",
-      "unlock": "invalid",
-      "lock": "invalid",
-      "pull": "invalid",
-      "turn on": "invalid",
-      "turn off": "invalid"
-    },
-    "fish-heads": {
-      "take": "invalid"
-    },
-    "brown cabbage": {
-      "take": "invalid"
-    },
-    "green beef": {
-      "take": "invalid"
-    },
-    "furry bread": {
-      "take": "invalid"
-    },
-    "flagpole": {
-      "eat": "invalid",
-      "drink": "invalid",
-      "open": "invalid",
-      "close": "invalid",
-      "unlock": "invalid",
-      "lock": "invalid",
-      "pull": "invalid",
-      "turn on": "invalid",
-      "turn off": "invalid"
-    },
-    "halyard": {
-      "wear": "invalid",
-      "eat": "invalid",
-      "drink": "invalid",
-      "open": "invalid",
-      "close": "invalid",
-      "unlock": "invalid",
-      "lock": "invalid",
-      "turn on": "invalid"
-    },
-    "golden rod": {
-      "wear": "invalid",
-      "drink": "invalid",
-      "open": "invalid",
-      "close": "invalid",
-      "unlock": "invalid",
-      "lock": "invalid",
-      "pull": "invalid",
-      "turn on": "invalid",
-      "turn off": "invalid"
-    },
-    "pile of garbage": {
-      "eat": "invalid",
-      "drink": "invalid",
-      "open": "invalid",
-      "close": "invalid",
-      "unlock": "invalid",
-      "lock": "invalid",
-      "pull": "invalid",
-      "turn on": "invalid",
-      "turn off": "invalid"
-    },
-    "rodents": {
-      "take": "invalid"
-    },
-    "snack-worms": {
-      "take": "invalid"
-    },
-    "gold crest": {
-      "wear": "invalid",
-      "drink": "invalid",
-      "open": "invalid",
-      "close": "invalid",
-      "unlock": "invalid",
-      "lock": "invalid",
-      "pull": "invalid",
-      "turn on": "invalid",
-      "turn off": "invalid"
-    },
-    "smashed bit of something or other": {
-      "take": "invalid"
-    },
-    "gold finger": {
-      "wear": "invalid",
-      "drink": "invalid",
-      "open": "invalid",
-      "close": "invalid",
-      "unlock": "invalid",
-      "lock": "invalid",
-      "pull": "invalid",
-      "turn on": "invalid",
-      "turn off": "invalid"
-    },
-    "gold nugget": {
-      "wear": "invalid",
-      "drink": "invalid",
-      "open": "invalid",
-      "close": "invalid",
-      "unlock": "invalid",
-      "lock": "invalid",
-      "push": "invalid",
-      "pull": "invalid",
-      "turn on": "invalid",
-      "turn off": "invalid"
-    },
-    "meadow": {
-      "close": "invalid",
-      "lock": "invalid",
-      "turn on": "invalid",
-      "turn off": "invalid"
-    },
-    "fence": {
-      "close": "invalid",
-      "lock": "invalid",
-      "turn on": "invalid",
-      "turn off": "invalid"
-    },
-    "pavilions": {
-      "close": "invalid",
-      "lock": "invalid",
-      "turn on": "invalid",
-      "turn off": "invalid"
-    },
-    "grandstand": {
-      "close": "invalid",
-      "lock": "invalid",
-      "turn on": "invalid",
-      "turn off": "invalid"
-    },
-    "golden ruler": {
-      "wear": "invalid",
-      "drink": "invalid",
-      "open": "invalid",
-      "close": "invalid",
-      "unlock": "invalid"
-    },
-    "straw": {
-      "close": "invalid"
-    },
-    "spear": {
-      "take": "invalid"
-    }
-  },
-  "world_graph": {
-    "nodes": [
-      "dingy stable",
-      "huge pile of garbage",
-      "on a trampled field, pock-marked by the feet of humans and their horses",
-      "on a jousting field",
-      "on a dismal fairground in a rowan coppice",
-      "juniper underbrush",
-      "outside a cave in a juniper scrubland",
-      "juniper ghostwood",
-      "juniper coppice",
-      "hawthorn underbrush",
-      "jousting field",
-      "on a trampled field",
-      "grandstand",
-      "huge pile of garbage, with the other rubbish thrown away after the tournament"
-    ],
-    "edges": [
-      [
-        "dingy stable",
-        "huge pile of garbage",
-        "east"
-      ],
-      [
-        "grandstand",
-        "on a jousting field",
-        "north"
-      ],
-      [
-        "hawthorn underbrush",
-        "juniper coppice",
-        "south"
-      ],
-      [
-        "huge pile of garbage",
-        "on a trampled field, pock-marked by the feet of humans and their horses",
-        "down/down/out/down/down/out/down/down/out/down/down/out/down/down/out/down/down/out/down/down/out/down/down/out/down/down/out/down/down/out/down/down/out/down/down/out/down/down/out/down/down/out/down/down/out/down/down/out/down/down/out/down/down/out/down/down/out/down/down/out/down/down/out/down/down/out/down/down/out/down/down/out/down/down/out/down/down/out/down/down/out/down/down/out/down/down/out/down/down/out/down/down/out/down/down/out/down/down/out/down/down/out/down/down/out/down/down/out/down/down/out/down/down/out/down/down/out/down/down/out/down/down/out/down/down/out/down/down/out/down/down/out/down/down/out/down/down/out/down/down/out/down/down/out/down/down/out/down/down/out/down/down/out/down/down/out/down/down/out/down/down/out/down/down/out/down/down/out/down/down/out/down/down/out/down/down/out/down/down/out/down/down/out/down/down/out/down/down/out/down/down/out/down/down/out/down/down/out/down/down/out/down/down/out/down/down/out/down/down/out/down/down/out/down/down/out/down/down/out/down/down/out/down/down/out/down/down/out/down/down/out/down/down/out/down/down/out/down/down/out/down/down/out/down/down/out/down/down/out/down/down/out/down/down/out/down/down/out/down/down/out/down/down/out/down/down/out/down/down/out/down/down/out/down/down/out/down/down/out/down/down/out/down/down/out/down/down/out/down/down/out/down/down/out/down/down/out/down/down/out/down/down/out/down/down/out/down/down/out/down/down/out/down/down/out/down/down/out/down/down/out/down/down/out/down/down/out/down/down/out/down/down/out/down/down/out/down/down/out/down/down/out/down/down/out/down/down/out/down/down/out/down/down/out/down/down/out/down/down/out/down/down/out/down/down/out/down/down/out/down/down/out/down/down/out/down/down/out/down/down/out/down/down/out"
-      ],
-      [
-        "jousting field",
-        "huge pile of garbage",
-        "north"
-      ],
-      [
-        "juniper coppice",
-        "hawthorn underbrush",
-        "north"
-      ],
-      [
-        "juniper coppice",
-        "juniper ghostwood",
-        "south"
-      ],
-      [
-        "juniper ghostwood",
-        "juniper coppice",
-        "north"
-      ],
-      [
-        "juniper ghostwood",
-        "outside a cave in a juniper scrubland",
-        "south"
-      ],
-      [
-        "juniper underbrush",
-        "on a dismal fairground in a rowan coppice",
-        "south"
-      ],
-      [
-        "juniper underbrush",
-        "outside a cave in a juniper scrubland",
-        "north"
-      ],
-      [
-        "on a dismal fairground in a rowan coppice",
-        "juniper underbrush",
-        "north"
-      ],
-      [
-        "on a dismal fairground in a rowan coppice",
-        "on a jousting field",
-        "south"
-      ],
-      [
-        "on a jousting field",
-        "grandstand",
-        "south"
-      ],
-      [
-        "on a jousting field",
-        "huge pile of garbage",
-        "west"
-      ],
-      [
-        "on a jousting field",
-        "on a dismal fairground in a rowan coppice",
-        "north"
-      ],
-      [
-        "on a jousting field",
-        "on a trampled field, pock-marked by the feet of humans and their horses",
-        "east"
-      ],
-      [
-        "on a trampled field",
-        "on a jousting field",
-        "west"
-      ],
-      [
-        "on a trampled field, pock-marked by the feet of humans and their horses",
-        "on a jousting field",
-        "west"
-      ],
-      [
-        "outside a cave in a juniper scrubland",
-        "juniper ghostwood",
-        "north"
-      ],
-      [
-        "outside a cave in a juniper scrubland",
-        "juniper underbrush",
-        "south"
-      ]
-    ]
-  }
+  ]
 }

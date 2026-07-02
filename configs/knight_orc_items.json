@@ -1,0 +1,173 @@
+{
+  "putty knife": {
+    "wear": "invalid",
+    "eat": "invalid",
+    "drink": "invalid",
+    "open": "invalid",
+    "close": "invalid",
+    "unlock": "invalid",
+    "lock": "invalid",
+    "pull": "invalid",
+    "turn on": "invalid",
+    "turn off": "invalid"
+  },
+  "hooded cloak": {
+    "eat": "invalid",
+    "drink": "invalid",
+    "open": "invalid",
+    "close": "invalid",
+    "unlock": "invalid",
+    "lock": "invalid",
+    "pull": "invalid",
+    "turn on": "invalid"
+  },
+  "garbage": {
+    "eat": "invalid",
+    "drink": "invalid",
+    "open": "invalid",
+    "close": "invalid",
+    "unlock": "invalid",
+    "lock": "invalid",
+    "pull": "invalid",
+    "turn on": "invalid",
+    "turn off": "invalid"
+  },
+  "fish-heads": {
+    "take": "invalid"
+  },
+  "brown cabbage": {
+    "take": "invalid"
+  },
+  "green beef": {
+    "take": "invalid"
+  },
+  "furry bread": {
+    "take": "invalid"
+  },
+  "flagpole": {
+    "eat": "invalid",
+    "drink": "invalid",
+    "open": "invalid",
+    "close": "invalid",
+    "unlock": "invalid",
+    "lock": "invalid",
+    "pull": "invalid",
+    "turn on": "invalid",
+    "turn off": "invalid"
+  },
+  "halyard": {
+    "wear": "invalid",
+    "eat": "invalid",
+    "drink": "invalid",
+    "open": "invalid",
+    "close": "invalid",
+    "unlock": "invalid",
+    "lock": "invalid",
+    "turn on": "invalid"
+  },
+  "golden rod": {
+    "wear": "invalid",
+    "drink": "invalid",
+    "open": "invalid",
+    "close": "invalid",
+    "unlock": "invalid",
+    "lock": "invalid",
+    "pull": "invalid",
+    "turn on": "invalid",
+    "turn off": "invalid"
+  },
+  "pile of garbage": {
+    "eat": "invalid",
+    "drink": "invalid",
+    "open": "invalid",
+    "close": "invalid",
+    "unlock": "invalid",
+    "lock": "invalid",
+    "pull": "invalid",
+    "turn on": "invalid",
+    "turn off": "invalid"
+  },
+  "rodents": {
+    "take": "invalid"
+  },
+  "snack-worms": {
+    "take": "invalid"
+  },
+  "gold crest": {
+    "wear": "invalid",
+    "drink": "invalid",
+    "open": "invalid",
+    "close": "invalid",
+    "unlock": "invalid",
+    "lock": "invalid",
+    "pull": "invalid",
+    "turn on": "invalid",
+    "turn off": "invalid"
+  },
+  "smashed bit of something or other": {
+    "take": "invalid"
+  },
+  "gold finger": {
+    "wear": "invalid",
+    "drink": "invalid",
+    "open": "invalid",
+    "close": "invalid",
+    "unlock": "invalid",
+    "lock": "invalid",
+    "pull": "invalid",
+    "turn on": "invalid",
+    "turn off": "invalid"
+  },
+  "gold nugget": {
+    "wear": "invalid",
+    "drink": "invalid",
+    "open": "invalid",
+    "close": "invalid",
+    "unlock": "invalid",
+    "lock": "invalid",
+    "push": "invalid",
+    "pull": "invalid",
+    "turn on": "invalid",
+    "turn off": "invalid"
+  },
+  "meadow": {
+    "close": "invalid",
+    "lock": "invalid",
+    "turn on": "invalid",
+    "turn off": "invalid"
+  },
+  "fence": {
+    "close": "invalid",
+    "lock": "invalid",
+    "turn on": "invalid",
+    "turn off": "invalid"
+  },
+  "pavilions": {
+    "close": "invalid",
+    "lock": "invalid",
+    "turn on": "invalid",
+    "turn off": "invalid"
+  },
+  "grandstand": {
+    "close": "invalid",
+    "lock": "invalid",
+    "turn on": "invalid",
+    "turn off": "invalid"
+  },
+  "golden ruler": {
+    "wear": "invalid",
+    "drink": "invalid",
+    "open": "invalid",
+    "close": "invalid",
+    "unlock": "invalid"
+  },
+  "straw": {
+    "close": "invalid"
+  },
+  "spear": {
+    "take": "invalid"
+  },
+  "gripper": {
+    "take": "invalid"
+  }
+}

@@ -15,10 +15,20 @@ config_fix  — failure response text not matched by any existing pattern in con
 python_fix  — finding type is "crash" (exception traceback present)
 ambiguous   — neither of the above; needs human review
 
-Strategy file (merge_run_record / load_strategy)
--------------------------------------------------
-configs/knight_orc_strategy.json accumulates futile_edges and run_history across
-runs. load_strategy() returns empty defaults if the file does not exist.
+Strategy file layout (merge_run_record / load_strategy)
+--------------------------------------------------------
+The strategy is split across three files derived from the base strategy path:
+
+  knight_orc_strategy.json — futile_edges, run_history
+  knight_orc_rooms.json    — world_graph (nodes + edges)
+  knight_orc_items.json    — entity_verb_outcomes
+
+Keeping the large, frequently updated sections in separate files makes diffs
+readable and lets the user inspect or clear rooms/items independently.
+
+load_strategy() and merge_run_record() handle the split transparently; callers
+pass the strategy path as before. Old single-file format (all keys in the main
+file) is still read correctly for backward compatibility.
 """
 import json
 import re
@@ -71,8 +81,23 @@ def classify_run(game_log, findings, final_score=None):
     return "ambiguous"
 
 
+def _sidecar(strategy_path, kind):
+    """Derive a sidecar path for 'rooms' or 'items' from the strategy path.
+
+    'configs/knight_orc_strategy.json' → 'configs/knight_orc_rooms.json'
+    'tmp/strategy.json'                → 'tmp/rooms.json'
+    """
+    p = Path(strategy_path)
+    stem = p.stem[: -len("_strategy")] if p.stem.endswith("_strategy") else p.stem
+    return p.with_name(f"{stem}_{kind}.json")
+
+
 def load_strategy(strategy_path):
     """Load accumulated strategy from file. Returns empty defaults if file absent.
+
+    Reads the main strategy file for futile_edges and run_history, then checks
+    for sidecar files (rooms, items) derived from the strategy path. Falls back
+    to inline keys in the main file for backward compatibility.
 
     Returns dict with:
         futile_edges         — set of (room, direction) tuples
@@ -81,20 +106,30 @@ def load_strategy(strategy_path):
         world_graph          — {"nodes": [...], "edges": [[src, dst, label], ...]}
     """
     path = Path(strategy_path)
-    if not path.exists():
-        return {
-            "futile_edges": set(),
-            "run_history": [],
-            "entity_verb_outcomes": {},
-            "world_graph": {"nodes": [], "edges": []},
-        }
-    with open(path) as f:
-        data = json.load(f)
+    data = {}
+    if path.exists():
+        with open(path) as f:
+            data = json.load(f)
+
+    rooms_path = _sidecar(strategy_path, "rooms")
+    if rooms_path.exists():
+        with open(rooms_path) as f:
+            world_graph = json.load(f)
+    else:
+        world_graph = data.get("world_graph", {"nodes": [], "edges": []})
+
+    items_path = _sidecar(strategy_path, "items")
+    if items_path.exists():
+        with open(items_path) as f:
+            entity_verb_outcomes = json.load(f)
+    else:
+        entity_verb_outcomes = data.get("entity_verb_outcomes", {})
+
     return {
         "futile_edges": {tuple(e) for e in data.get("futile_edges", [])},
         "run_history": data.get("run_history", []),
-        "entity_verb_outcomes": data.get("entity_verb_outcomes", {}),
-        "world_graph": data.get("world_graph", {"nodes": [], "edges": []}),
+        "entity_verb_outcomes": entity_verb_outcomes,
+        "world_graph": world_graph,
     }
 
 
@@ -146,17 +181,25 @@ def merge_run_record(run_record, strategy_path):
 
     path = Path(strategy_path)
     path.parent.mkdir(parents=True, exist_ok=True)
+
     with open(path, "w") as f:
         json.dump(
             {
                 "futile_edges": [list(e) for e in sorted(strategy["futile_edges"])],
                 "run_history": strategy["run_history"],
-                "entity_verb_outcomes": strategy["entity_verb_outcomes"],
-                "world_graph": acc,
             },
             f,
             indent=2,
         )
+
+    rooms_path = _sidecar(strategy_path, "rooms")
+    with open(rooms_path, "w") as f:
+        json.dump(acc, f, indent=2)
+
+    items_path = _sidecar(strategy_path, "items")
+    with open(items_path, "w") as f:
+        json.dump(strategy["entity_verb_outcomes"], f, indent=2)
+
     return strategy
 
 

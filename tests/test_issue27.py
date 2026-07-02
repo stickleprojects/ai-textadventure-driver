@@ -94,8 +94,10 @@ class TestMergeRunRecordEntityVerbOutcomes:
     def test_entity_verb_outcomes_written_to_file(self, tmp_path):
         strategy_path = tmp_path / "strategy.json"
         merge_run_record(_make_record(entity_verb_outcomes={"fence": {"read": "invalid"}}), strategy_path)
-        on_disk = json.loads(strategy_path.read_text())
-        assert on_disk["entity_verb_outcomes"]["fence"]["read"] == "invalid"
+        # entity_verb_outcomes now lives in the items sidecar, not the main strategy file
+        items_path = tmp_path / "strategy_items.json"
+        on_disk = json.loads(items_path.read_text())
+        assert on_disk["fence"]["read"] == "invalid"
 
 
 # ── make_initial_state startup load ──────────────────────────────────────────
