@@ -118,19 +118,19 @@ class TestScoreAction:
 
     def test_score_issued_at_interval(self):
         state = self._state_with_steps(_SCORE_INTERVAL)
-        assert determine_next_action(state) == "score"
+        assert determine_next_action(state)[0] == "score"
 
     def test_score_issued_at_double_interval(self):
         state = self._state_with_steps(_SCORE_INTERVAL * 2)
-        assert determine_next_action(state) == "score"
+        assert determine_next_action(state)[0] == "score"
 
     def test_score_not_issued_at_zero(self):
         state = self._state_with_steps(0)
-        assert determine_next_action(state) != "score"
+        assert determine_next_action(state)[0] != "score"
 
     def test_score_not_issued_between_intervals(self):
         state = self._state_with_steps(_SCORE_INTERVAL - 1)
-        assert determine_next_action(state) != "score"
+        assert determine_next_action(state)[0] != "score"
 
 
 # ── 10.b — score parsed from response ────────────────────────────────────────
