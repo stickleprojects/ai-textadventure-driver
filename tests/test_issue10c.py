@@ -244,3 +244,60 @@ class TestWorldGraphPersistence:
     def test_make_initial_state_empty_graph_when_no_strategy(self, tmp_path):
         state = make_initial_state(strategy_path=tmp_path / "nonexistent.json")
         assert len(state["world_graph"].nodes) == 0
+
+    def test_edge_label_deduplication_across_runs(self, tmp_path):
+        """Merging a pre-seeded label against itself must not grow it."""
+        strategy_file = tmp_path / "strategy.json"
+        # Simulate a strategy that already has a merged label "down/out"
+        strategy_file.write_text(json.dumps({
+            "futile_edges": [],
+            "run_history": [],
+            "entity_verb_outcomes": {},
+            "world_graph": {
+                "nodes": ["Garbage Heap", "Field"],
+                "edges": [["Garbage Heap", "Field", "down/out"]],
+            },
+        }))
+        # Run record also has the merged label (pre-seeded from the same strategy)
+        run_record = {
+            "run_id": "test_dedup",
+            "outcome": "score_improved",
+            "futile_edges": [],
+            "world_graph": {
+                "nodes": ["Garbage Heap", "Field"],
+                "edges": [["Garbage Heap", "Field", "down/out"]],
+            },
+        }
+        merge_run_record(run_record, strategy_file)
+        merged = load_strategy(strategy_file)
+        label = next(lbl for u, v, lbl in merged["world_graph"]["edges"]
+                     if u == "Garbage Heap" and v == "Field")
+        # Must stay "down/out", not grow to "down/out/down/out"
+        assert label == "down/out"
+
+    def test_edge_label_merge_adds_new_direction(self, tmp_path):
+        """A genuinely new direction alias should be appended."""
+        strategy_file = tmp_path / "strategy.json"
+        strategy_file.write_text(json.dumps({
+            "futile_edges": [],
+            "run_history": [],
+            "entity_verb_outcomes": {},
+            "world_graph": {
+                "nodes": ["A", "B"],
+                "edges": [["A", "B", "south"]],
+            },
+        }))
+        run_record = {
+            "run_id": "test_merge",
+            "outcome": "score_improved",
+            "futile_edges": [],
+            "world_graph": {
+                "nodes": ["A", "B"],
+                "edges": [["A", "B", "down"]],
+            },
+        }
+        merge_run_record(run_record, strategy_file)
+        merged = load_strategy(strategy_file)
+        label = next(lbl for u, v, lbl in merged["world_graph"]["edges"]
+                     if u == "A" and v == "B")
+        assert set(label.split("/")) == {"south", "down"}
