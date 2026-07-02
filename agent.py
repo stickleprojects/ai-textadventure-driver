@@ -217,6 +217,10 @@ def _nav_command(state, target, fast=True):
 
 def determine_next_action(state):
     """Returns (action, reason) based on agent priority logic."""
+    if state.get("position_lost"):
+        state["position_lost"] = False
+        return "look", "re-establishing position after lost room extraction"
+
     if state["active_goal"]:
         target_room = state["active_goal"]["room"]
         if state["current_room"] == target_room:
@@ -436,6 +440,10 @@ def process_agent_step(state, child, llm_instance):
     if extracted.get("room"):
         state["current_room"] = _resolve_room_name(state["world_graph"], extracted["room"])
         state.setdefault("visited_rooms", set()).add(state["current_room"])
+    elif action_taken in _DIRECTIONS and not _is_hard_failure(response) and not _is_soft_failure(response):
+        # Movement appeared to succeed but LLM returned no room — position is unknown.
+        # Force a look on the next step to re-establish where we are.
+        state["position_lost"] = True
 
     if "exits" in extracted:
         update_graph(state, state["current_room"], extracted["exits"], previous_room, action_taken)

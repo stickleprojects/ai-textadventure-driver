@@ -1,4 +1,4 @@
-from unittest.mock import patch, PropertyMock
+from unittest.mock import MagicMock, patch, PropertyMock
 
 import pytest
 import networkx as nx
@@ -879,6 +879,52 @@ class TestPendingNpcTasks:
             {"npc": "Denzyl", "task_description": "fetch spear", "wait_command": "wait for denzyl"},
         ]
         assert determine_next_action(state)[0] == "north"
+
+class TestPositionLost:
+    """Bug 60: when LLM returns no room after apparent movement, force look next step."""
+
+    def _state_with_unknown_exit(self):
+        """State where determine_next_action will emit a direction (north) to explore."""
+        import networkx as nx
+        state = make_state()
+        g = nx.DiGraph()
+        g.add_node("Forest")
+        g.add_edge("Forest", "Unknown (north from Forest)", label="north")
+        state["world_graph"] = g
+        state["current_room"] = "Forest"
+        return state
+
+    def test_position_lost_set_when_direction_no_room_no_failure(self):
+        state = self._state_with_unknown_exit()
+        child = MagicMock()
+        with patch("agent.execute_game_command", return_value="You go north and are in a cedar glade."), \
+             patch("agent.extract_knowledge", return_value={"exits": ["east", "south"]}):
+            process_agent_step(state, child, None)
+        assert state.get("position_lost") is True
+
+    def test_position_lost_cleared_and_look_returned(self):
+        state = make_state()
+        state["position_lost"] = True
+        action, reason = determine_next_action(state)
+        assert action == "look"
+        assert state.get("position_lost") is False
+
+    def test_position_not_lost_when_room_extracted(self):
+        state = self._state_with_unknown_exit()
+        child = MagicMock()
+        with patch("agent.execute_game_command", return_value="You go north and are in a cedar glade."), \
+             patch("agent.extract_knowledge", return_value={"room": "cedar glade", "exits": ["south"]}):
+            process_agent_step(state, child, None)
+        assert not state.get("position_lost")
+
+    def test_position_not_lost_on_soft_failure(self):
+        state = self._state_with_unknown_exit()
+        child = MagicMock()
+        with patch("agent.execute_game_command", return_value="You can't go that way."), \
+             patch("agent.extract_knowledge", return_value={}):
+            process_agent_step(state, child, None)
+        assert not state.get("position_lost")
+
 
     def test_config_loads_wait_for_command(self, tmp_path):
         cfg_file = tmp_path / "game.json"

@@ -310,6 +310,7 @@ if __name__ == "__main__":
     parser.add_argument("steps", nargs="?", type=int, default=50, help="Number of game steps (default: 50)")
     parser.add_argument("--config", metavar="PATH", help="Path to game config JSON (default: built-in Knight Orc values)")
     parser.add_argument("--detect", action="store_true", help="Run anomaly detection after the run")
+    parser.add_argument("--review", action="store_true", help="Run LLM log review after detection (implies --detect; requires ANTHROPIC_API_KEY)")
     parser.add_argument("--architect", action="store_true", help="Run architect to produce a fix plan if anomalies found (implies --detect)")
     args = parser.parse_args()
 
@@ -319,12 +320,15 @@ if __name__ == "__main__":
     findings, run_id = run(steps=args.steps, verbose=True)
     print(json.dumps(findings, indent=2))
 
-    if run_id and (args.detect or args.architect):
+    if run_id and (args.detect or args.review or args.architect):
         _scripts_dir = os.path.dirname(os.path.abspath(__file__))
         if _scripts_dir not in sys.path:
             sys.path.insert(0, _scripts_dir)
         from detect_anomalies import detect
         report = detect(run_id, STRATEGY_PATH)
+        if args.review or args.architect:
+            from llm_review import llm_review
+            llm_review(run_id)
         if args.architect and report["anomalies"]:
             from architect import architect
             architect(run_id)
