@@ -81,6 +81,59 @@ def _user_message(run_id, log_table, existing_anomaly_types):
     )
 
 
+def _parse_findings(raw):
+    """Extract a JSON array from the LLM response, handling common wrapping patterns.
+
+    Tries in order:
+    1. Direct parse (clean response)
+    2. Strip markdown code fences (```json ... ```)
+    3. Locate the first '[' and last ']' and parse that substring
+    4. If the response is truncated mid-array, close the last complete object and array
+
+    Returns the list on success, None on failure.
+    """
+    import re as _re
+
+    def _try(text):
+        try:
+            result = json.loads(text)
+            return result if isinstance(result, list) else None
+        except json.JSONDecodeError:
+            return None
+
+    # 1. Direct
+    result = _try(raw)
+    if result is not None:
+        return result
+
+    # 2. Strip markdown fences
+    stripped = _re.sub(r"^```(?:json)?\s*", "", raw, flags=_re.MULTILINE)
+    stripped = _re.sub(r"```\s*$", "", stripped, flags=_re.MULTILINE).strip()
+    result = _try(stripped)
+    if result is not None:
+        return result
+
+    # 3. Extract the outermost [...] span
+    start = raw.find("[")
+    end = raw.rfind("]")
+    if start != -1 and end > start:
+        result = _try(raw[start:end + 1])
+        if result is not None:
+            return result
+
+    # 4. Truncated mid-array — close the last complete object and the array
+    if start != -1:
+        candidate = raw[start:]
+        # Drop any incomplete trailing object (after the last complete '}')
+        last_close = candidate.rfind("}")
+        if last_close != -1:
+            result = _try(candidate[:last_close + 1] + "]")
+            if result is not None:
+                return result
+
+    return None
+
+
 def llm_review(run_id, model=_DEFAULT_MODEL):
     """Run LLM log review for run_id and append findings to anomaly_report.json.
 
@@ -110,7 +163,7 @@ def llm_review(run_id, model=_DEFAULT_MODEL):
     try:
         message = client.messages.create(
             model=model,
-            max_tokens=2048,
+            max_tokens=4096,
             system=_system_prompt(),
             messages=[{"role": "user", "content": _user_message(run_id, log_table, existing_types)}],
         )
@@ -125,13 +178,13 @@ def llm_review(run_id, model=_DEFAULT_MODEL):
         print(f"ERROR: API rejected the request (400): {exc.message}", file=sys.stderr)
         sys.exit(1)
 
+    if message.stop_reason == "max_tokens":
+        print("WARNING: LLM response was truncated (hit max_tokens). Attempting partial parse.", file=sys.stderr)
+
     raw = message.content[0].text.strip()
-    try:
-        findings = json.loads(raw)
-        if not isinstance(findings, list):
-            raise ValueError("expected a JSON array")
-    except (json.JSONDecodeError, ValueError) as exc:
-        print(f"ERROR: LLM returned unparseable output: {exc}\n{raw[:300]}", file=sys.stderr)
+    findings = _parse_findings(raw)
+    if findings is None:
+        print(f"ERROR: LLM returned unparseable output:\n{raw[:500]}", file=sys.stderr)
         sys.exit(1)
 
     # Assign IDs continuing from where detect_anomalies left off
