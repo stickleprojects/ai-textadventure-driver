@@ -1,0 +1,1901 @@
+{
+  "nodes": [
+    "dingy stable",
+    "huge pile of garbage",
+    "trampled field",
+    "jousting field",
+    "dismal fairground in a rowan coppice",
+    "juniper underbrush",
+    "juniper ghostwood",
+    "juniper coppice",
+    "hawthorn underbrush",
+    "hawthorn scrubland",
+    "hawthorn ghostwood",
+    "hawthorn coppice",
+    "blackthorn underbrush",
+    "blackthorn scrubland",
+    "blackthorn ghostwood",
+    "blackthorn glade",
+    "blackthorn grove",
+    "cedar forest",
+    "cedar ghostwood",
+    "cedar glade",
+    "cedar grove",
+    "alder clump",
+    "alder ghostwood",
+    "alder scrubland",
+    "alder underbrush",
+    "elder coppice",
+    "elder ghostwood",
+    "elder scrubland",
+    "elder underbrush",
+    "holly coppice",
+    "holly ghostwood",
+    "holly scrubland",
+    "oak coppice",
+    "oak clump",
+    "holly thicket",
+    "holly heartwood",
+    "holly forest",
+    "holly clump",
+    "elder thicket",
+    "elder heartwood",
+    "elder forest",
+    "elder clump",
+    "alder thicket",
+    "alder heartwood",
+    "alder forest",
+    "holly underbrush",
+    "larch tangle",
+    "larch grove",
+    "larch edgewood",
+    "hazel woodland",
+    "hazel tangle",
+    "hazel grove",
+    "hazel edgewood",
+    "cedar woodland",
+    "cedar tangle",
+    "cedar spinney",
+    "cedar wildwood",
+    "hazel deadwood",
+    "hazel glade",
+    "hazel spinney",
+    "hazel wildwood",
+    "larch deadwood",
+    "larch glade",
+    "larch spinney",
+    "larch wildwood",
+    "whitebeam deadwood",
+    "whitebeam glade",
+    "whitebeam edgewood",
+    "larch woodland",
+    "larch scrubland",
+    "larch ghostwood",
+    "larch coppice",
+    "hazel underbrush",
+    "hazel scrubland",
+    "hazel ghostwood",
+    "hazel coppice",
+    "cedar underbrush",
+    "cedar scrubland",
+    "cedar heartwood",
+    "cedar thicket",
+    "hazel clump",
+    "hazel forest",
+    "hazel heartwood",
+    "hazel thicket",
+    "larch clump",
+    "larch forest",
+    "larch heartwood",
+    "larch thicket",
+    "whitebeam clump",
+    "whitebeam forest",
+    "whitebeam coppice",
+    "larch underbrush",
+    "juniper tangle",
+    "grandstand: a long tent with one side missing",
+    "public bar of the Orc's Head Inn",
+    "Headhunters",
+    "damp cellar",
+    "Headhunters saloon bar of the Orc's Head Inn",
+    "market field",
+    "juniper wildwood",
+    "juniper spinney",
+    "juniper glade",
+    "juniper deadwood",
+    "hawthorn wildwood",
+    "hawthorn spinney",
+    "hawthorn glade",
+    "hawthorn deadwood",
+    "blackthorn wildwood",
+    "blackthorn spinney",
+    "blackthorn tangle",
+    "blackthorn woodland",
+    "hawthorn edgewood",
+    "hawthorn grove",
+    "hawthorn tangle",
+    "hawthorn woodland",
+    "juniper edgewood",
+    "juniper grove",
+    "juniper woodland",
+    "clearing in a rowan edgewood",
+    "rowan grove",
+    "whitebeam ghostwood",
+    "whitebeam grove",
+    "rowan deadwood",
+    "outside a cave in a juniper scrubland",
+    "vast hall of bright cloud"
+  ],
+  "edges": [
+    [
+      "Headhunters",
+      "damp cellar",
+      "down"
+    ],
+    [
+      "Headhunters",
+      "public bar of the Orc's Head Inn",
+      "west"
+    ],
+    [
+      "Headhunters saloon bar of the Orc's Head Inn",
+      "damp cellar",
+      "down"
+    ],
+    [
+      "Headhunters saloon bar of the Orc's Head Inn",
+      "public bar of the Orc's Head Inn",
+      "west"
+    ],
+    [
+      "alder clump",
+      "alder forest",
+      "sw"
+    ],
+    [
+      "alder clump",
+      "alder ghostwood",
+      "south/se/south/se"
+    ],
+    [
+      "alder clump",
+      "cedar grove",
+      "west"
+    ],
+    [
+      "alder forest",
+      "alder clump",
+      "north"
+    ],
+    [
+      "alder forest",
+      "alder ghostwood",
+      "east"
+    ],
+    [
+      "alder forest",
+      "alder heartwood",
+      "south"
+    ],
+    [
+      "alder forest",
+      "cedar tangle",
+      "west"
+    ],
+    [
+      "alder ghostwood",
+      "alder clump",
+      "nw/north/nw/north"
+    ],
+    [
+      "alder ghostwood",
+      "alder forest",
+      "west"
+    ],
+    [
+      "alder ghostwood",
+      "alder heartwood",
+      "sw"
+    ],
+    [
+      "alder ghostwood",
+      "alder scrubland",
+      "south"
+    ],
+    [
+      "alder heartwood",
+      "alder forest",
+      "north"
+    ],
+    [
+      "alder heartwood",
+      "alder scrubland",
+      "east"
+    ],
+    [
+      "alder heartwood",
+      "alder thicket",
+      "south"
+    ],
+    [
+      "alder scrubland",
+      "alder ghostwood",
+      "north"
+    ],
+    [
+      "alder scrubland",
+      "alder heartwood",
+      "west"
+    ],
+    [
+      "alder scrubland",
+      "alder thicket",
+      "sw"
+    ],
+    [
+      "alder scrubland",
+      "alder underbrush",
+      "south"
+    ],
+    [
+      "alder thicket",
+      "alder heartwood",
+      "north"
+    ],
+    [
+      "alder thicket",
+      "alder underbrush",
+      "east"
+    ],
+    [
+      "alder thicket",
+      "elder clump",
+      "south"
+    ],
+    [
+      "alder underbrush",
+      "alder scrubland",
+      "north"
+    ],
+    [
+      "alder underbrush",
+      "alder thicket",
+      "west"
+    ],
+    [
+      "alder underbrush",
+      "elder clump",
+      "sw"
+    ],
+    [
+      "alder underbrush",
+      "elder coppice",
+      "south"
+    ],
+    [
+      "blackthorn ghostwood",
+      "blackthorn glade",
+      "east"
+    ],
+    [
+      "blackthorn ghostwood",
+      "blackthorn scrubland",
+      "south"
+    ],
+    [
+      "blackthorn glade",
+      "blackthorn ghostwood",
+      "west"
+    ],
+    [
+      "blackthorn glade",
+      "blackthorn grove",
+      "east"
+    ],
+    [
+      "blackthorn glade",
+      "blackthorn spinney",
+      "south"
+    ],
+    [
+      "blackthorn glade",
+      "blackthorn tangle",
+      "se"
+    ],
+    [
+      "blackthorn grove",
+      "blackthorn glade",
+      "west"
+    ],
+    [
+      "blackthorn grove",
+      "blackthorn tangle",
+      "south"
+    ],
+    [
+      "blackthorn grove",
+      "cedar forest",
+      "east"
+    ],
+    [
+      "blackthorn grove",
+      "cedar heartwood",
+      "se"
+    ],
+    [
+      "blackthorn scrubland",
+      "blackthorn ghostwood",
+      "north"
+    ],
+    [
+      "blackthorn scrubland",
+      "blackthorn underbrush",
+      "south"
+    ],
+    [
+      "blackthorn spinney",
+      "blackthorn glade",
+      "north"
+    ],
+    [
+      "blackthorn spinney",
+      "blackthorn wildwood",
+      "south"
+    ],
+    [
+      "blackthorn tangle",
+      "blackthorn grove",
+      "north"
+    ],
+    [
+      "blackthorn tangle",
+      "blackthorn woodland",
+      "south"
+    ],
+    [
+      "blackthorn tangle",
+      "cedar heartwood",
+      "east"
+    ],
+    [
+      "blackthorn underbrush",
+      "blackthorn scrubland",
+      "north"
+    ],
+    [
+      "blackthorn underbrush",
+      "hawthorn coppice",
+      "south"
+    ],
+    [
+      "blackthorn wildwood",
+      "blackthorn spinney",
+      "north"
+    ],
+    [
+      "blackthorn wildwood",
+      "hawthorn deadwood",
+      "south"
+    ],
+    [
+      "blackthorn woodland",
+      "blackthorn tangle",
+      "north"
+    ],
+    [
+      "blackthorn woodland",
+      "hawthorn edgewood",
+      "south"
+    ],
+    [
+      "cedar forest",
+      "blackthorn grove",
+      "west"
+    ],
+    [
+      "cedar forest",
+      "cedar ghostwood",
+      "east"
+    ],
+    [
+      "cedar forest",
+      "cedar heartwood",
+      "south"
+    ],
+    [
+      "cedar forest",
+      "cedar scrubland",
+      "se"
+    ],
+    [
+      "cedar ghostwood",
+      "cedar forest",
+      "west"
+    ],
+    [
+      "cedar ghostwood",
+      "cedar glade",
+      "east"
+    ],
+    [
+      "cedar ghostwood",
+      "cedar heartwood",
+      "sw"
+    ],
+    [
+      "cedar ghostwood",
+      "cedar scrubland",
+      "south"
+    ],
+    [
+      "cedar ghostwood",
+      "cedar spinney",
+      "se"
+    ],
+    [
+      "cedar glade",
+      "cedar ghostwood",
+      "west"
+    ],
+    [
+      "cedar glade",
+      "cedar grove",
+      "east"
+    ],
+    [
+      "cedar grove",
+      "alder clump",
+      "east"
+    ],
+    [
+      "cedar grove",
+      "alder forest",
+      "se"
+    ],
+    [
+      "cedar grove",
+      "cedar glade",
+      "west"
+    ],
+    [
+      "cedar grove",
+      "cedar tangle",
+      "south"
+    ],
+    [
+      "cedar heartwood",
+      "blackthorn tangle",
+      "west"
+    ],
+    [
+      "cedar heartwood",
+      "cedar forest",
+      "north"
+    ],
+    [
+      "cedar heartwood",
+      "cedar scrubland",
+      "east"
+    ],
+    [
+      "cedar heartwood",
+      "cedar thicket",
+      "south"
+    ],
+    [
+      "cedar scrubland",
+      "cedar ghostwood",
+      "north"
+    ],
+    [
+      "cedar scrubland",
+      "cedar heartwood",
+      "west"
+    ],
+    [
+      "cedar scrubland",
+      "cedar spinney",
+      "east"
+    ],
+    [
+      "cedar scrubland",
+      "cedar underbrush",
+      "south"
+    ],
+    [
+      "cedar spinney",
+      "cedar scrubland",
+      "west"
+    ],
+    [
+      "cedar spinney",
+      "cedar tangle",
+      "east"
+    ],
+    [
+      "cedar spinney",
+      "cedar wildwood",
+      "south"
+    ],
+    [
+      "cedar tangle",
+      "alder forest",
+      "east"
+    ],
+    [
+      "cedar tangle",
+      "cedar grove",
+      "north"
+    ],
+    [
+      "cedar tangle",
+      "cedar spinney",
+      "west"
+    ],
+    [
+      "cedar tangle",
+      "cedar woodland",
+      "south"
+    ],
+    [
+      "cedar thicket",
+      "cedar heartwood",
+      "north"
+    ],
+    [
+      "cedar thicket",
+      "hazel clump",
+      "south"
+    ],
+    [
+      "cedar underbrush",
+      "cedar scrubland",
+      "north"
+    ],
+    [
+      "cedar underbrush",
+      "hazel coppice",
+      "south"
+    ],
+    [
+      "cedar wildwood",
+      "cedar spinney",
+      "north"
+    ],
+    [
+      "cedar wildwood",
+      "hazel deadwood",
+      "south"
+    ],
+    [
+      "cedar woodland",
+      "cedar tangle",
+      "north"
+    ],
+    [
+      "cedar woodland",
+      "hazel edgewood",
+      "south"
+    ],
+    [
+      "clearing in a rowan edgewood",
+      "juniper woodland",
+      "north"
+    ],
+    [
+      "clearing in a rowan edgewood",
+      "rowan deadwood",
+      "west"
+    ],
+    [
+      "clearing in a rowan edgewood",
+      "rowan grove",
+      "south"
+    ],
+    [
+      "clearing in a rowan edgewood",
+      "whitebeam clump",
+      "east"
+    ],
+    [
+      "damp cellar",
+      "Headhunters",
+      "up"
+    ],
+    [
+      "damp cellar",
+      "Headhunters saloon bar of the Orc's Head Inn",
+      "up"
+    ],
+    [
+      "dingy stable",
+      "huge pile of garbage",
+      "east"
+    ],
+    [
+      "dingy stable",
+      "jousting field",
+      "east"
+    ],
+    [
+      "dismal fairground in a rowan coppice",
+      "jousting field",
+      "south"
+    ],
+    [
+      "dismal fairground in a rowan coppice",
+      "juniper underbrush",
+      "north"
+    ],
+    [
+      "dismal fairground in a rowan coppice",
+      "market field",
+      "west"
+    ],
+    [
+      "dismal fairground in a rowan coppice",
+      "public bar of the Orc's Head Inn",
+      "in/east"
+    ],
+    [
+      "elder clump",
+      "alder thicket",
+      "north"
+    ],
+    [
+      "elder clump",
+      "elder coppice",
+      "east"
+    ],
+    [
+      "elder clump",
+      "elder forest",
+      "south"
+    ],
+    [
+      "elder coppice",
+      "alder underbrush",
+      "north"
+    ],
+    [
+      "elder coppice",
+      "elder clump",
+      "west"
+    ],
+    [
+      "elder coppice",
+      "elder forest",
+      "sw"
+    ],
+    [
+      "elder coppice",
+      "elder ghostwood",
+      "south"
+    ],
+    [
+      "elder forest",
+      "elder clump",
+      "north"
+    ],
+    [
+      "elder forest",
+      "elder ghostwood",
+      "east"
+    ],
+    [
+      "elder forest",
+      "elder heartwood",
+      "south"
+    ],
+    [
+      "elder ghostwood",
+      "elder coppice",
+      "north"
+    ],
+    [
+      "elder ghostwood",
+      "elder forest",
+      "west"
+    ],
+    [
+      "elder ghostwood",
+      "elder heartwood",
+      "sw"
+    ],
+    [
+      "elder ghostwood",
+      "elder scrubland",
+      "south"
+    ],
+    [
+      "elder heartwood",
+      "elder forest",
+      "north"
+    ],
+    [
+      "elder heartwood",
+      "elder scrubland",
+      "east"
+    ],
+    [
+      "elder heartwood",
+      "elder thicket",
+      "south"
+    ],
+    [
+      "elder scrubland",
+      "elder ghostwood",
+      "north"
+    ],
+    [
+      "elder scrubland",
+      "elder heartwood",
+      "west"
+    ],
+    [
+      "elder scrubland",
+      "elder thicket",
+      "sw"
+    ],
+    [
+      "elder scrubland",
+      "elder underbrush",
+      "south"
+    ],
+    [
+      "elder thicket",
+      "elder heartwood",
+      "north"
+    ],
+    [
+      "elder thicket",
+      "elder underbrush",
+      "east"
+    ],
+    [
+      "elder thicket",
+      "holly clump",
+      "south"
+    ],
+    [
+      "elder underbrush",
+      "elder scrubland",
+      "north"
+    ],
+    [
+      "elder underbrush",
+      "elder thicket",
+      "west"
+    ],
+    [
+      "elder underbrush",
+      "holly clump",
+      "sw"
+    ],
+    [
+      "elder underbrush",
+      "holly coppice",
+      "south"
+    ],
+    [
+      "grandstand: a long tent with one side missing",
+      "jousting field",
+      "north"
+    ],
+    [
+      "hawthorn coppice",
+      "blackthorn underbrush",
+      "north"
+    ],
+    [
+      "hawthorn coppice",
+      "hawthorn ghostwood",
+      "south"
+    ],
+    [
+      "hawthorn deadwood",
+      "blackthorn wildwood",
+      "north"
+    ],
+    [
+      "hawthorn deadwood",
+      "hawthorn glade",
+      "south"
+    ],
+    [
+      "hawthorn edgewood",
+      "blackthorn woodland",
+      "north"
+    ],
+    [
+      "hawthorn edgewood",
+      "hawthorn grove",
+      "south"
+    ],
+    [
+      "hawthorn ghostwood",
+      "hawthorn coppice",
+      "north"
+    ],
+    [
+      "hawthorn ghostwood",
+      "hawthorn scrubland",
+      "south"
+    ],
+    [
+      "hawthorn glade",
+      "hawthorn deadwood",
+      "north"
+    ],
+    [
+      "hawthorn glade",
+      "hawthorn spinney",
+      "south"
+    ],
+    [
+      "hawthorn grove",
+      "hawthorn edgewood",
+      "north"
+    ],
+    [
+      "hawthorn grove",
+      "hawthorn tangle",
+      "south"
+    ],
+    [
+      "hawthorn scrubland",
+      "hawthorn ghostwood",
+      "north"
+    ],
+    [
+      "hawthorn scrubland",
+      "hawthorn underbrush",
+      "south"
+    ],
+    [
+      "hawthorn spinney",
+      "hawthorn glade",
+      "north"
+    ],
+    [
+      "hawthorn spinney",
+      "hawthorn wildwood",
+      "south"
+    ],
+    [
+      "hawthorn tangle",
+      "hawthorn grove",
+      "north"
+    ],
+    [
+      "hawthorn tangle",
+      "hawthorn woodland",
+      "south"
+    ],
+    [
+      "hawthorn underbrush",
+      "hawthorn scrubland",
+      "north"
+    ],
+    [
+      "hawthorn underbrush",
+      "juniper coppice",
+      "south"
+    ],
+    [
+      "hawthorn wildwood",
+      "hawthorn spinney",
+      "north"
+    ],
+    [
+      "hawthorn wildwood",
+      "juniper deadwood",
+      "south"
+    ],
+    [
+      "hawthorn woodland",
+      "hawthorn tangle",
+      "north"
+    ],
+    [
+      "hawthorn woodland",
+      "juniper edgewood",
+      "south"
+    ],
+    [
+      "hazel clump",
+      "cedar thicket",
+      "north"
+    ],
+    [
+      "hazel clump",
+      "hazel forest",
+      "south"
+    ],
+    [
+      "hazel coppice",
+      "cedar underbrush",
+      "north"
+    ],
+    [
+      "hazel coppice",
+      "hazel ghostwood",
+      "south"
+    ],
+    [
+      "hazel deadwood",
+      "cedar wildwood",
+      "north"
+    ],
+    [
+      "hazel deadwood",
+      "hazel glade",
+      "south"
+    ],
+    [
+      "hazel edgewood",
+      "cedar woodland",
+      "north"
+    ],
+    [
+      "hazel edgewood",
+      "hazel grove",
+      "south"
+    ],
+    [
+      "hazel forest",
+      "hazel clump",
+      "north"
+    ],
+    [
+      "hazel forest",
+      "hazel heartwood",
+      "south"
+    ],
+    [
+      "hazel ghostwood",
+      "hazel coppice",
+      "north"
+    ],
+    [
+      "hazel ghostwood",
+      "hazel scrubland",
+      "south"
+    ],
+    [
+      "hazel glade",
+      "hazel deadwood",
+      "north"
+    ],
+    [
+      "hazel glade",
+      "hazel spinney",
+      "south"
+    ],
+    [
+      "hazel grove",
+      "hazel edgewood",
+      "north"
+    ],
+    [
+      "hazel grove",
+      "hazel tangle",
+      "south"
+    ],
+    [
+      "hazel heartwood",
+      "hazel forest",
+      "north"
+    ],
+    [
+      "hazel heartwood",
+      "hazel thicket",
+      "south"
+    ],
+    [
+      "hazel scrubland",
+      "hazel ghostwood",
+      "north"
+    ],
+    [
+      "hazel scrubland",
+      "hazel underbrush",
+      "south"
+    ],
+    [
+      "hazel spinney",
+      "hazel glade",
+      "north"
+    ],
+    [
+      "hazel spinney",
+      "hazel wildwood",
+      "south"
+    ],
+    [
+      "hazel tangle",
+      "hazel grove",
+      "north"
+    ],
+    [
+      "hazel tangle",
+      "hazel woodland",
+      "south"
+    ],
+    [
+      "hazel thicket",
+      "hazel heartwood",
+      "north"
+    ],
+    [
+      "hazel thicket",
+      "larch clump",
+      "south"
+    ],
+    [
+      "hazel underbrush",
+      "hazel scrubland",
+      "north"
+    ],
+    [
+      "hazel underbrush",
+      "larch coppice",
+      "south"
+    ],
+    [
+      "hazel wildwood",
+      "hazel spinney",
+      "north"
+    ],
+    [
+      "hazel wildwood",
+      "larch deadwood",
+      "south"
+    ],
+    [
+      "hazel woodland",
+      "hazel tangle",
+      "north"
+    ],
+    [
+      "hazel woodland",
+      "larch edgewood",
+      "south"
+    ],
+    [
+      "holly clump",
+      "elder thicket",
+      "north"
+    ],
+    [
+      "holly clump",
+      "holly coppice",
+      "east"
+    ],
+    [
+      "holly clump",
+      "holly forest",
+      "south"
+    ],
+    [
+      "holly clump",
+      "larch grove",
+      "west"
+    ],
+    [
+      "holly coppice",
+      "elder underbrush",
+      "north"
+    ],
+    [
+      "holly coppice",
+      "holly clump",
+      "west"
+    ],
+    [
+      "holly coppice",
+      "holly forest",
+      "sw"
+    ],
+    [
+      "holly coppice",
+      "holly ghostwood",
+      "south"
+    ],
+    [
+      "holly forest",
+      "holly clump",
+      "north"
+    ],
+    [
+      "holly forest",
+      "holly ghostwood",
+      "east"
+    ],
+    [
+      "holly forest",
+      "holly heartwood",
+      "south"
+    ],
+    [
+      "holly forest",
+      "larch tangle",
+      "west"
+    ],
+    [
+      "holly ghostwood",
+      "holly coppice",
+      "north"
+    ],
+    [
+      "holly ghostwood",
+      "holly forest",
+      "west"
+    ],
+    [
+      "holly ghostwood",
+      "holly heartwood",
+      "sw"
+    ],
+    [
+      "holly ghostwood",
+      "holly scrubland",
+      "south"
+    ],
+    [
+      "holly heartwood",
+      "holly forest",
+      "north"
+    ],
+    [
+      "holly heartwood",
+      "holly scrubland",
+      "east"
+    ],
+    [
+      "holly heartwood",
+      "holly thicket",
+      "south"
+    ],
+    [
+      "holly heartwood",
+      "larch woodland",
+      "west"
+    ],
+    [
+      "holly scrubland",
+      "holly forest",
+      "nw"
+    ],
+    [
+      "holly scrubland",
+      "holly ghostwood",
+      "north"
+    ],
+    [
+      "holly scrubland",
+      "holly heartwood",
+      "west"
+    ],
+    [
+      "holly scrubland",
+      "holly thicket",
+      "sw"
+    ],
+    [
+      "holly scrubland",
+      "oak coppice",
+      "south"
+    ],
+    [
+      "holly thicket",
+      "holly heartwood",
+      "north"
+    ],
+    [
+      "holly thicket",
+      "holly underbrush",
+      "east"
+    ],
+    [
+      "holly thicket",
+      "oak clump",
+      "south"
+    ],
+    [
+      "holly thicket",
+      "whitebeam edgewood",
+      "west"
+    ],
+    [
+      "holly underbrush",
+      "holly scrubland",
+      "north"
+    ],
+    [
+      "holly underbrush",
+      "holly thicket",
+      "west"
+    ],
+    [
+      "huge pile of garbage",
+      "trampled field",
+      "down/down/out"
+    ],
+    [
+      "jousting field",
+      "dingy stable",
+      "west"
+    ],
+    [
+      "jousting field",
+      "dismal fairground in a rowan coppice",
+      "north"
+    ],
+    [
+      "jousting field",
+      "grandstand: a long tent with one side missing",
+      "south"
+    ],
+    [
+      "jousting field",
+      "trampled field",
+      "east"
+    ],
+    [
+      "juniper coppice",
+      "hawthorn underbrush",
+      "north"
+    ],
+    [
+      "juniper coppice",
+      "juniper ghostwood",
+      "south"
+    ],
+    [
+      "juniper deadwood",
+      "hawthorn wildwood",
+      "north"
+    ],
+    [
+      "juniper deadwood",
+      "juniper glade",
+      "south"
+    ],
+    [
+      "juniper edgewood",
+      "hawthorn woodland",
+      "north"
+    ],
+    [
+      "juniper edgewood",
+      "juniper grove",
+      "south"
+    ],
+    [
+      "juniper ghostwood",
+      "juniper coppice",
+      "north"
+    ],
+    [
+      "juniper ghostwood",
+      "juniper glade",
+      "east"
+    ],
+    [
+      "juniper ghostwood",
+      "juniper underbrush",
+      "south"
+    ],
+    [
+      "juniper glade",
+      "juniper deadwood",
+      "north"
+    ],
+    [
+      "juniper glade",
+      "juniper ghostwood",
+      "west"
+    ],
+    [
+      "juniper glade",
+      "juniper grove",
+      "east"
+    ],
+    [
+      "juniper glade",
+      "juniper spinney",
+      "south"
+    ],
+    [
+      "juniper grove",
+      "juniper edgewood",
+      "north"
+    ],
+    [
+      "juniper grove",
+      "juniper glade",
+      "west"
+    ],
+    [
+      "juniper grove",
+      "juniper tangle",
+      "south"
+    ],
+    [
+      "juniper grove",
+      "larch forest",
+      "east"
+    ],
+    [
+      "juniper grove",
+      "vast hall of bright cloud",
+      "up"
+    ],
+    [
+      "juniper spinney",
+      "juniper glade",
+      "north"
+    ],
+    [
+      "juniper spinney",
+      "juniper tangle",
+      "east"
+    ],
+    [
+      "juniper spinney",
+      "juniper wildwood",
+      "south"
+    ],
+    [
+      "juniper spinney",
+      "outside a cave in a juniper scrubland",
+      "west"
+    ],
+    [
+      "juniper tangle",
+      "juniper grove",
+      "north"
+    ],
+    [
+      "juniper tangle",
+      "juniper spinney",
+      "west"
+    ],
+    [
+      "juniper tangle",
+      "juniper woodland",
+      "south"
+    ],
+    [
+      "juniper tangle",
+      "larch heartwood",
+      "east"
+    ],
+    [
+      "juniper underbrush",
+      "dismal fairground in a rowan coppice",
+      "south"
+    ],
+    [
+      "juniper underbrush",
+      "juniper ghostwood",
+      "north"
+    ],
+    [
+      "juniper underbrush",
+      "juniper wildwood",
+      "east"
+    ],
+    [
+      "juniper wildwood",
+      "juniper spinney",
+      "north"
+    ],
+    [
+      "juniper wildwood",
+      "juniper underbrush",
+      "west"
+    ],
+    [
+      "juniper wildwood",
+      "juniper woodland",
+      "east"
+    ],
+    [
+      "juniper wildwood",
+      "rowan deadwood",
+      "south"
+    ],
+    [
+      "juniper woodland",
+      "clearing in a rowan edgewood",
+      "south"
+    ],
+    [
+      "juniper woodland",
+      "juniper tangle",
+      "north"
+    ],
+    [
+      "juniper woodland",
+      "juniper wildwood",
+      "west"
+    ],
+    [
+      "juniper woodland",
+      "larch thicket",
+      "east"
+    ],
+    [
+      "larch clump",
+      "hazel thicket",
+      "north"
+    ],
+    [
+      "larch clump",
+      "larch forest",
+      "south"
+    ],
+    [
+      "larch coppice",
+      "hazel underbrush",
+      "north"
+    ],
+    [
+      "larch coppice",
+      "larch ghostwood",
+      "south"
+    ],
+    [
+      "larch deadwood",
+      "hazel wildwood",
+      "north"
+    ],
+    [
+      "larch deadwood",
+      "larch glade",
+      "south"
+    ],
+    [
+      "larch edgewood",
+      "hazel woodland",
+      "north"
+    ],
+    [
+      "larch edgewood",
+      "larch grove",
+      "south"
+    ],
+    [
+      "larch forest",
+      "juniper grove",
+      "west"
+    ],
+    [
+      "larch forest",
+      "larch clump",
+      "north"
+    ],
+    [
+      "larch forest",
+      "larch ghostwood",
+      "east"
+    ],
+    [
+      "larch forest",
+      "larch heartwood",
+      "south"
+    ],
+    [
+      "larch ghostwood",
+      "larch coppice",
+      "north"
+    ],
+    [
+      "larch ghostwood",
+      "larch forest",
+      "west"
+    ],
+    [
+      "larch ghostwood",
+      "larch glade",
+      "east"
+    ],
+    [
+      "larch ghostwood",
+      "larch scrubland",
+      "south"
+    ],
+    [
+      "larch glade",
+      "larch deadwood",
+      "north"
+    ],
+    [
+      "larch glade",
+      "larch ghostwood",
+      "west"
+    ],
+    [
+      "larch glade",
+      "larch grove",
+      "east"
+    ],
+    [
+      "larch glade",
+      "larch spinney",
+      "south"
+    ],
+    [
+      "larch grove",
+      "holly clump",
+      "east"
+    ],
+    [
+      "larch grove",
+      "larch edgewood",
+      "north"
+    ],
+    [
+      "larch grove",
+      "larch glade",
+      "west"
+    ],
+    [
+      "larch grove",
+      "larch tangle",
+      "south"
+    ],
+    [
+      "larch heartwood",
+      "juniper tangle",
+      "west"
+    ],
+    [
+      "larch heartwood",
+      "larch forest",
+      "north"
+    ],
+    [
+      "larch heartwood",
+      "larch scrubland",
+      "east"
+    ],
+    [
+      "larch heartwood",
+      "larch thicket",
+      "south"
+    ],
+    [
+      "larch scrubland",
+      "larch ghostwood",
+      "north"
+    ],
+    [
+      "larch scrubland",
+      "larch heartwood",
+      "west"
+    ],
+    [
+      "larch scrubland",
+      "larch spinney",
+      "east"
+    ],
+    [
+      "larch scrubland",
+      "larch underbrush",
+      "south"
+    ],
+    [
+      "larch spinney",
+      "larch glade",
+      "north"
+    ],
+    [
+      "larch spinney",
+      "larch scrubland",
+      "west"
+    ],
+    [
+      "larch spinney",
+      "larch tangle",
+      "east"
+    ],
+    [
+      "larch spinney",
+      "larch wildwood",
+      "south"
+    ],
+    [
+      "larch tangle",
+      "holly forest",
+      "east"
+    ],
+    [
+      "larch tangle",
+      "larch grove",
+      "north"
+    ],
+    [
+      "larch tangle",
+      "larch spinney",
+      "west"
+    ],
+    [
+      "larch tangle",
+      "larch woodland",
+      "south"
+    ],
+    [
+      "larch thicket",
+      "juniper woodland",
+      "west"
+    ],
+    [
+      "larch thicket",
+      "larch heartwood",
+      "north"
+    ],
+    [
+      "larch thicket",
+      "larch underbrush",
+      "east"
+    ],
+    [
+      "larch thicket",
+      "whitebeam clump",
+      "south"
+    ],
+    [
+      "larch underbrush",
+      "larch scrubland",
+      "north"
+    ],
+    [
+      "larch underbrush",
+      "larch thicket",
+      "west"
+    ],
+    [
+      "larch underbrush",
+      "larch wildwood",
+      "east"
+    ],
+    [
+      "larch underbrush",
+      "whitebeam coppice",
+      "south"
+    ],
+    [
+      "larch wildwood",
+      "larch spinney",
+      "north"
+    ],
+    [
+      "larch wildwood",
+      "larch underbrush",
+      "west"
+    ],
+    [
+      "larch wildwood",
+      "larch woodland",
+      "east"
+    ],
+    [
+      "larch wildwood",
+      "whitebeam deadwood",
+      "south"
+    ],
+    [
+      "larch woodland",
+      "holly heartwood",
+      "east"
+    ],
+    [
+      "larch woodland",
+      "larch tangle",
+      "north"
+    ],
+    [
+      "larch woodland",
+      "larch wildwood",
+      "west"
+    ],
+    [
+      "larch woodland",
+      "whitebeam edgewood",
+      "south"
+    ],
+    [
+      "market field",
+      "dismal fairground in a rowan coppice",
+      "east"
+    ],
+    [
+      "oak clump",
+      "holly thicket",
+      "north"
+    ],
+    [
+      "oak clump",
+      "oak coppice",
+      "east"
+    ],
+    [
+      "oak coppice",
+      "holly scrubland",
+      "north"
+    ],
+    [
+      "oak coppice",
+      "oak clump",
+      "west"
+    ],
+    [
+      "outside a cave in a juniper scrubland",
+      "juniper ghostwood",
+      "north"
+    ],
+    [
+      "outside a cave in a juniper scrubland",
+      "juniper spinney",
+      "east"
+    ],
+    [
+      "public bar of the Orc's Head Inn",
+      "Headhunters",
+      "east"
+    ],
+    [
+      "public bar of the Orc's Head Inn",
+      "dismal fairground in a rowan coppice",
+      "west/out"
+    ],
+    [
+      "rowan deadwood",
+      "clearing in a rowan edgewood",
+      "east"
+    ],
+    [
+      "rowan deadwood",
+      "juniper wildwood",
+      "north"
+    ],
+    [
+      "rowan grove",
+      "clearing in a rowan edgewood",
+      "north"
+    ],
+    [
+      "rowan grove",
+      "whitebeam clump",
+      "ne"
+    ],
+    [
+      "trampled field",
+      "jousting field",
+      "west"
+    ],
+    [
+      "whitebeam clump",
+      "clearing in a rowan edgewood",
+      "west"
+    ],
+    [
+      "whitebeam clump",
+      "larch thicket",
+      "north"
+    ],
+    [
+      "whitebeam clump",
+      "whitebeam coppice",
+      "east"
+    ],
+    [
+      "whitebeam clump",
+      "whitebeam forest",
+      "south"
+    ],
+    [
+      "whitebeam coppice",
+      "larch underbrush",
+      "north"
+    ],
+    [
+      "whitebeam coppice",
+      "whitebeam clump",
+      "west"
+    ],
+    [
+      "whitebeam coppice",
+      "whitebeam deadwood",
+      "east"
+    ],
+    [
+      "whitebeam coppice",
+      "whitebeam ghostwood",
+      "south"
+    ],
+    [
+      "whitebeam deadwood",
+      "larch wildwood",
+      "north"
+    ],
+    [
+      "whitebeam deadwood",
+      "whitebeam coppice",
+      "west"
+    ],
+    [
+      "whitebeam deadwood",
+      "whitebeam edgewood",
+      "east"
+    ],
+    [
+      "whitebeam deadwood",
+      "whitebeam glade",
+      "south"
+    ],
+    [
+      "whitebeam edgewood",
+      "holly thicket",
+      "east"
+    ],
+    [
+      "whitebeam edgewood",
+      "larch woodland",
+      "north"
+    ],
+    [
+      "whitebeam edgewood",
+      "whitebeam deadwood",
+      "west"
+    ],
+    [
+      "whitebeam edgewood",
+      "whitebeam grove",
+      "south"
+    ],
+    [
+      "whitebeam forest",
+      "whitebeam clump",
+      "north"
+    ],
+    [
+      "whitebeam forest",
+      "whitebeam coppice",
+      "ne"
+    ],
+    [
+      "whitebeam ghostwood",
+      "whitebeam coppice",
+      "north"
+    ],
+    [
+      "whitebeam ghostwood",
+      "whitebeam deadwood",
+      "ne"
+    ],
+    [
+      "whitebeam glade",
+      "whitebeam deadwood",
+      "north"
+    ],
+    [
+      "whitebeam glade",
+      "whitebeam edgewood",
+      "ne"
+    ],
+    [
+      "whitebeam grove",
+      "holly thicket",
+      "ne"
+    ],
+    [
+      "whitebeam grove",
+      "whitebeam edgewood",
+      "north"
+    ]
+  ]
+}

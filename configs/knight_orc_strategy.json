@@ -21,11 +21,55 @@
       "up"
     ],
     [
+      "cedar scrubland",
+      "down"
+    ],
+    [
+      "cedar scrubland",
+      "up"
+    ],
+    [
+      "cedar spinney",
+      "north"
+    ],
+    [
+      "clearing in a rowan edgewood",
+      "down"
+    ],
+    [
+      "clearing in a rowan edgewood",
+      "up"
+    ],
+    [
       "dismal fairground in a rowan coppice",
       "down"
     ],
     [
       "dismal fairground in a rowan coppice",
+      "up"
+    ],
+    [
+      "holly clump",
+      "down"
+    ],
+    [
+      "holly clump",
+      "up"
+    ],
+    [
+      "holly heartwood",
+      "down"
+    ],
+    [
+      "holly heartwood",
+      "up"
+    ],
+    [
+      "holly thicket",
+      "down"
+    ],
+    [
+      "holly thicket",
       "up"
     ],
     [
@@ -37,8 +81,112 @@
       "se"
     ],
     [
+      "juniper woodland",
+      "down"
+    ],
+    [
+      "juniper woodland",
+      "up"
+    ],
+    [
+      "larch forest",
+      "down"
+    ],
+    [
+      "larch forest",
+      "up"
+    ],
+    [
+      "larch ghostwood",
+      "down"
+    ],
+    [
+      "larch ghostwood",
+      "up"
+    ],
+    [
+      "larch glade",
+      "down"
+    ],
+    [
+      "larch glade",
+      "up"
+    ],
+    [
+      "larch grove",
+      "down"
+    ],
+    [
+      "larch grove",
+      "up"
+    ],
+    [
+      "larch thicket",
+      "down"
+    ],
+    [
+      "larch thicket",
+      "up"
+    ],
+    [
+      "larch underbrush",
+      "down"
+    ],
+    [
+      "larch underbrush",
+      "up"
+    ],
+    [
+      "larch wildwood",
+      "down"
+    ],
+    [
+      "larch wildwood",
+      "up"
+    ],
+    [
+      "larch woodland",
+      "down"
+    ],
+    [
+      "larch woodland",
+      "up"
+    ],
+    [
       "pile of garbage",
       "north"
+    ],
+    [
+      "whitebeam clump",
+      "down"
+    ],
+    [
+      "whitebeam clump",
+      "up"
+    ],
+    [
+      "whitebeam coppice",
+      "down"
+    ],
+    [
+      "whitebeam coppice",
+      "up"
+    ],
+    [
+      "whitebeam deadwood",
+      "down"
+    ],
+    [
+      "whitebeam deadwood",
+      "up"
+    ],
+    [
+      "whitebeam edgewood",
+      "down"
+    ],
+    [
+      "whitebeam edgewood",
+      "up"
     ]
   ],
   "run_history": [
@@ -175,6 +323,16 @@
     {
       "run_id": "watch_20260702_141020",
       "outcome": "ambiguous",
+      "final_score": null
+    },
+    {
+      "run_id": "watch_20260702_152816",
+      "outcome": "ambiguous",
+      "final_score": null
+    },
+    {
+      "run_id": "watch_20260702_154524",
+      "outcome": "game_ended",
       "final_score": null
     }
   ]
