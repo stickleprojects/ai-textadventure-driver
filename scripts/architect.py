@@ -136,29 +136,49 @@ def architect(run_id, anomaly_id=None, model="claude-opus-4-8"):
     files = _pick_files(anomaly["type"])
     sources = _read_sources(files)
 
-    client = anthropic.Anthropic()
+    api_key = os.environ.get("ANTHROPIC_API_KEY")
+    if not api_key:
+        print("ERROR: ANTHROPIC_API_KEY is not set in the environment.", file=sys.stderr)
+        sys.exit(1)
+
+    client = anthropic.Anthropic(api_key=api_key)
     print(f"Calling {model} for anomaly {anomaly['id']} ({anomaly['type']}) …")
-    message = client.messages.create(
-        model=model,
-        max_tokens=1024,
-        system=_SYSTEM_PROMPT,
-        messages=[{"role": "user", "content": _user_message(anomaly, sources)}],
-    )
+    try:
+        message = client.messages.create(
+            model=model,
+            max_tokens=1024,
+            system=_SYSTEM_PROMPT,
+            messages=[{"role": "user", "content": _user_message(anomaly, sources)}],
+        )
+    except anthropic.AuthenticationError:
+        print(
+            "ERROR: Anthropic API key was rejected (401).\n"
+            "Check ANTHROPIC_API_KEY — watch for stray characters from terminal paste (e.g. '[[200~' prefix).",
+            file=sys.stderr,
+        )
+        sys.exit(1)
+    except anthropic.BadRequestError as exc:
+        print(f"ERROR: API rejected the request (400): {exc.message}", file=sys.stderr)
+        sys.exit(1)
+    except anthropic.APIStatusError as exc:
+        print(f"ERROR: API returned {exc.status_code}: {exc.message}", file=sys.stderr)
+        sys.exit(1)
+
     raw = message.content[0].text.strip()
 
     try:
         plan = json.loads(raw)
-    except json.JSONDecodeError as exc:
+    except json.JSONDecodeError:
         print(f"ERROR: model returned non-JSON:\n{raw}", file=sys.stderr)
         sys.exit(1)
 
-    out_path = ORCHESTRATOR_DIR / run_id / "fix_plan.json"
+    out_path = (ORCHESTRATOR_DIR / run_id / "fix_plan.json").resolve()
     out_path.write_text(json.dumps(plan, indent=2))
     print(f"Wrote {out_path}")
     print(f"Root cause: {plan.get('root_cause_hypothesis', '?')}")
     print(f"Files:      {plan.get('target_files', [])}")
     print()
-    print("Review fix_plan.json before passing to the Dev stage.")
+    print(f"Review {out_path} before passing to the Dev stage.")
 
 
 def main():

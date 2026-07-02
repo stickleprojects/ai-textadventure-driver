@@ -189,9 +189,14 @@ def get_next_move_to_target(state, target_room):
 
 
 def _nav_command(state, target, fast=True):
-    """Return a navigation command using the game's native nav if configured, else graph-based."""
+    """Return a navigation command using the game's native nav if configured, else graph-based.
+
+    Fast/full nav templates are only used when the target is in visited_rooms —
+    the game only accepts 'run to X' / 'go to X' for rooms it has already seen
+    the player enter. Unvisited targets fall back to graph-based step navigation.
+    """
     template = config.fast_nav_command if fast else config.full_nav_command
-    if template:
+    if template and target in state.get("visited_rooms", set()):
         return template.format(target=target)
     return get_next_move_to_target(state, target)
 

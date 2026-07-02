@@ -737,12 +737,20 @@ class TestFutileEdgesMarkedOnStep:
 
 class TestNavCommand:
     def test_fast_template_used_when_configured(self):
-        state = make_state(current_room="Hall")
+        state = make_state(current_room="Hall", visited_rooms={"Courtyard"})
         with patch.object(config, "fast_nav_command", "run to {target}"):
             assert _nav_command(state, "Courtyard", fast=True) == "run to Courtyard"
 
-    def test_full_template_used_when_configured(self):
+    def test_fast_template_not_used_for_unvisited_room(self):
         state = make_state(current_room="Hall")
+        state["world_graph"].add_node("Hall")
+        state["world_graph"].add_node("Courtyard")
+        state["world_graph"].add_edge("Hall", "Courtyard", label="north")
+        with patch.object(config, "fast_nav_command", "run to {target}"):
+            assert _nav_command(state, "Courtyard", fast=True) == "north"
+
+    def test_full_template_used_when_configured(self):
+        state = make_state(current_room="Hall", visited_rooms={"Courtyard"})
         with patch.object(config, "full_nav_command", "go to {target}"):
             assert _nav_command(state, "Courtyard", fast=False) == "go to Courtyard"
 
@@ -772,6 +780,7 @@ class TestActiveGoalNavigation:
             inventory=["key"],
             active_goal={"room": "Courtyard", "target": "door", "solution": "key"},
             world_graph=g,
+            visited_rooms={"Courtyard"},
         )
 
     def test_active_goal_emits_fast_nav_when_configured(self):
