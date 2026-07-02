@@ -302,6 +302,21 @@ class TestProcessAgentStepOutcomes:
         assert state["known_entities"]["wall"]["verb_outcomes"].get("take") == "invalid"
         assert state["current_inspection"]["target"] is None
 
+    def test_take_scenery_clears_inspection(self, stub_child):
+        # Bug 58: "probably just scenery" was not in hard_failure_patterns so take
+        # was recorded as succeeded and the full inspect sequence ran on scenery items.
+        import re
+        state = make_state(uninspected_objects=["grass"])
+        state["known_entities"]["grass"] = {"status": "discovered", "location": "Hall", "verb_outcomes": {}}
+        scenery_pattern = re.compile("probably just scenery", re.IGNORECASE)
+        with patch("agent.execute_game_command", return_value="That's probably just scenery."), \
+             patch("agent.extract_knowledge", return_value={}), \
+             patch.object(config, "hard_failure_pattern", scenery_pattern), \
+             patch.object(config, "failure_pattern", scenery_pattern):
+            process_agent_step(state, stub_child, None)
+        assert state["known_entities"]["grass"]["verb_outcomes"].get("take") == "invalid"
+        assert state["current_inspection"]["target"] is None
+
     def test_take_success_records_succeeded(self, stub_child):
         state = make_state(uninspected_objects=["key"])
         state["known_entities"]["key"] = {"status": "discovered", "location": "Hall", "verb_outcomes": {}}

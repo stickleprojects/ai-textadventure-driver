@@ -60,7 +60,8 @@
         "Yeuch!",
         "What a peculiar idea.",
         "Cannot drink",
-        "Strange concept"
+        "Strange concept",
+        "probably just scenery"
     ],
     "soft_failure_patterns": [
         "right now",
