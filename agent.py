@@ -1,4 +1,5 @@
 import re
+from collections import Counter
 from datetime import datetime
 
 import networkx as nx
@@ -274,26 +275,37 @@ def determine_next_action(state):
             direction = data["label"].split("/")[0]
             return direction, f"exploring exit '{direction}' from {state['current_room']}"
 
-    # Current room fully explored — navigate to nearest room with an Unknown exit.
+    # Current room fully explored — navigate to a room with an Unknown exit.
+    # Score by path_len + recent-direction penalty to avoid chasing the same diagonal
+    # indefinitely (e.g. alternating sw/east across a grid of similar rooms).
+    recent_dir_freq = Counter(
+        e["action"] for e in state["game_log"][-20:]
+        if e.get("action") in _DIRECTIONS
+    )
     best_target = None
-    best_len = float("inf")
+    best_score = float("inf")
     for node in state["world_graph"].nodes:
         if node.startswith("Unknown"):
             continue
-        if not any(
-            v.startswith("Unknown") and not d.get("futile")
-            for _, v, d in state["world_graph"].edges(node, data=True)
-        ):
+        unknown_dirs = [
+            data["label"].split("/")[0]
+            for _, v, data in state["world_graph"].edges(node, data=True)
+            if v.startswith("Unknown") and not data.get("futile")
+        ]
+        if not unknown_dirs:
             continue
         try:
             path_len = nx.shortest_path_length(
                 state["world_graph"], state["current_room"], node
             )
-            if path_len < best_len:
-                best_len = path_len
-                best_target = node
         except (nx.NetworkXNoPath, nx.NodeNotFound):
             continue
+        # Penalise rooms whose Unknown exits are in overused directions; prefer fresh ones
+        min_dir_freq = min(recent_dir_freq.get(d, 0) for d in unknown_dirs)
+        score = path_len + min_dir_freq
+        if score < best_score:
+            best_score = score
+            best_target = node
     if best_target:
         move = _nav_command(state, best_target, fast=True)
         if move:
@@ -446,7 +458,12 @@ def process_agent_step(state, child, llm_instance):
         state["position_lost"] = True
 
     if "exits" in extracted:
-        update_graph(state, state["current_room"], extracted["exits"], previous_room, action_taken)
+        resp_lower = response.lower()
+        # The LLM infers "up"/"down" from "Exits lead in all directions" even when those
+        # exits don't exist. Only trust them when literally present in the response text.
+        exits = [e for e in extracted["exits"] if e not in ("up", "down") or e in resp_lower]
+        extracted["exits"] = exits
+        update_graph(state, state["current_room"], exits, previous_room, action_taken)
 
     # If a goal action hard-failed, drop the anomaly so it is not re-queued
     if _is_hard_failure(response):
