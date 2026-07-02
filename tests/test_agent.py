@@ -6,12 +6,14 @@ import networkx as nx
 from agent import (
     _compute_utility,
     _detect_loop,
+    _is_death,
     _is_failure_response,
     _is_hard_failure,
     _is_soft_failure,
     _mark_edge_futile,
     _nav_command,
     _parse_inspection_action,
+    _parse_inventory_response,
     _record_verb_outcome,
     _snapshot_state,
     determine_next_action,
@@ -829,9 +831,25 @@ class TestActiveGoalNavigation:
             visited_rooms={"Courtyard"},
         )
 
-    def test_active_goal_emits_fast_nav_when_configured(self):
+    def test_active_goal_emits_fast_nav_when_configured_and_visited(self):
+        state = self._goal_state()
+        state["visited_rooms"] = {"Courtyard"}
         with patch.object(config, "fast_nav_command", "run to {target}"):
             assert determine_next_action(self._goal_state())[0] == "run to Courtyard"
+
+    def test_active_goal_uses_graph_nav_for_unvisited_room(self):
+        g = nx.DiGraph()
+        g.add_node("Hall")
+        g.add_node("Courtyard")
+        g.add_edge("Hall", "Courtyard", label="north")
+        state = make_state(
+            current_room="Hall",
+            inventory=["key"],
+            active_goal={"room": "Courtyard", "target": "door", "solution": "key"},
+            world_graph=g,
+        )
+        with patch.object(config, "fast_nav_command", "run to {target}"):
+            assert determine_next_action(state)[0] == "north"
 
     def test_active_goal_falls_back_to_graph_step_when_no_template(self):
         with patch.object(config, "fast_nav_command", None):
@@ -880,6 +898,7 @@ class TestPendingNpcTasks:
         ]
         assert determine_next_action(state)[0] == "north"
 
+
 class TestPositionLost:
     """Bug 60: when LLM returns no room after apparent movement, force look next step."""
 
@@ -926,6 +945,7 @@ class TestPositionLost:
         assert not state.get("position_lost")
 
 
+
     def test_config_loads_wait_for_command(self, tmp_path):
         cfg_file = tmp_path / "game.json"
         cfg_file.write_text('{"npc_commands": {"wait_for_command": "wait for {npc}"}}')
@@ -933,3 +953,73 @@ class TestPositionLost:
         cfg = GameConfig()
         cfg.load_from_file(cfg_file)
         assert cfg.wait_for_command == "wait for {npc}"
+
+
+# ── Death detection ────────────────────────────────────────────────────────────
+
+class TestDeathDetection:
+    @pytest.mark.parametrize("text", [
+        "You are dead.",
+        "You have died.",
+        "You were killed by the knight.",
+        "killed in action",
+    ])
+    def test_is_death_detects_death_phrases(self, text):
+        assert _is_death(text)
+
+    @pytest.mark.parametrize("text", [
+        "You take the sword.",
+        "You are in the courtyard.",
+        "Nothing happens.",
+    ])
+    def test_is_death_ignores_non_death(self, text):
+        assert not _is_death(text)
+
+    def test_parse_inventory_response_items(self):
+        text = "You are carrying: a sword, a lantern and a rope."
+        result = _parse_inventory_response(text)
+        assert result == ["a sword", "a lantern", "a rope"]
+
+    def test_parse_inventory_response_nothing(self):
+        text = "You are not carrying anything."
+        result = _parse_inventory_response(text)
+        assert result == []
+
+    def test_parse_inventory_response_no_match_returns_none(self):
+        assert _parse_inventory_response("You are in a dark room.") is None
+
+    def test_determine_next_action_returns_inventory_when_recheck_set(self):
+        state = make_state()
+        state["recheck_inventory"] = True
+        action, reason = determine_next_action(state)
+        assert action == "inventory"
+        assert "death" in reason.lower() or "inventory" in reason.lower()
+
+    def test_recheck_inventory_clears_after_parse(self):
+        state = make_state()
+        state["recheck_inventory"] = True
+        state["inventory"] = ["sword"]
+        state["known_entities"]["sword"] = {"status": "held", "location": None, "verb_outcomes": {}}
+        response_text = "You are not carrying anything."
+
+        with patch("agent.extract_knowledge", return_value={}), \
+             patch("agent.execute_game_command", return_value=response_text):
+            process_agent_step(state, child=object(), llm_instance=None)
+
+        assert state["recheck_inventory"] is False
+        assert state["inventory"] == []
+        assert state["known_entities"]["sword"]["status"] == "discovered"
+
+    def test_recheck_inventory_updates_items_to_held(self):
+        state = make_state()
+        state["recheck_inventory"] = True
+        state["inventory"] = []
+        state["known_entities"]["lantern"] = {"status": "discovered", "location": None, "verb_outcomes": {}}
+        response_text = "You are carrying: a lantern."
+
+        with patch("agent.extract_knowledge", return_value={}), \
+             patch("agent.execute_game_command", return_value=response_text):
+            process_agent_step(state, child=object(), llm_instance=None)
+
+        assert "a lantern" in state["inventory"] or "lantern" in state["inventory"]
+        assert state["recheck_inventory"] is False

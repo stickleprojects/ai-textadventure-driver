@@ -76,6 +76,28 @@ def _is_failure_response(text):
     return bool(config.failure_pattern.search(text))
 
 
+def _is_death(text):
+    return bool(config.death_pattern.search(text))
+
+
+_CARRYING_RE = re.compile(r"carrying[:\s]+(.+?)(?:\.\s*$|$)", re.IGNORECASE | re.DOTALL)
+_NOT_CARRYING_RE = re.compile(r"not carrying|carrying nothing|nothing", re.IGNORECASE)
+
+
+def _parse_inventory_response(text):
+    """Return item list from a game inventory response, or None if unparseable."""
+    if _NOT_CARRYING_RE.search(text):
+        return []
+    m = _CARRYING_RE.search(text)
+    if not m:
+        return None
+    raw = m.group(1).strip().rstrip(".")
+    # Split on comma or " and " (handles "item1, item2 and item3")
+    parts = re.split(r",|\s+and\s+", raw, flags=re.IGNORECASE)
+    items = [p.strip() for p in parts if p.strip()]
+    return items if items else []
+
+
 _DIRECTIONS = {"north", "south", "east", "west", "up", "down", "ne", "nw", "se", "sw"}
 
 
@@ -222,6 +244,9 @@ def determine_next_action(state):
         state["position_lost"] = False
         return "look", "re-establishing position after lost room extraction"
 
+    if state.get("recheck_inventory"):
+        return "inventory", "post-death inventory check"
+
     if state["active_goal"]:
         target_room = state["active_goal"]["room"]
         if state["current_room"] == target_room:
@@ -334,32 +359,6 @@ def determine_next_action(state):
         if move:
             return move, f"navigating to unvisited room {best_unvisited}"
 
-    # Current room is fully explored — navigate toward the nearest room that still
-    # has an Unknown exit, so we don't fall through to "look" prematurely.
-    best_target = None
-    best_len = float("inf")
-    for node in state["world_graph"].nodes:
-        if node.startswith("Unknown"):
-            continue
-        if not any(
-            v.startswith("Unknown") and not d.get("futile")
-            for _, v, d in state["world_graph"].edges(node, data=True)
-        ):
-            continue
-        try:
-            path_len = nx.shortest_path_length(
-                state["world_graph"], state["current_room"], node
-            )
-            if path_len < best_len:
-                best_len = path_len
-                best_target = node
-        except (nx.NetworkXNoPath, nx.NodeNotFound):
-            continue
-    if best_target:
-        move = _nav_command(state, best_target, fast=True)
-        if move:
-            return move
-
     step_count = len(state["game_log"])
     if step_count > 0 and step_count % _SCORE_INTERVAL == 0:
         return "score", "periodic score check"
@@ -451,6 +450,7 @@ def process_agent_step(state, child, llm_instance):
 
     if extracted.get("room"):
         state["current_room"] = _resolve_room_name(state["world_graph"], extracted["room"])
+        extracted["room"] = state["current_room"]
         state.setdefault("visited_rooms", set()).add(state["current_room"])
     elif action_taken in _DIRECTIONS and not _is_hard_failure(response) and not _is_soft_failure(response):
         # Movement appeared to succeed but LLM returned no room — position is unknown.
@@ -465,11 +465,19 @@ def process_agent_step(state, child, llm_instance):
         extracted["exits"] = exits
         update_graph(state, state["current_room"], exits, previous_room, action_taken)
 
-    # If a goal action hard-failed, drop the anomaly so it is not re-queued
+    # If a goal action hard-failed, clear the active_goal / drop the anomaly
     if _is_hard_failure(response):
         parts = action_taken.split(" on ", 1)
         if len(parts) == 2 and action_taken.startswith(("use ", "cast ")):
             state["unresolved_anomalies"].pop(parts[1], None)
+        # go to / run to failure — game rejected the room name.  Drop both the
+        # active_goal and the anomaly that triggered it so it is not immediately
+        # re-queued.  With visited_rooms gating in _nav_command this should be
+        # rare; the anomaly will be re-detected if the LLM sees it again later.
+        if action_taken.startswith(("go to ", "run to ")):
+            if state["active_goal"]:
+                state["unresolved_anomalies"].pop(state["active_goal"].get("target", ""), None)
+            state["active_goal"] = None
 
     for npc in extracted.get("npcs", []):
         if npc not in state["known_npcs"]:
@@ -522,6 +530,22 @@ def process_agent_step(state, child, llm_instance):
         action_taken, response, snap_before, _snapshot_state(state),
         insp_verb, effective_target, pre_verb_outcomes,
     )
+
+    if _is_death(response):
+        utility = "death"
+        state["recheck_inventory"] = True
+
+    if action_taken == "inventory" and state.get("recheck_inventory"):
+        parsed = _parse_inventory_response(response)
+        if parsed is not None:
+            for item in state["inventory"]:
+                if item in state["known_entities"]:
+                    state["known_entities"][item]["status"] = "discovered"
+            state["inventory"] = parsed
+            for item in parsed:
+                if item in state["known_entities"]:
+                    state["known_entities"][item]["status"] = "held"
+        state["recheck_inventory"] = False
 
     if utility == "futile" and action_taken in _DIRECTIONS:
         _mark_edge_futile(state, previous_room, action_taken)

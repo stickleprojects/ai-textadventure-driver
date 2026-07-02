@@ -93,6 +93,7 @@ def make_initial_state(strategy_path=STRATEGY_PATH):
         "futile_edges": strategy["futile_edges"],
         "pending_npc_tasks": [],
         "visited_rooms": set(),
+        "recheck_inventory": False,
     }
 
 

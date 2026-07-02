@@ -91,6 +91,8 @@ class GameConfig:
             "|".join(self._hard_failure_patterns + self._soft_failure_patterns),
             re.IGNORECASE,
         )
+        death_pats = self._DEFAULT_END_STATE_PATTERNS["death"]
+        self.death_pattern = re.compile("|".join(death_pats), re.IGNORECASE)
 
     @property
     def inspection_sequence(self):
