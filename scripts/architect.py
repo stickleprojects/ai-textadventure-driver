@@ -30,13 +30,16 @@ ORCHESTRATOR_DIR = RUNS_DIR / "orchestrator"
 # Which source files to include per anomaly type. More specific types first;
 # the fallback key "" is always appended.
 _FILE_ROUTES = {
-    "loop_detected":        ["agent.py", "game_config.py"],
-    "futile_streak":        ["agent.py", "game_config.py"],
-    "redundant_streak":     ["agent.py"],
-    "malformed_extraction": ["llm.py", "game_engine.py"],
-    "regression":           ["run_evaluator.py", "agent.py"],
-    "agent_failure_finding":["agent.py", "game_config.py"],
-    "":                     ["agent.py"],  # fallback
+    "loop_detected":           ["agent.py", "game_config.py"],
+    "futile_streak":           ["agent.py", "game_config.py"],
+    "redundant_streak":        ["agent.py"],
+    "malformed_extraction":    ["llm.py", "game_engine.py"],
+    "regression":              ["run_evaluator.py", "agent.py"],
+    "agent_failure_finding":   ["agent.py", "game_config.py"],
+    "futile_direction_probing":["agent.py", "llm.py"],  # may be extraction or decision layer
+    "repetitive_zigzag_navigation": ["agent.py"],
+    "redundant_object_inspection":  ["agent.py"],
+    "":                        ["agent.py"],  # fallback
 }
 
 _SEVERITY_ORDER = {"high": 0, "medium": 1, "low": 2}
@@ -61,6 +64,24 @@ Key design constraints:
 - do not propose changes that add LLM calls to the hot path (process_agent_step).
 - acceptance_criteria must be concretely observable in a future run or log file,
   not just "tests pass".
+
+Before proposing any fix, apply these three checks:
+
+1. CODE AUDIT — read the relevant source files and confirm whether the guard or
+   check you are about to propose already exists. State explicitly in root_cause_hypothesis
+   whether existing code already enforces this. If it does, your fix must target a
+   different layer.
+
+2. PRODUCTIVITY CHECK — if the anomaly involves a repeated or alternating action
+   pattern, check whether each step is util=productive (new room, new entity, new
+   inventory). If steps are productive, futile-edge marking and loop-break logic
+   are contraindicated. The fix must change the *selection policy* (e.g. navigation
+   scoring, priority ordering), not the edge state.
+
+3. DATA ORIGIN LAYER — identify which layer produces the bad data:
+   (a) game engine response  (b) LLM extraction  (c) graph/state update  (d) decision logic
+   The fix must target the *origin layer*. A guard at a downstream consumer is
+   fragile and may mask the same data entering via a different code path.
 """
 
 
@@ -106,10 +127,17 @@ def _user_message(anomaly, sources):
 
 ## Task
 
-Produce a fix_plan.json object (schema: fix_plan/v1) with these fields:
+Before writing the plan, work through the three pre-checks from your instructions:
+1. Does the code already enforce the guard you are about to propose? (Code audit)
+2. Are the anomalous steps util=productive? If so, futile-edge marking is off the table. (Productivity check)
+3. Which layer — (a) game engine, (b) LLM extraction, (c) graph/state update, (d) decision logic — originates the bad data? (Data origin layer)
+
+Then produce a fix_plan.json object (schema: fix_plan/v1) with these fields:
 - schema: "fix_plan/v1"
 - anomaly_id: the anomaly's id string
-- root_cause_hypothesis: one concise sentence
+- data_origin_layer: one of "game_engine", "llm_extraction", "graph_state", "decision_logic"
+- productivity_check: "productive" if repeated steps are util=productive (fix must not mark edges futile), else "non_productive"
+- root_cause_hypothesis: one concise sentence — must name the origin layer and confirm whether the guard already exists
 - target_files: list of files to change
 - change_summary: what to change and why (2-4 sentences)
 - acceptance_criteria: list of 2-4 strings, each concretely observable in
