@@ -40,6 +40,8 @@ Agent gameplay capabilities — things the agent must be able to do to play Knig
     - Add `taken_by_npc: [{"item": "gold plate", "npc": "troll"}]` — item leaves inventory involuntarily; agent removes from `inventory`, optionally adds anomaly
     - **Dependency on requirement 20:** implement this first, then add the hint "NPCs will steal treasure from you if they see you carrying it — put it inside a sack or box" via the hint mechanism
     - **Effort: Low | Risk: Low** — schema addition + inventory mutation in `process_agent_step`
+    - **Reliability note:** unlike hard failure patterns (fixed engine templates), NPC theft/gift dialogue is author-written natural language ("That's mine! He takes the cask", "snatches it from you", "grabs the X back"). This is an extraction schema problem, not a pattern list — the LLM is the right tool but expect ~80% recall with good few-shot examples. Miss rate means inventory will still occasionally drift; not a blocker but worth noting before scoping the work.
+    - **Observed in watch_20260702_124917 step 86:** innkeeper took the cask at step 86 without the agent tracking the inventory loss.
 
 25. the agent has no way to detect or respond to route blockages reported by the game ("You are blocked by the drawbridge"). These are distinct from hard failures on objects — the verb is valid but a specific obstacle is preventing movement.
     - Add `blocked_by: [{"obstacle": "drawbridge", "blocking": "route to castle"}]` to extraction schema
