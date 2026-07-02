@@ -170,6 +170,109 @@ python scripts/generate_evals.py --log game_log.json --out tests/evals/fixtures.
 ANTHROPIC_API_KEY=sk-... python scripts/generate_evals.py --log game_log.json --out tests/evals/fixtures.py
 ```
 
+### Writing tests for new scenarios
+
+Every game behaviour worth testing falls into one of two categories, each needing a different kind of test. You almost always need both.
+
+#### The boundary
+
+`extract_knowledge(response, action, llm)` is the boundary between the LLM and the agent. Tests on the left side verify the LLM extracts the right fields from game text. Tests on the right side verify the agent reacts correctly to whatever `extract_knowledge` returns — without involving the LLM at all.
+
+```
+game text  →  extract_knowledge()  →  agent state / determine_next_action()
+              ↑ eval tests here         ↑ unit tests here
+```
+
+#### Test 1: Eval case (does the LLM extract X?)
+
+Add an entry to `tests/evals/fixtures.py`. Each case needs:
+
+- `"id"` — unique snake_case string, used to run the test by name
+- `"action"` — the command the agent sent (LLM uses it as context)
+- `"game_output"` — the raw game response text
+- `"expected"` — fields and values that must be present (scored with Jaccard similarity, threshold 0.7)
+- `"absent"` — field names that must be null/missing (e.g. `room` should not appear after a terse "Taken.")
+- `"must_not"` — field values that must not appear (e.g. key must not be in `added_to_inventory` if it was only revealed, not taken)
+
+Example — a take action reveals a hidden object:
+```python
+{
+    "id": "revealed_object_from_take",
+    "action": "take welcome mat",
+    "game_output": "You pick up the welcome mat. Underneath it you find a key!",
+    "expected": {"objects": ["key"]},
+    "must_not": {"added_to_inventory": ["key"]},  # revealed ≠ taken yet
+},
+```
+
+Run it:
+```bash
+pytest tests/test_evals.py -m llm -k revealed_object -v
+```
+
+> **You don't need to know the exact game wording upfront.** Write the eval with expected wording, run the agent on the real ROM, then update `"game_output"` with what the game actually produces.
+
+#### Test 2: Agent unit test (does state update correctly?)
+
+Add to `tests/test_agent.py`. These are fast and deterministic — mock the game and the LLM, assert on state.
+
+The three things you set up:
+1. **`state`** via `make_state(...)` from `tests/conftest.py` — only include keys relevant to the scenario
+2. **`patch("agent.execute_game_command", return_value="...")`** — the raw game response
+3. **`patch("agent.extract_knowledge", return_value={...})`** — what the LLM would return
+
+Then assert on state fields (`uninspected_objects`, `inventory`, `known_entities`, etc.) or on the next `determine_next_action()` call.
+
+Example — key revealed by taking mat is queued, then taken next:
+```python
+class TestRevealedObject:
+    def test_key_queued_when_revealed_by_taking_mat(self, stub_child):
+        state = make_state(
+            current_room="Doorstep",
+            current_inspection={
+                "target": "welcome mat",
+                "sequence": ["take"],
+                "step_index": 0,
+            },
+            known_entities={
+                "welcome mat": {"status": "discovered", "location": "Doorstep", "verb_outcomes": {}},
+            },
+        )
+        with patch("agent.execute_game_command",
+                   return_value="You pick up the welcome mat. Underneath it you find a key!"), \
+             patch("agent.extract_knowledge",
+                   return_value={"added_to_inventory": ["welcome mat"], "objects": ["key"]}):
+            process_agent_step(state, stub_child, None)
+
+        assert "key" in state["uninspected_objects"]
+
+    def test_key_taken_on_next_step(self, stub_child):
+        state = make_state(
+            current_room="Doorstep",
+            uninspected_objects=["key"],
+            known_entities={
+                "key": {"status": "discovered", "location": "Doorstep", "verb_outcomes": {}},
+            },
+        )
+        action, _ = determine_next_action(state)
+        assert action == "take key"
+```
+
+Run it:
+```bash
+pytest tests/test_agent.py -k TestRevealedObject -v
+```
+
+#### Quick reference
+
+| What you're testing | File | What to mock |
+|---|---|---|
+| LLM extracts the right fields from game text | `tests/evals/fixtures.py` | Nothing — uses real model |
+| Agent state updates correctly after a step | `tests/test_agent.py`, call `process_agent_step` | `execute_game_command` + `extract_knowledge` |
+| `determine_next_action` returns the right command | `tests/test_agent.py`, call `determine_next_action` | Just set up `state` — no mocks needed |
+
+`stub_child` (the mock game process) is a pytest fixture defined in `tests/conftest.py` and available in all agent tests automatically.
+
 ---
 
 ## Project structure

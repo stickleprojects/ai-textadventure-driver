@@ -34,26 +34,26 @@ def llm_instance():
     return Llama(model_path=MODEL_PATH, n_ctx=2048, n_threads=n_threads, use_mlock=False, verbose=verbose)
 
 
-@pytest.mark.parametrize("case", EVAL_CASES, ids=[c["id"] for c in EVAL_CASES])
+@pytest.mark.parametrize("case", EVAL_CASES, ids=[c.id for c in EVAL_CASES])
 def test_extraction_case(case, llm_instance):
-    if "xfail" in case:
-        pytest.xfail(case["xfail"])
+    if case.xfail:
+        pytest.xfail(case.xfail)
 
-    actual = extract_knowledge(case["game_output"], case["action"], llm_instance)
+    actual = extract_knowledge(case.game_output, case.action, llm_instance)
 
-    for field, forbidden in case.get("must_not", {}).items():
+    for field, forbidden in case.must_not.items():
         actual_values = actual.get(field, [])
         violations = set(forbidden) & set(actual_values)
-        assert not violations, f"{case['id']}: forbidden values {violations} found in '{field}': {actual_values}"
+        assert not violations, f"{case.id}: forbidden values {violations} found in '{field}': {actual_values}"
 
-    for field in case.get("absent", []):
+    for field in case.absent:
         value = actual.get(field)
-        assert not value, f"{case['id']}: field '{field}' should be absent/null, got: {value!r}"
+        assert not value, f"{case.id}: field '{field}' should be absent/null, got: {value!r}"
 
     scores = []
-    for field, expected_value in case["expected"].items():
+    for field, expected_value in case.expected.items():
         actual_value = actual.get(field, [])
         scores.append(_jaccard(expected_value, actual_value))
     score = sum(scores) / len(scores) if scores else 1.0
 
-    assert score >= EVAL_THRESHOLD, f"{case['id']}: score {score:.2f} below threshold {EVAL_THRESHOLD}. Got: {actual}"
+    assert score >= EVAL_THRESHOLD, f"{case.id}: score {score:.2f} below threshold {EVAL_THRESHOLD}. Got: {actual}"

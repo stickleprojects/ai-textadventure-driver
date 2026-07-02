@@ -1,87 +1,86 @@
-EVAL_CASES = [
-    # room hallucination: terse take confirmation should NOT produce a room name
-    {
-        "id": "taken_no_room_hallucination",
-        "action": "take putty knife",
-        "game_output": "Taken.",
-        "expected": {"added_to_inventory": ["putty knife"]},
-        "absent": ["room"],
-    },
-    # terse failure response should produce no room
-    {
-        "id": "failure_no_room_hallucination",
-        "action": "examine putty knife",
-        "game_output": "You can't do that.",
-        "expected": {},
-        "absent": ["room"],
-    },
-    {
-        "id": "horse_is_npc",
-        "action": "look",
-        "game_output": "You are in the Courtyard. A horse stands nearby. You can see a stone and a sword.",
-        "expected": {"objects": ["stone", "sword"], "npcs": ["horse"]},
-        "must_not": {"objects": ["horse"]},
-    },
-    {
-        "id": "taken_confirmation",
-        "action": "take sword",
-        "game_output": "Taken.",
-        "expected": {"added_to_inventory": ["sword"]},
-    },
-    {
-        "id": "no_phantom_inventory",
-        "action": "look",
-        "game_output": "You can see a key on the table.",
-        "expected": {"added_to_inventory": []},
-    },
-    {
-        "id": "exits_extracted",
-        "action": "look",
-        "game_output": "You are in the Forest Path. Exits: north, east.",
-        "expected": {"exits": ["north", "east"]},
-    },
-    {
-        "id": "knight_is_npc",
-        "action": "look",
-        "game_output": "A huge knight blocks the doorway. There is a key on the floor.",
-        "expected": {"objects": ["key"], "npcs": ["knight"]},
-        "must_not": {"objects": ["knight"]},
-    },
-    {
-        "id": "exits_all_directions",
-        "action": "look",
-        "game_output": "You are in a dismal fairground. Exits lead in all directions.",
-        "expected": {"exits": ["north", "south", "east", "west"]},
-    },
-    {
-        "id": "sub_object_from_examine",
-        "action": "examine flagpole",
-        "game_output": "It is an ugly white post, a hundred feet tall. Fastened to it is a halyard.",
-        "expected": {"objects": ["halyard"]},
-    },
-    {
-        "id": "handles_you_dont_need_to_use_the_word",
-        "action": "take green beef",
-        "game_output": "You don't need to use the word \"beef\" to finish this part of the game.",
-        "expected": {"added_to_inventory": []},
-    },
-    {
-        "id": "direction_string_not_used_as_room",
-        "action": "east",
-        "game_output": "You go east.",
-        "absent": ["room"],
-    },
-    {
-        "id": "npc_name_not_used_as_room",
-        "action": "look",
-        "game_output": "Denzyl is here.",
-        "expected": {"npcs": ["Denzyl"]},
-        "absent": ["room"],
-    },
-    {
-        "id": "outside_compound_description_is_valid_room",
-        "action": "north",
-        "game_output": "You go north and are outside a cave in a juniper scrubland. In the distance is a castle. Exits lead in all directions and inside.",
-        "expected": {"room": "outside a cave in a juniper scrubland"},
-    },
-]
+"""
+Eval case loader for LLM extraction tests.
+
+Cases are defined in fixtures.json alongside this file.  The JSON schema
+for each case is:
+
+  id           str            Unique snake_case identifier used as the pytest
+                              test ID.  Required.
+
+  action       str            The command the agent sent to the game engine.
+                              The LLM receives this as context when extracting
+                              knowledge from game_output.  Required.
+
+  game_output  str            The raw text the game engine returned.
+                              This is the text the LLM must interpret.  Required.
+
+  expected     object         Fields and values that must appear in the
+                              extraction result.  Each field is scored with
+                              Jaccard similarity against the actual extraction;
+                              all field scores are averaged and must meet
+                              EVAL_THRESHOLD (default 0.7).  Omit or use {}
+                              when the test is purely about absence.
+
+  absent       list[str]      Field names whose value must be null, empty, or
+                              missing entirely in the result.  Use this to
+                              guard against hallucination (e.g. "room" must
+                              not appear after a terse "Taken." response).
+
+  must_not     object         Fields whose values must NOT appear in the
+                              result.  Use this when the field may legitimately
+                              contain other values, but specific ones are
+                              forbidden (e.g. objects must not contain "horse"
+                              when horse should be classified as an NPC).
+
+  xfail        str (optional) If present, the test is marked xfail with this
+                              string as the reason.  Use for known LLM
+                              weaknesses you want to track without blocking CI.
+
+Example case:
+
+  {
+    "id": "revealed_object_from_take",
+    "action": "take welcome mat",
+    "game_output": "You pick up the welcome mat. Underneath it you find a key!",
+    "expected": { "objects": ["key"], "added_to_inventory": ["welcome mat"] },
+    "must_not": { "added_to_inventory": ["key"] }
+  }
+"""
+
+import json
+from dataclasses import dataclass, field
+from pathlib import Path
+
+
+@dataclass
+class EvalCase:
+    """One extraction eval scenario."""
+
+    id: str
+    action: str
+    game_output: str
+    expected: dict = field(default_factory=dict)
+    absent: list = field(default_factory=list)
+    must_not: dict = field(default_factory=dict)
+    xfail: str | None = None
+
+    @classmethod
+    def from_dict(cls, data: dict) -> "EvalCase":
+        return cls(
+            id=data["id"],
+            action=data["action"],
+            game_output=data["game_output"],
+            expected=data.get("expected", {}),
+            absent=data.get("absent", []),
+            must_not=data.get("must_not", {}),
+            xfail=data.get("xfail"),
+        )
+
+
+def _load() -> list[EvalCase]:
+    path = Path(__file__).with_suffix(".json")
+    raw = json.loads(path.read_text())
+    return [EvalCase.from_dict(entry) for entry in raw]
+
+
+EVAL_CASES: list[EvalCase] = _load()
