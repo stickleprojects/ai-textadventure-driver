@@ -87,3 +87,21 @@ Added `_productive_thrash()` to `anomaly_detector.py`: sliding 20-step window; i
 ### Fast-nav to undiscovered rooms caused engine-level failures
 
 The `run to <room>` template was being emitted for rooms that hadn't been physically entered yet. Knight Orc rejects this immediately with an error message ("You don't know where that is" or similar). The first draft fix plan from the architect proposed retrying a few times before giving up and marking the room as `blocked`; a human reviewer caught that this was wrong on two counts: (1) the game's rejection is immediate and deterministic, not a transient state issue, so retrying accomplishes nothing; (2) marking the room `blocked` in the strategy store would be harmful, because the constraint is structural (agent hasn't been there yet) not permanent. The actual fix was to gate the fast-nav template on `target in state["visited_rooms"]` — a one-line structural filter. Lesson: the architect's first draft should be reviewed by a human before implementation starts; prompt it to distinguish structural constraints from state-dependent ones.
+
+### Architect misdiagnoses root cause when code already implements the proposed guard (a4)
+
+For anomaly a4 (agent probing "up" and "down" in flat rooms), the architect produced: "Unknown edges are generated for directions the LLM never listed." The fix plan said to only create Unknown placeholder edges for directions in the extracted exits list. That guard already exists — `update_graph` has always iterated over `exits` and only created Unknown nodes for listed directions.
+
+The actual root cause was one level up: the LLM itself infers "up" and "down" from the phrase "Exits lead in all directions", inserting them into the exits list even when they don't exist in the game. The fix belonged in `process_agent_step`, not `update_graph`: filter "up"/"down" from extracted exits unless those words appear literally in the response text.
+
+This pattern — architect diagnosing a symptom in code that already has the guard — suggests the architect prompt should explicitly ask "does the code already enforce this?" and "at what layer does the bad data originate?" before proposing a fix location.
+
+### Architect proposes harmful fix for productive diagonal exploration (a3)
+
+For anomaly a3 (sw/east zigzag), the architect proposed: detect A/B alternation, mark the oscillating edges futile. This would have broken the agent: steps 56–75 of the same run show sw/east alternating with `util=productive` on every step (each leg visits a new room). Marking those edges futile would have cut off valid corridors.
+
+The real cause is structural: the forest world has a diagonal grid topology. Each sw room has an east Unknown exit; each east room has a sw Unknown exit. The agent follows these chains greedily because it always picks the nearest room with an Unknown exit, and "nearest" always resolves to the next diagonal step.
+
+The correct fix: add a direction-diversity penalty to navigation target scoring. When picking which room to navigate to for Unknown exit exploration, score by `path_len + recent_dir_frequency(unknown_exit_direction)`. This steers the agent toward rooms with underused exit directions without ever marking productive corridors as futile.
+
+Lesson: when an anomaly type is "repetitive pattern", the architect must first check whether each repetition is productive (new rooms, new entities, new inventory). If steps are productive, the edges are never candidates for futile marking — the fix must instead change the *selection policy*, not the edge state.
