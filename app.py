@@ -38,10 +38,15 @@ def _make_clean_state():
         for name, verbs in strategy.get("entity_verb_outcomes", {}).items()
     }
     wg_data = strategy.get("world_graph", {"nodes": [], "edges": []})
-    world_graph = nx.DiGraph()
+    world_graph = nx.MultiDiGraph()
     world_graph.add_nodes_from(wg_data.get("nodes", []))
     for u, v, label in wg_data.get("edges", []):
-        world_graph.add_edge(u, v, label=label)
+        # Split legacy compound labels ("south/out") into separate edges on load.
+        for part in label.split("/"):
+            if part:
+                existing = {d["label"] for d in (world_graph.get_edge_data(u, v) or {}).values()}
+                if part not in existing:
+                    world_graph.add_edge(u, v, label=part)
     return {
         "current_room": "Unknown Location",
         "inventory": [],
@@ -188,19 +193,15 @@ with col_viz:
     components.html(
         """<script>
         (function() {
-            try {
-                var markers = window.parent.document.getElementsByClassName('io-terminal-bottom');
-                if (!markers.length) return;
-                var el = markers[markers.length - 1];
-                var node = el.parentElement;
-                while (node) {
-                    if (node.scrollHeight > node.clientHeight) {
-                        node.scrollTop = node.scrollHeight;
-                        break;
-                    }
-                    node = node.parentElement;
-                }
-            } catch(e) {}
+            function scroll() {
+                try {
+                    var markers = window.parent.document.getElementsByClassName('io-terminal-bottom');
+                    if (!markers.length) return;
+                    markers[markers.length - 1].scrollIntoView({block: 'end', behavior: 'instant'});
+                } catch(e) {}
+            }
+            scroll();
+            setTimeout(scroll, 150);
         })();
         </script>""",
         height=0,

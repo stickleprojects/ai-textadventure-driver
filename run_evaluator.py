@@ -158,13 +158,17 @@ def merge_run_record(run_record, strategy_path):
         "final_score": run_record.get("final_score"),
     })
 
-    # Merge world graph — union nodes; merge edge labels with "/" when the same
-    # (src, dst) pair appears with a different direction alias.
+    # Merge world graph — union nodes; each (src, dst, direction) triplet stored
+    # separately. Legacy compound labels ("south/out") are split on load.
     # Unknown placeholder nodes are excluded: they are transient and re-discovered
     # naturally each run.
     acc = strategy["world_graph"]
     known_nodes = set(acc["nodes"])
-    known_edges = {(u, v): label for u, v, label in acc["edges"]}
+    known_edge_set = set()
+    for u, v, label in acc["edges"]:
+        for part in label.split("/"):
+            if part:
+                known_edge_set.add((u, v, part))
     for node in run_record.get("world_graph", {}).get("nodes", []):
         if not node.startswith("Unknown") and node not in known_nodes:
             known_nodes.add(node)
@@ -172,15 +176,10 @@ def merge_run_record(run_record, strategy_path):
     for u, v, label in run_record.get("world_graph", {}).get("edges", []):
         if u.startswith("Unknown") or v.startswith("Unknown"):
             continue
-        existing = known_edges.get((u, v))
-        if existing is None:
-            known_edges[(u, v)] = label
-        else:
-            existing_parts = set(existing.split("/"))
-            new_parts = set(label.split("/"))
-            merged = existing_parts | new_parts
-            known_edges[(u, v)] = "/".join(sorted(merged))
-    acc["edges"] = [[u, v, label] for (u, v), label in sorted(known_edges.items())]
+        for part in label.split("/"):
+            if part:
+                known_edge_set.add((u, v, part))
+    acc["edges"] = [[u, v, label] for u, v, label in sorted(known_edge_set)]
 
     path = Path(strategy_path)
     path.parent.mkdir(parents=True, exist_ok=True)

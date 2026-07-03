@@ -183,22 +183,17 @@ def update_graph(state, room_name, exits, previous_room, action):
         ):
             if state["world_graph"].has_node(placeholder):
                 state["world_graph"].remove_node(placeholder)
-        # If the edge already exists (direction alias, e.g. south==down at start), merge
-        # the new label rather than overwriting the existing one.
-        if state["world_graph"].has_edge(previous_room, room_name):
-            edge_data = state["world_graph"][previous_room][room_name]
-            existing = edge_data.get("label", "").split("/")
-            if action not in existing:
-                edge_data["label"] = "/".join(existing + [action])
-        else:
+        # Store each direction alias as its own edge (MultiDiGraph allows multiple
+        # edges per node pair). Only add if this exact label is not already present.
+        existing_labels = {
+            d.get("label")
+            for d in (state["world_graph"].get_edge_data(previous_room, room_name) or {}).values()
+        }
+        if action not in existing_labels:
             state["world_graph"].add_edge(previous_room, room_name, label=action)
 
     for direction in exits:
-        # Split merged labels (e.g. "south/down") so each component is checked individually
-        existing_labels = set()
-        for _, _, d in state["world_graph"].edges(room_name, data=True):
-            for lbl in d.get("label", "").split("/"):
-                existing_labels.add(lbl)
+        existing_labels = {d.get("label", "") for _, _, d in state["world_graph"].edges(room_name, data=True)}
         if direction in existing_labels:
             continue
         # If this exit points back the way we came, wire the real return edge so
@@ -219,8 +214,8 @@ def get_next_move_to_target(state, target_room):
         path = nx.shortest_path(state["world_graph"], source=state["current_room"], target=target_room)
         if len(path) > 1:
             edge_data = state["world_graph"].get_edge_data(state["current_room"], path[1])
-            # Edge label may store multiple aliases ("down/out") — only the first is needed.
-            return edge_data['label'].split("/")[0]
+            # MultiDiGraph: get_edge_data returns {key: data} — pick first edge's label.
+            return next(iter(edge_data.values()))['label']
     except (nx.NetworkXNoPath, nx.NodeNotFound):
         return None
 

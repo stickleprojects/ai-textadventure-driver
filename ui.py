@@ -147,27 +147,43 @@ def _display_label(node_id):
     return "\n".join(textwrap.wrap(node_id, width=_LABEL_WRAP_WIDTH) or [node_id])
 
 
+def _combine_labels(*labels):
+    """Merge direction labels into one slash-separated string, deduplicating parts."""
+    seen_parts: set = set()
+    parts = []
+    for label in labels:
+        for part in label.split("/"):
+            if part and part not in seen_parts:
+                seen_parts.add(part)
+                parts.append(part)
+    return "/".join(parts)
+
+
 def _iter_display_edges(g):
     """Yield (u, v, label, bidirectional) for rendering.
 
-    When both (u, v) and (v, u) exist, yield them once as a single bidirectional
-    entry with a combined label (e.g. "north/south"). One-way edges are yielded
-    as-is with bidirectional=False.
+    Collapses all edges between a node pair into one entry. When edges exist in
+    both directions they are combined into a single bidirectional entry with all
+    direction labels joined (e.g. "north/south"). Works for MultiDiGraph where
+    multiple edges per pair are stored.
     """
-    seen = set()
-    for u, v, data in g.edges(data=True):
-        if (u, v) in seen:
+    seen: set = set()
+    for u, v in g.edges():
+        if (u, v) in seen or (v, u) in seen:
             continue
-        label = data.get("label", "")
+        fwd = g.get_edge_data(u, v) or {}
         rev = g.get_edge_data(v, u)
-        if rev is not None:
-            rev_label = rev.get("label", "")
-            combined = f"{label}/{rev_label}" if label != rev_label else label
-            yield u, v, combined, True
-            seen.add((v, u))
+        fwd_labels = [d.get("label", "") for d in fwd.values()]
+        bidir = rev is not None
+        if bidir:
+            rev_labels = [d.get("label", "") for d in rev.values()]
+            combined = _combine_labels(*fwd_labels, *rev_labels)
         else:
-            yield u, v, label, False
+            combined = _combine_labels(*fwd_labels)
+        yield u, v, combined, bidir
         seen.add((u, v))
+        if bidir:
+            seen.add((v, u))
 
 
 def render_graph(state):
@@ -287,15 +303,26 @@ def save_graph_image(graph, current_room, output_path, draw_unknowns=True):
             font_color="black", font_size=_MAP_FONT_SIZE - 1,
         )
 
-    # Edges — black lines, black labels on transparent background
+    # Edges — black lines, black labels on transparent background.
+    # Deduplicate to one entry per (u, v) direction pair; combine labels for that pair.
     visible_nodes = set(real_nodes) | set(unknown_nodes)
-    visible_edges = [(u, v) for u, v in graph.edges() if u in visible_nodes and v in visible_nodes]
+    seen_pairs: set = set()
+    visible_edges = []
+    edge_labels: dict = {}
+    for u, v, d in graph.edges(data=True):
+        if u not in visible_nodes or v not in visible_nodes:
+            continue
+        lbl = d.get("label", "")
+        if (u, v) not in seen_pairs:
+            visible_edges.append((u, v))
+            seen_pairs.add((u, v))
+            edge_labels[(u, v)] = lbl
+        else:
+            edge_labels[(u, v)] = _combine_labels(edge_labels[(u, v)], lbl)
     nx.draw_networkx_edges(
         graph, pos=pos, ax=ax, edgelist=visible_edges,
         edge_color="black", arrows=True, arrowsize=12,
     )
-    edge_labels = {(u, v): d.get("label", "") for u, v, d in graph.edges(data=True)
-                   if u in visible_nodes and v in visible_nodes}
     nx.draw_networkx_edge_labels(
         graph, pos=pos, edge_labels=edge_labels, ax=ax,
         font_color="black", font_size=_MAP_EDGE_FONT_SIZE,
