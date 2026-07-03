@@ -185,7 +185,8 @@ class TestWorldGraphPersistence:
         result = load_strategy(strategy_path)
         assert result["world_graph"]["nodes"].count("Hall") == 1
 
-    def test_edge_labels_merged_on_alias(self, tmp_path):
+    def test_direction_aliases_stored_as_separate_edges(self, tmp_path):
+        # With MultiDiGraph each alias is its own [u, v, label] triplet.
         strategy_path = tmp_path / "strategy.json"
         merge_run_record(
             _make_record_with_graph(
@@ -203,9 +204,10 @@ class TestWorldGraphPersistence:
             strategy_path,
         )
         result = load_strategy(strategy_path)
-        edge_labels = {(u, v): lbl for u, v, lbl in result["world_graph"]["edges"]}
-        assert "south" in edge_labels[("Hall", "Cellar")]
-        assert "down" in edge_labels[("Hall", "Cellar")]
+        hall_cellar_labels = {lbl for u, v, lbl in result["world_graph"]["edges"]
+                              if u == "Hall" and v == "Cellar"}
+        assert "south" in hall_cellar_labels
+        assert "down" in hall_cellar_labels
 
     def test_unknown_nodes_excluded_from_strategy(self, tmp_path):
         strategy_path = tmp_path / "strategy.json"
@@ -238,7 +240,8 @@ class TestWorldGraphPersistence:
         assert "Hall" in g.nodes
         assert "Courtyard" in g.nodes
         assert g.has_edge("Hall", "Courtyard")
-        assert g["Hall"]["Courtyard"]["label"] == "south"
+        # MultiDiGraph: g[u][v] returns {key: data}; check any edge has the label
+        assert any(d["label"] == "south" for d in g["Hall"]["Courtyard"].values())
 
     def test_make_initial_state_empty_graph_when_no_strategy(self, tmp_path):
         state = make_initial_state(strategy_path=tmp_path / "nonexistent.json")
@@ -269,10 +272,13 @@ class TestWorldGraphPersistence:
         }
         merge_run_record(run_record, strategy_file)
         merged = load_strategy(strategy_file)
-        label = next(lbl for u, v, lbl in merged["world_graph"]["edges"]
-                     if u == "Garbage Heap" and v == "Field")
-        # Must stay "down/out", not grow to "down/out/down/out"
-        assert label == "down/out"
+        # With MultiDiGraph each direction is a separate triplet; both must be present.
+        heap_field_labels = {lbl for u, v, lbl in merged["world_graph"]["edges"]
+                             if u == "Garbage Heap" and v == "Field"}
+        # Legacy compound "down/out" is split; no duplicate parts.
+        assert "down" in heap_field_labels
+        assert "out" in heap_field_labels
+        assert heap_field_labels == {"down", "out"}
 
     def test_edge_label_merge_adds_new_direction(self, tmp_path):
         """A genuinely new direction alias should be appended."""
@@ -297,6 +303,7 @@ class TestWorldGraphPersistence:
         }
         merge_run_record(run_record, strategy_file)
         merged = load_strategy(strategy_file)
-        label = next(lbl for u, v, lbl in merged["world_graph"]["edges"]
-                     if u == "A" and v == "B")
-        assert set(label.split("/")) == {"south", "down"}
+        # With MultiDiGraph each alias is stored as its own triplet.
+        ab_labels = {lbl for u, v, lbl in merged["world_graph"]["edges"]
+                     if u == "A" and v == "B"}
+        assert ab_labels == {"south", "down"}
