@@ -12,18 +12,8 @@
 #   EVAL_THRESHOLD=0.8 ./run_evals.sh
 set -euo pipefail
 cd "$(dirname "$0")"
-
-source .venv/bin/activate
-
-eval "$(python - <<'EOF'
-import os, sys
-sys.path.insert(0, ".")
-from env_utils import load_env_file
-for k in load_env_file():
-    v = os.environ[k].replace("'", "'\\''")
-    print(f"export {k}='{v}'")
-EOF
-)"
+# shellcheck source=scripts/_common.sh
+source scripts/_common.sh
 
 MODEL="${EVAL_MODEL_PATH:-../models/Phi-3.5-mini-instruct-Q3_K_M.gguf}"
 THRESHOLD="${EVAL_THRESHOLD:-0.7}"
