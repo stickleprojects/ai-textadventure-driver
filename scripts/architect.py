@@ -4,9 +4,14 @@
 Reads runs/orchestrator/<run_id>/anomaly_report.json, calls Claude for each
 anomaly, and writes canonical fix plans to plans/P<N>.json.
 
-Deduplication: if the anomaly type already exists in plans/index.json the run
-is recorded against the existing entry and the API is NOT called again.  A
+Deduplication: if the anomaly type already exists among plans/P*.json the run
+is recorded against the existing plan and the API is NOT called again.  A
 notice is printed so the user can review whether to bump priority.
+
+plans.md is the human-facing index (lean table of plan_id/title/type/severity/
+status), regenerated from plans/P*.json on every run. There is no separate
+JSON index file — plan_id/anomaly_type act as the lookup keys, derived by
+scanning the plan files directly.
 
 Usage:
     python scripts/architect.py <run_id> [--anomaly-id a1] [--all] [--model MODEL]
@@ -29,8 +34,9 @@ import anthropic
 RUNS_DIR = Path("runs")
 ORCHESTRATOR_DIR = RUNS_DIR / "orchestrator"
 PLANS_DIR = Path("plans")
-PLANS_INDEX = PLANS_DIR / "index.json"
 PLANS_MD = Path("plans.md")
+
+_STATUS_ORDER = ["open", "in_progress", "deferred", "fixed"]
 
 # Which source files to include per anomaly type. More specific types first;
 # the fallback key "" is always appended.
@@ -90,75 +96,61 @@ Before proposing any fix, apply these three checks:
 """
 
 
-def _load_index():
-    if PLANS_INDEX.exists():
-        return json.loads(PLANS_INDEX.read_text())
-    return {"next_id": 1, "plans": []}
-
-
-def _save_index(index):
-    PLANS_DIR.mkdir(exist_ok=True)
-    PLANS_INDEX.write_text(json.dumps(index, indent=2))
-
-
 def _plan_id(n):
     return f"P{n:03d}"
 
 
-def _find_existing(index, anomaly_type):
-    for entry in index["plans"]:
-        if entry["anomaly_type"] == anomaly_type:
-            return entry
-    return None
+def _load_plans():
+    """Load every plans/P*.json file, keyed by plan_id.
+
+    This dict *is* the dedup/next-id source of truth — there is no separate
+    JSON index to keep in sync.
+    """
+    return {f.stem: json.loads(f.read_text()) for f in sorted(PLANS_DIR.glob("P*.json"))}
 
 
-def _write_plans_md(index):
-    """Regenerate plans.md from index.json."""
-    _STATUS_ORDER = ["open", "deferred", "fixed"]
-    by_status = {s: [] for s in _STATUS_ORDER}
-    for entry in index["plans"]:
-        by_status.setdefault(entry.get("status", "open"), []).append(entry)
+def _next_plan_id(plans):
+    nums = [int(pid[1:]) for pid in plans if pid[1:].isdigit()]
+    return _plan_id(max(nums, default=0) + 1)
+
+
+def _find_existing(plans, anomaly_type):
+    for pid, plan in plans.items():
+        if plan.get("anomaly_type") == anomaly_type:
+            return pid, plan
+    return None, None
+
+
+def _write_plans_md(plans):
+    """Regenerate plans.md — a lean table serving as the human-facing index.
+
+    Full detail (root cause, acceptance criteria, source runs) lives in the
+    linked plans/P<N>.json file, not here.
+    """
+    def sort_key(item):
+        pid, plan = item
+        status = plan.get("status", "open")
+        status_rank = _STATUS_ORDER.index(status) if status in _STATUS_ORDER else len(_STATUS_ORDER)
+        severity_rank = _SEVERITY_ORDER.get(plan.get("severity", "low"), 99)
+        return (status_rank, severity_rank, pid)
+
+    rows = sorted(plans.items(), key=sort_key)
 
     lines = [
         "# Fix Plans",
         "",
-        "Architect-generated issue registry. Each entry represents a distinct anomaly type — not a per-run finding.",
-        "When a new run surfaces an existing type, the run is added under **Also seen** and priority is reviewed.",
-        "Full fix plan JSON lives in `plans/P<N>.json`.",
+        "Architect-generated issue index. Each row is a distinct anomaly type — not a per-run finding.",
+        "Full fix plan detail (root cause, acceptance criteria, source runs) lives in the linked plan file.",
         "",
-        "---",
+        "| Plan | Title | Type | Severity | Status |",
+        "|------|-------|------|----------|--------|",
     ]
-
-    for status in _STATUS_ORDER:
-        entries = by_status.get(status, [])
-        lines.append("")
-        lines.append(f"## {status.capitalize()}")
-        lines.append("")
-        if not entries:
-            lines.append("*(none)*")
-        for e in entries:
-            runs = e["source_runs"]
-            first_run = runs[0] if runs else "unknown"
-            also = runs[1:] if len(runs) > 1 else []
-            anomaly_refs = ", ".join(
-                aid.split("/")[-1] for aid in e.get("anomaly_ids", [])
-                if aid.startswith(first_run)
-            )
-            lines.append(f"### {e['plan_id']} — {e['anomaly_type']} [{e['severity']}]")
-            lines.append(e["summary"])
-            lines.append(f"- **First seen:** {first_run} ({anomaly_refs})")
-            if also:
-                also_refs = "; ".join(also)
-                lines.append(f"- **Also seen:** {also_refs}")
-            else:
-                lines.append("- **Also seen:** *(none yet)*")
-            if e.get("fixed_in"):
-                lines.append(f"- **Fixed in:** {e['fixed_in']}")
-            if e.get("notes"):
-                lines.append(f"- **Note:** {e['notes']}")
-            lines.append(f"- **Plan:** [plans/{e['plan_id']}.json](plans/{e['plan_id']}.json)")
-            lines.append("")
-        lines.append("---")
+    for pid, plan in rows:
+        title = plan.get("title", "").replace("|", "\\|")
+        atype = plan.get("anomaly_type", "")
+        severity = plan.get("severity", "")
+        status = plan.get("status", "")
+        lines.append(f"| [{pid}](plans/{pid}.json) | {title} | {atype} | {severity} | {status} |")
 
     PLANS_MD.write_text("\n".join(lines) + "\n")
 
@@ -191,6 +183,75 @@ def _pick_anomaly(anomalies, anomaly_id):
     return min(anomalies, key=lambda a: _SEVERITY_ORDER.get(a["severity"], 99))
 
 
+_FIX_PLAN_TOOL = {
+    "name": "submit_fix_plan",
+    "description": "Submit the completed fix plan for this anomaly.",
+    "input_schema": {
+        "type": "object",
+        "properties": {
+            "title": {
+                "type": "string",
+                "description": "Short human-readable title for this fix, e.g. 'Two-room oscillation loop' (used in plans.md).",
+            },
+            "data_origin_layer": {
+                "type": "string",
+                "enum": ["game_engine", "llm_extraction", "graph_state", "decision_logic"],
+                "description": "Which layer originates the bad data (see pre-check 3).",
+            },
+            "productivity_check": {
+                "type": "string",
+                "enum": ["productive", "non_productive"],
+                "description": (
+                    "'productive' if the repeated steps are util=productive (fix must not "
+                    "mark edges futile), else 'non_productive' (see pre-check 2)."
+                ),
+            },
+            "root_cause_hypothesis": {
+                "type": "string",
+                "description": (
+                    "One concise sentence naming the origin layer and confirming whether "
+                    "the guard already exists (see pre-check 1)."
+                ),
+            },
+            "target_files": {
+                "type": "array",
+                "items": {"type": "string"},
+                "minItems": 1,
+                "description": "Files to change.",
+            },
+            "change_summary": {
+                "type": "string",
+                "description": "What to change and why (2-4 sentences).",
+            },
+            "acceptance_criteria": {
+                "type": "array",
+                "items": {"type": "string"},
+                "minItems": 2,
+                "maxItems": 4,
+                "description": (
+                    "Each concretely observable in a future run log or strategy file — "
+                    "not 'tests pass'."
+                ),
+            },
+            "risk_notes": {
+                "type": "string",
+                "description": "Potential regressions or edge cases to watch.",
+            },
+        },
+        "required": [
+            "title",
+            "data_origin_layer",
+            "productivity_check",
+            "root_cause_hypothesis",
+            "target_files",
+            "change_summary",
+            "acceptance_criteria",
+            "risk_notes",
+        ],
+    },
+}
+
+
 def _user_message(anomaly, sources):
     return f"""\
 ## Anomaly to fix
@@ -205,25 +266,10 @@ def _user_message(anomaly, sources):
 
 ## Task
 
-Before writing the plan, work through the three pre-checks from your instructions:
-1. Does the code already enforce the guard you are about to propose? (Code audit)
-2. Are the anomalous steps util=productive? If so, futile-edge marking is off the table. (Productivity check)
-3. Which layer — (a) game engine, (b) LLM extraction, (c) graph/state update, (d) decision logic — originates the bad data? (Data origin layer)
-
-Then produce a fix_plan.json object (schema: fix_plan/v1) with these fields:
-- schema: "fix_plan/v1"
-- anomaly_id: the anomaly's id string
-- data_origin_layer: one of "game_engine", "llm_extraction", "graph_state", "decision_logic"
-- productivity_check: "productive" if repeated steps are util=productive (fix must not mark edges futile), else "non_productive"
-- root_cause_hypothesis: one concise sentence — must name the origin layer and confirm whether the guard already exists
-- target_files: list of files to change
-- change_summary: what to change and why (2-4 sentences)
-- acceptance_criteria: list of 2-4 strings, each concretely observable in
-  a future run log or strategy file — not "tests pass"
-- risk_notes: potential regressions or edge cases to watch
-- status: "proposed"
-
-Reply with ONLY the raw JSON object, no markdown fences, no commentary.
+Work through the three pre-checks from your instructions (code audit, productivity
+check, data origin layer) before deciding on a fix, then call `submit_fix_plan` with
+your conclusions. Fold the pre-check reasoning into `root_cause_hypothesis` and
+`productivity_check` rather than writing it out separately.
 """
 
 
@@ -237,6 +283,8 @@ def _call_api(client, model, anomaly):
             model=model,
             max_tokens=1024,
             system=_SYSTEM_PROMPT,
+            tools=[_FIX_PLAN_TOOL],
+            tool_choice={"type": "tool", "name": "submit_fix_plan"},
             messages=[{"role": "user", "content": _user_message(anomaly, sources)}],
         )
     except anthropic.AuthenticationError:
@@ -253,20 +301,26 @@ def _call_api(client, model, anomaly):
         print(f"ERROR: API returned {exc.status_code}: {exc.message}", file=sys.stderr)
         sys.exit(1)
 
-    raw = message.content[0].text.strip()
-    try:
-        return json.loads(raw)
-    except json.JSONDecodeError:
-        print(f"ERROR: model returned non-JSON for {anomaly['id']}:\n{raw}", file=sys.stderr)
+    tool_use = next((b for b in message.content if b.type == "tool_use"), None)
+    if tool_use is None:
+        print(f"ERROR: model did not call submit_fix_plan for {anomaly['id']}", file=sys.stderr)
         sys.exit(1)
+
+    plan = dict(tool_use.input)
+    plan["schema"] = "fix_plan/v1"
+    plan["anomaly_id"] = anomaly["id"]
+    plan["anomaly_type"] = anomaly["type"]
+    plan["severity"] = anomaly.get("severity", "low")
+    plan["status"] = "open"
+    return plan
 
 
 def architect(run_id, anomaly_id=None, model="claude-opus-4-8"):
     """Produce fix plans for one anomaly (anomaly_id) or all anomalies (anomaly_id=None).
 
-    New anomaly types get a canonical plans/P<N>.json and an entry in plans/index.json.
-    Duplicate types (same anomaly_type already in the index) are recorded against the
-    existing entry without calling the API again — a notice is printed to prompt a
+    New anomaly types get a canonical plans/P<N>.json. Duplicate types (same
+    anomaly_type already present in an existing plan file) are recorded against
+    that plan without calling the API again — a notice is printed to prompt a
     priority review.
 
     Returns list of plan file paths written (new plans only; duplicates return the
@@ -296,7 +350,7 @@ def architect(run_id, anomaly_id=None, model="claude-opus-4-8"):
 
     client = anthropic.Anthropic(api_key=api_key)
     PLANS_DIR.mkdir(exist_ok=True)
-    index = _load_index()
+    plans = _load_plans()
 
     # Deduplicate targets by type within this batch before hitting the API
     seen_types = {}
@@ -318,25 +372,31 @@ def architect(run_id, anomaly_id=None, model="claude-opus-4-8"):
     for anomaly in deduped:
         atype = anomaly["type"]
         aid_ref = f"{run_id}/{anomaly['id']}"
-        existing = _find_existing(index, atype)
+        pid, existing = _find_existing(plans, atype)
 
         if existing:
             dup_count += 1
-            plan_path = PLANS_DIR / f"{existing['plan_id']}.json"
-            if run_id not in existing["source_runs"]:
-                existing["source_runs"].append(run_id)
+            plan_path = PLANS_DIR / f"{pid}.json"
+            changed = False
+            if run_id not in existing.get("source_runs", []):
+                existing.setdefault("source_runs", []).append(run_id)
+                changed = True
             if aid_ref not in existing.get("anomaly_ids", []):
                 existing.setdefault("anomaly_ids", []).append(aid_ref)
-            old_sev = existing["severity"]
+                changed = True
+            old_sev = existing.get("severity", "low")
             new_sev = anomaly.get("severity", old_sev)
             upgraded = _SEVERITY_ORDER.get(new_sev, 99) < _SEVERITY_ORDER.get(old_sev, 99)
             if upgraded:
                 existing["severity"] = new_sev
+                changed = True
+            if changed:
+                plan_path.write_text(json.dumps(existing, indent=2))
             print(
-                f"  DUPLICATE: {anomaly['id']} ({atype}) already tracked as {existing['plan_id']} "
+                f"  DUPLICATE: {anomaly['id']} ({atype}) already tracked as {pid} "
                 f"[{existing['status']}]"
             )
-            print(f"    Added run {run_id} to {existing['plan_id']}.")
+            print(f"    Added run {run_id} to {pid}.")
             if upgraded:
                 print(f"    ⚠ Severity upgraded {old_sev} → {new_sev} — review priority.")
             elif existing["status"] in ("fixed", "deferred"):
@@ -346,29 +406,20 @@ def architect(run_id, anomaly_id=None, model="claude-opus-4-8"):
         else:
             new_count += 1
             plan = _call_api(client, model, anomaly)
-            pid = _plan_id(index["next_id"])
-            index["next_id"] += 1
+            pid = _next_plan_id(plans)
             plan["plan_id"] = pid
+            plan["source_runs"] = [run_id]
+            plan["anomaly_ids"] = [aid_ref]
             plan_path = PLANS_DIR / f"{pid}.json"
             plan_path.write_text(json.dumps(plan, indent=2))
-            index["plans"].append({
-                "plan_id": pid,
-                "anomaly_type": atype,
-                "summary": plan.get("root_cause_hypothesis", anomaly.get("summary", "")),
-                "severity": anomaly.get("severity", "low"),
-                "status": "open",
-                "source_runs": [run_id],
-                "anomaly_ids": [aid_ref],
-                "plan_file": str(plan_path),
-            })
+            plans[pid] = plan
             print(f"  NEW {pid}: {atype}")
             print(f"    Root cause: {plan.get('root_cause_hypothesis', '?')}")
             print(f"    Files:      {plan.get('target_files', [])}")
             print(f"    Plan: {plan_path}")
             out_paths.append(plan_path)
 
-    _save_index(index)
-    _write_plans_md(index)
+    _write_plans_md(plans)
     print(
         f"\n{new_count} new plan(s), {dup_count} duplicate(s) recorded. "
         f"Review plans.md before passing to the Dev stage."

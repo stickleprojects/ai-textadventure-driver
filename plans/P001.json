@@ -1,6 +1,9 @@
 {
   "schema": "fix_plan/v1",
   "anomaly_id": "redundant_object_inspection",
+  "title": "Redundant post-take inspection verbs",
+  "anomaly_type": "redundant_object_inspection",
+  "severity": "low",
   "root_cause_hypothesis": "The post-take inspection sequence blindly runs every candidate verb (examine, read, look inside) on an object without checking whether a prior verb already returned identical output, so redundant verbs are executed and wasted.",
   "target_files": [
     "agent.py"
@@ -15,5 +18,12 @@
   "risk_notes": "Must not persist response signatures or 'blocked' outcomes to strategy JSON, since responses are state-dependent; keep signatures in-memory on the run state only. Response normalization must ignore volatile substrings (timestamps, score lines) to avoid false-negatives. Pruning too aggressively could skip a verb that legitimately reveals new info in a different game state, so only prune within the same object's current inspection pass, not permanently.",
   "status": "deferred",
   "plan_id": "P001",
+  "source_runs": [
+    "watch_20260702_152816"
+  ],
+  "anomaly_ids": [
+    "watch_20260702_152816/a1",
+    "watch_20260702_152816/a2"
+  ],
   "deferred_reason": "Identical response to examine does not prove drop/throw/wear would also be redundant. Re-evaluate if a future run shows this causing meaningful progress loss."
 }

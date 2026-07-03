@@ -1,0 +1,27 @@
+{
+  "data_origin_layer": "decision_logic",
+  "productivity_check": "productive",
+  "root_cause_hypothesis": "Origin is decision_logic in determine_next_action: the two-room oscillation is productive (each move is util=productive because current_room changes, so _detect_loop already excludes it and _compute_utility never marks it futile), and the real cause is that the unknown-exit scan returns the first Unknown edge on the current room / the best_target scoring picks the same near neighbour each step, ping-ponging between two adjacent rooms that both still have Unknown exits while equidistant farther rooms are ignored.",
+  "target_files": [
+    "agent.py"
+  ],
+  "change_summary": "The agent alternates between 'dingy stable' and 'jousting field' because both rooms retain first-in-iteration Unknown exits and the navigation/exit-selection policy keeps re-selecting the nearest one, producing a productive-but-non-progressing shuttle. Change the selection policy, not the edge state: in the current-room Unknown-exit loop and in the best_target scoring, incorporate a visit/recency penalty so exits leading back into recently-visited oscillation partners are deprioritised, and prefer exploring the current room's *own* remaining Unknown exits fully before navigating away. Specifically, when the immediate Unknown-exit scan finds an exit whose direction was just traversed to arrive here (reverse of last move) or leads to a room visited in the last N steps, defer it in favour of a genuinely fresh direction, and add a recent-room penalty term to best_score so far-but-unexplored frontiers win over the two-room shuttle.",
+  "acceptance_criteria": [
+    "In a future run log, no pair of adjacent rooms appears as the extracted room in more than 6 of any 20 consecutive steps (the dingy-stable/jousting-field shuttle no longer dominates steps 5-50).",
+    "A future run log shows the agent reaching at least one room outside the dingy-stable/jousting-field pair before step 20, with a reason string like 'navigating to <room> (has unexplored exits)' targeting a room not in the recent oscillation set.",
+    "No edges gain a futile=True flag as a result of this change (grep strategy JSON and graph dump: futile_edges count is unchanged for productive shuttle directions)."
+  ],
+  "schema": "fix_plan/v1",
+  "anomaly_id": "a1",
+  "title": "Two-room oscillation loop",
+  "anomaly_type": "repetitive_oscillation",
+  "severity": "high",
+  "status": "open",
+  "plan_id": "P004",
+  "source_runs": [
+    "watch_20260703_141009"
+  ],
+  "anomaly_ids": [
+    "watch_20260703_141009/a1"
+  ]
+}

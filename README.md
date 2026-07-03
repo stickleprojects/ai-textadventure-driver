@@ -133,7 +133,7 @@ After a run, trigger the full detect → review → architect pipeline:
 
 - `--detect` runs `scripts/detect_anomalies.py` → `anomaly_report.json`
 - `--review` appends LLM findings to the report (requires `ANTHROPIC_API_KEY`)
-- `--architect` produces fix plans in `plans/` (deduped by type via `plans/index.json`)
+- `--architect` produces fix plans in `plans/` (deduped by type by scanning `plans/P*.json`; see `plans.md` for the index)
 
 ### Generating a map from a saved run log
 
@@ -215,7 +215,7 @@ configs/
   knight_orc_items.json     Entity verb outcomes sidecar
 
 schemas/                    JSON Schema Draft-7 files for all tracked JSON files
-plans/                      Fix plan documents + index.json registry
+plans/                      Fix plan documents (P<N>.json); plans.md is the generated index table
 tests/                      pytest suite; evals/fixtures.json for LLM evals
 docs/                       Per-issue docs (bugs/, requirements/, features/)
 .github/workflows/ci.yml    GitHub Actions CI (lint + test on every PR)
