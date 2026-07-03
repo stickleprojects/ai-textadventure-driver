@@ -46,3 +46,4 @@ Architect-generated anomaly plans are tracked separately in [plans.md](plans.md)
 | 61 | [61.md](bugs/61.md) | Streamlit UI broken after cloud LLM support added | ✅ Fixed |
 | 62 | [62.md](bugs/62.md) | Boot/Reset buttons have no guard against misuse | ✅ Fixed |
 | 63 | [63.md](bugs/63.md) | TypeError crash on first step when boot LLM returns null room | ✅ Fixed |
+| 64 | [64.md](bugs/64.md) | Known-from-prior-run objects never queued for take | ✅ Fixed |

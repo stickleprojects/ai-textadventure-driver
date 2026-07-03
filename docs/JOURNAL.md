@@ -105,3 +105,22 @@ The real cause is structural: the forest world has a diagonal grid topology. Eac
 The correct fix: add a direction-diversity penalty to navigation target scoring. When picking which room to navigate to for Unknown exit exploration, score by `path_len + recent_dir_frequency(unknown_exit_direction)`. This steers the agent toward rooms with underused exit directions without ever marking productive corridors as futile.
 
 Lesson: when an anomaly type is "repetitive pattern", the architect must first check whether each repetition is productive (new rooms, new entities, new inventory). If steps are productive, the edges are never candidates for futile marking — the fix must instead change the *selection policy*, not the edge state.
+
+---
+
+## 2026-07-03
+
+### Cross-run object memory silently blocked re-picking-up known items (bug 64)
+
+A live run showed the agent walking straight past objects in a room on step 2 without ever attempting to take them. Neither the deterministic anomaly detectors nor the LLM review flagged it — there was no failure, no repetition, just an absent action, which log-diffing detectors have no way to notice without domain knowledge of what *should* have happened.
+
+The cause: `known_entities` is pre-seeded at session start from the cross-run strategy sidecar, so it accumulates every object name ever seen across *every* prior run. The object-queueing gate in `process_agent_step` was `obj not in state["known_entities"]` — a check that conflates "have I ever seen this object" (permanent, cross-run) with "do I currently possess it" (per-run; `state["inventory"]` and `state["uninspected_objects"]` both reset every run). Once an object had been seen in any run, it could never be queued for `take` again.
+
+The fix required separating two kinds of memory that had been collapsed into one field:
+- **Cross-run, correctly persistent**: verb outcomes on non-`take` inspection verbs (`smell`, `read`, `examine`, ...) — if we've already learned an object has no smell, don't smell it again. This was already implemented correctly via `verb_outcomes` filtering in the post-take inspection sequence and did not need to change.
+- **Cross-run, but only for one specific fact**: `take` outcome `"invalid"` (permanently un-takeable, e.g. scenery) is a real fact about the object and should keep blocking re-queueing forever.
+- **Per-run, must reset**: whether the object is currently held or already pending pickup this run. This is what should gate re-queueing for `take` — not blanket `known_entities` membership.
+
+A second, related bug surfaced during the fix: the `take` outcome classifier used the broad `_is_failure_response` (hard OR soft) and recorded *any* failure as `"invalid"`, unlike every other verb which already split hard (permanent) from soft (state-dependent, "blocked", never persisted). A state-dependent take failure — e.g. "you're already carrying that", or a future carry-capacity limit — would have been wrongly persisted as a permanent fact and blacklisted the object cross-run. Fixed by giving `take` the same hard/soft split already used elsewhere.
+
+Lesson: when a single dict (`known_entities`) is used both as "things I remember learning" (cross-run) and "things relevant to my current state" (per-run), any check against bare membership in that dict is a latent bug. The fix is never "clear it every run" (that would also lose the legitimately-permanent verb-outcome memory) — it's identifying exactly which sub-fact is permanent and which is run-scoped, then gating on the right one.
