@@ -93,9 +93,9 @@ The app defaults to:
 ## Known Issues
 
 Issues are tracked in `docs/` with one file per issue:
-- `docs/bugs/` — incorrect or broken behaviour ([contents](docs/bugs/contents.md))
-- `docs/requirements/` — agent gameplay capabilities ([contents](docs/requirements/contents.md))
-- `docs/features/` — enhancements, tooling, infrastructure ([contents](docs/features/contents.md))
+- [`docs/bugs.md`](docs/bugs.md) — incorrect or broken behaviour (individual files in `docs/bugs/`)
+- [`docs/requirements.md`](docs/requirements.md) — agent gameplay capabilities (individual files in `docs/requirements/`)
+- [`docs/features.md`](docs/features.md) — enhancements, tooling, infrastructure (individual files in `docs/features/`)
 
 Current open issues of note:
 - Bug 45: maze rooms with non-unique names collapse to a single graph node, causing loops
