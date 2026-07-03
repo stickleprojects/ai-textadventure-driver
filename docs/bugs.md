@@ -43,3 +43,4 @@ Architect-generated anomaly plans are tracked separately in [plans.md](plans.md)
 | 58 | [58.md](bugs/58.md) | Scenery items not in hard failure patterns | ✅ Fixed |
 | 59 | [59.md](bugs/59.md) | Compound edge labels grow infinitely | ✅ Fixed |
 | 60 | [60.md](bugs/60.md) | Lost room after successful movement | ✅ Fixed |
+| 61 | [61.md](bugs/61.md) | Streamlit UI broken after cloud LLM support added | 🔲 Open |

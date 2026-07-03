@@ -9,18 +9,8 @@
 #   ./run_watch.sh 200 --verbose
 set -euo pipefail
 cd "$(dirname "$0")"
-
-source .venv/bin/activate
-
-eval "$(python - <<'EOF'
-import os, sys
-sys.path.insert(0, ".")
-from env_utils import load_env_file
-for k in load_env_file():
-    v = os.environ[k].replace("'", "'\\''")
-    print(f"export {k}='{v}'")
-EOF
-)"
+# shellcheck source=scripts/_common.sh
+source scripts/_common.sh
 
 PROVIDER="${LLM_PROVIDER:-local}"
 if [ "$PROVIDER" = "local" ]; then

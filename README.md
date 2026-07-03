@@ -68,36 +68,23 @@ chmod +x tools/glklevel9
 
 ## Running
 
-### Option A: Local llama.cpp model (Streamlit UI)
+### Streamlit UI
 
 ```bash
-source .venv/bin/activate
-streamlit run app.py
+./run_app.sh
 ```
 
-In the sidebar: **Boot Engine** → set model path → **Start Auto-Run**.
+Activates the venv, loads `.env`, and starts Streamlit. In the sidebar: **Boot Engine** → set model path → **Start Auto-Run**. Pass extra args through to streamlit if needed (e.g. `./run_app.sh --server.port 8502`).
 
-### Option B: Cloud LLM (headless)
-
-Set env vars in `.env` (or export directly), then run headlessly:
+### Headless agent run
 
 ```bash
-export LLM_PROVIDER=deepseek      # or "openai"
-export LLM_API_KEY=sk-...
-export LLM_MODEL=deepseek-chat    # or "gpt-4o-mini" etc.
-
-python scripts/watch_run.py 100
+./run_watch.sh              # 50 steps, default LLM from .env
+./run_watch.sh 100          # 100 steps
+./run_watch.sh 100 --detect --review --architect   # with anomaly pipeline
 ```
 
-`LLM_PROVIDER=local` (the default) uses llama.cpp instead.
-
-### Option C: Local llama.cpp (headless)
-
-```bash
-python scripts/watch_run.py 50
-```
-
-The model path is read from the `LLM_MODEL_PATH` env var (or sidebar for Streamlit).
+Prints the active LLM provider to stderr on startup. Set `LLM_PROVIDER`, `LLM_API_KEY`, and `LLM_MODEL` in `.env` to switch between local llama.cpp and cloud providers (DeepSeek, OpenAI-compatible).
 
 ---
 
@@ -125,22 +112,23 @@ pytest tests/test_json_schemas.py -v
 
 Validates all `configs/`, `plans/`, and `tests/evals/` JSON files against schemas in `schemas/`.
 
-### LLM extraction evals (requires model)
+### LLM extraction evals (requires local model)
 
 ```bash
-pytest tests/test_evals.py -m llm -v
-# Override model path or pass threshold:
-EVAL_MODEL_PATH=../models/my-model.gguf EVAL_THRESHOLD=0.8 pytest tests/test_evals.py -m llm -v
-# Run a single eval case by ID:
-pytest "tests/test_evals.py::test_extraction_case[taken_no_room_hallucination]" -v -m llm
+./run_evals.sh                          # all cases, default model path
+./run_evals.sh -k horse_is_npc          # filter by case ID substring
+EVAL_THRESHOLD=0.8 ./run_evals.sh       # stricter threshold
+EVAL_MODEL_PATH=../models/other.gguf ./run_evals.sh
 ```
+
+Checks the model file exists before running and prints the active path and threshold. Set `EVAL_MODEL_PATH` in `.env` or inline to override the default.
 
 ### Anomaly detection pipeline
 
 After a run, trigger the full detect → review → architect pipeline:
 
 ```bash
-python scripts/watch_run.py 100 --detect --review --architect
+./run_watch.sh 100 --detect --review --architect
 ```
 
 - `--detect` runs `scripts/detect_anomalies.py` → `anomaly_report.json`
@@ -229,8 +217,12 @@ configs/
 schemas/                    JSON Schema Draft-7 files for all tracked JSON files
 plans/                      Fix plan documents + index.json registry
 tests/                      pytest suite; evals/fixtures.json for LLM evals
+docs/                       Per-issue docs (bugs/, requirements/, features/)
 .github/workflows/ci.yml    GitHub Actions CI (lint + test on every PR)
 pyproject.toml              Ruff lint config
+run_app.sh                  Start the Streamlit UI
+run_watch.sh                Run the headless agent
+run_evals.sh                Run LLM extraction evals
 gamefiles/                  Knight Orc ROM files (user-supplied)
 tools/glklevel9             Level 9 interpreter binary (Linux x86-64)
 ```
