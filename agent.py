@@ -428,7 +428,14 @@ def process_agent_step(state, child, llm_instance):
     # Record verb outcomes and handle take failure
     if insp_verb and effective_target:
         if insp_verb == "take":
-            if _is_failure_response(response):
+            if _is_soft_failure(response):
+                # State-dependent (e.g. "you're already carrying that", hands full) —
+                # may succeed on a later attempt/run, so never persist as permanent.
+                _record_verb_outcome(state, effective_target, "take", "blocked")
+                state["current_inspection"]["target"] = None
+                state["current_inspection"]["step_index"] = 0
+            elif _is_hard_failure(response):
+                # Permanently un-takeable (e.g. scenery) — safe to persist cross-run.
                 _record_verb_outcome(state, effective_target, "take", "invalid")
                 state["current_inspection"]["target"] = None
                 state["current_inspection"]["step_index"] = 0
@@ -488,9 +495,19 @@ def process_agent_step(state, child, llm_instance):
                 if obj not in state["known_npcs"]:
                     state["known_npcs"][obj] = {"location": state["current_room"], "greeted": False}
                 continue
-            if obj not in state["known_entities"] and obj not in state["uninspected_objects"] and obj not in state["inventory"]:
+            entity = state["known_entities"].get(obj)
+            # "take" invalid is a permanent, cross-run fact (e.g. scenery) — anything
+            # else about the object (inspected in a prior run, or even this run) must
+            # not block re-queueing "take", since inventory/uninspected_objects reset
+            # every run and possession is what we actually care about here.
+            permanently_untakeable = entity is not None and entity.get("verb_outcomes", {}).get("take") == "invalid"
+            already_pending_or_held = obj in state["uninspected_objects"] or obj in state["inventory"]
+            if not permanently_untakeable and not already_pending_or_held:
                 state["uninspected_objects"].append(obj)
-                state["known_entities"][obj] = {"status": "discovered", "location": state["current_room"]}
+                if entity is None:
+                    state["known_entities"][obj] = {"status": "discovered", "location": state["current_room"]}
+                else:
+                    entity["location"] = state["current_room"]
 
     if _is_hard_failure(response):
         # Suppress LLM inventory hallucinations on failure responses so the log

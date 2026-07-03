@@ -396,6 +396,51 @@ class TestProcessAgentStepOutcomes:
         assert "horse" not in state["uninspected_objects"]
         assert "horse" not in state["known_entities"]
 
+    def test_object_known_from_prior_run_is_still_queued_for_take(self, stub_child):
+        # Bug: known_entities is pre-seeded cross-run from the strategy sidecar, so
+        # any object ever seen in *any* prior run was blocking re-queueing here —
+        # the agent would walk past a takeable item without ever attempting "take".
+        state = make_state(known_entities={
+            "lantern": {"status": "discovered", "location": None, "verb_outcomes": {}}
+        })
+        with patch("agent.execute_game_command", return_value="A lantern is here."), \
+             patch("agent.extract_knowledge", return_value={"room": "Cellar", "objects": ["lantern"]}):
+            process_agent_step(state, stub_child, None)
+        assert "lantern" in state["uninspected_objects"]
+
+    def test_object_permanently_untakeable_is_not_requeued(self, stub_child):
+        # Cross-run "take": "invalid" (e.g. scenery) is a permanent fact about the
+        # object and should still block re-queueing, unlike bare known_entities membership.
+        state = make_state(known_entities={
+            "grass": {"status": "discovered", "location": None, "verb_outcomes": {"take": "invalid"}}
+        })
+        with patch("agent.execute_game_command", return_value="Grass is here."), \
+             patch("agent.extract_knowledge", return_value={"room": "Field", "objects": ["grass"]}):
+            process_agent_step(state, stub_child, None)
+        assert "grass" not in state["uninspected_objects"]
+
+    def test_object_already_held_is_not_requeued(self, stub_child):
+        state = make_state(
+            inventory=["sword"],
+            known_entities={"sword": {"status": "held", "location": None, "verb_outcomes": {}}},
+        )
+        with patch("agent.execute_game_command", return_value="A sword is here."), \
+             patch("agent.extract_knowledge", return_value={"room": "Armoury", "objects": ["sword"]}):
+            process_agent_step(state, stub_child, None)
+        assert "sword" not in state["uninspected_objects"]
+
+    def test_take_soft_failure_records_blocked_not_invalid(self, stub_child):
+        # A carry-capacity/"already carrying" style failure is state-dependent, not a
+        # permanent fact about the object — must not be persisted as "invalid" or the
+        # object would be permanently blacklisted from ever being taken again.
+        state = make_state(uninspected_objects=["cloak"])
+        state["known_entities"]["cloak"] = {"status": "discovered", "location": "Hall", "verb_outcomes": {}}
+        with patch("agent.execute_game_command", return_value="You're already carrying that."), \
+             patch("agent.extract_knowledge", return_value={}):
+            process_agent_step(state, stub_child, None)
+        assert state["known_entities"]["cloak"]["verb_outcomes"].get("take") == "blocked"
+        assert state["current_inspection"]["target"] is None
+
 
 # ── issue 19 regression tests ─────────────────────────────────────────────────
 
