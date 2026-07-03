@@ -193,19 +193,15 @@ with col_viz:
     components.html(
         """<script>
         (function() {
-            try {
-                var markers = window.parent.document.getElementsByClassName('io-terminal-bottom');
-                if (!markers.length) return;
-                var el = markers[markers.length - 1];
-                var node = el.parentElement;
-                while (node) {
-                    if (node.scrollHeight > node.clientHeight) {
-                        node.scrollTop = node.scrollHeight;
-                        break;
-                    }
-                    node = node.parentElement;
-                }
-            } catch(e) {}
+            function scroll() {
+                try {
+                    var markers = window.parent.document.getElementsByClassName('io-terminal-bottom');
+                    if (!markers.length) return;
+                    markers[markers.length - 1].scrollIntoView({block: 'end', behavior: 'instant'});
+                } catch(e) {}
+            }
+            scroll();
+            setTimeout(scroll, 150);
         })();
         </script>""",
         height=0,
