@@ -27,4 +27,4 @@ if [ ! -f "$MODEL" ]; then
     exit 1
 fi
 
-exec pytest tests/test_evals.py -m llm -v "$@"
+exec python -m pytest tests/test_evals.py -m llm -v "$@"

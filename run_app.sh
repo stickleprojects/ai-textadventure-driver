@@ -6,4 +6,4 @@ cd "$(dirname "$0")"
 # shellcheck source=scripts/_common.sh
 source scripts/_common.sh
 
-exec streamlit run app.py "$@"
+exec python -m streamlit run app.py "$@"
