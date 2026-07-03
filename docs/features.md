@@ -18,3 +18,4 @@ Enhancements, new functionality, tooling, and infrastructure improvements.
 | 44 | [44.md](features/44.md) | No thumbnail images for map locations | 🔲 Open |
 | 45 | [45.md](features/45.md) | No LLM short-circuit for common responses | 🔲 Open |
 | 56 | [56.md](features/56.md) | Dev-loop orchestrator not built | 🔲 Open |
+| 57 | [57.md](features/57.md) | CI tests for Streamlit UI | 🔲 Open |
