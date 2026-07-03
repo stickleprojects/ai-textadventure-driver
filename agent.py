@@ -339,15 +339,19 @@ def determine_next_action(state):
     # No Unknown exits anywhere — navigate to nearest unvisited known room.
     # This handles a pre-seeded graph where all edges are real but rooms haven't
     # been visited this run (so Unknown placeholders were never generated).
+    # Guard: if current_room is None or absent from the graph, nx.shortest_path_length
+    # treats None as "all sources" and returns a dict, crashing the < comparison.
     visited = state.get("visited_rooms", set())
     best_unvisited = None
     best_len = float("inf")
-    for node in state["world_graph"].nodes:
+    current = state["current_room"]
+    _known_nodes = state["world_graph"].nodes if (current and current in state["world_graph"]) else []
+    for node in _known_nodes:
         if node.startswith("Unknown") or node in visited:
             continue
         try:
             path_len = nx.shortest_path_length(
-                state["world_graph"], state["current_room"], node
+                state["world_graph"], current, node
             )
             if path_len < best_len:
                 best_len = path_len
