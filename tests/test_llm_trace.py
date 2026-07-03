@@ -57,7 +57,7 @@ class TestTraceInLogEntry:
         state = {
             "current_room": "Hall",
             "inventory": [], "spellbook": [],
-            "known_entities": {}, "world_graph": nx.DiGraph(),
+            "known_entities": {}, "world_graph": nx.MultiDiGraph(),
             "uninspected_objects": [],
             "current_inspection": {"target": None, "sequence": [], "step_index": 0},
             "known_npcs": {}, "unresolved_anomalies": {}, "active_goal": None,

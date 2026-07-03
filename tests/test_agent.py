@@ -199,7 +199,7 @@ def test_active_goal_in_target_room_casts_spell():
 
 def test_anomaly_resolved_by_inventory_sets_active_goal():
     import networkx as nx
-    g = nx.DiGraph()
+    g = nx.MultiDiGraph()
     g.add_edge("Forest", "Cave", label="north")
     state = make_state(
         current_room="Forest",
@@ -226,7 +226,7 @@ def test_uninspected_objects_starts_inspection():
 
 def test_unknown_exit_explored():
     import networkx as nx
-    g = nx.DiGraph()
+    g = nx.MultiDiGraph()
     g.add_edge("Forest", "Unknown (north from Forest)", label="north")
     state = make_state(current_room="Forest", world_graph=g)
     assert determine_next_action(state)[0] == "north"
@@ -460,16 +460,17 @@ class TestNullRoomHandling:
         assert not state["world_graph"].has_node("Unknown (south from Blackthorn Underbrush)")
         assert state["world_graph"].has_edge("Blackthorn Underbrush", "Hawthorn Coppice")
 
-    def test_direction_alias_merges_edge_label(self):
-        # Bug 48: south==down at starting room — second traversal should merge
-        # the label rather than overwrite.
+    def test_direction_aliases_stored_as_separate_edges(self):
+        # Bug 48: south==down at starting room — each alias is a separate edge
+        # in a MultiDiGraph rather than a merged compound label.
         state = make_state(current_room="Start")
         update_graph(state, "Cellar", [], "Start", "south")
         update_graph(state, "Cellar", [], "Start", "down")
-        edge = state["world_graph"].get_edge_data("Start", "Cellar")
-        assert edge is not None
-        assert "south" in edge["label"]
-        assert "down" in edge["label"]
+        edges = state["world_graph"].get_edge_data("Start", "Cellar")
+        assert edges is not None
+        labels = {d["label"] for d in edges.values()}
+        assert "south" in labels
+        assert "down" in labels
 
     def test_direction_alias_does_not_readd_unknown_for_merged_direction(self):
         # Bug 48: after south/down are merged, exits listing "south" again should
@@ -487,7 +488,7 @@ class TestNullRoomHandling:
         # "cave in a juniper scrubland") — both should resolve to the same node.
         from agent import _resolve_room_name
         import networkx as nx
-        g = nx.DiGraph()
+        g = nx.MultiDiGraph()
         g.add_node("cave in juniper scrubland")
         assert _resolve_room_name(g, "cave in a juniper scrubland") == "cave in juniper scrubland"
         assert _resolve_room_name(g, "Cave In Juniper Scrubland") == "cave in juniper scrubland"
@@ -498,7 +499,7 @@ class TestNullRoomHandling:
         # stored node is "alder ghostwood" / "alder forest".
         from agent import _resolve_room_name
         import networkx as nx
-        g = nx.DiGraph()
+        g = nx.MultiDiGraph()
         g.add_node("alder ghostwood")
         g.add_node("cedar tangle")
         g.add_node("alder forest")
@@ -512,7 +513,7 @@ class TestNullRoomHandling:
         assert _resolve_room_name(g, "on a jousting field") == "jousting field"
 
         # "inside" / "outside" must NOT be stripped — they are distinct locations
-        g2 = nx.DiGraph()
+        g2 = nx.MultiDiGraph()
         g2.add_node("inside a cave")
         g2.add_node("outside a cave")
         assert _resolve_room_name(g2, "inside a cave") == "inside a cave"
@@ -526,7 +527,7 @@ class TestNullRoomHandling:
         # separated by comma or semicolon. Both forms must resolve to the same node.
         from agent import _resolve_room_name
         import networkx as nx
-        g = nx.DiGraph()
+        g = nx.MultiDiGraph()
         g.add_node("jousting field")
         g.add_node("dingy stable")
         g.add_node("dismal fairground in a rowan coppice")
@@ -546,7 +547,7 @@ class TestNullRoomHandling:
         # the new node should be stored under the short name, not the full description.
         from agent import _resolve_room_name
         import networkx as nx
-        g = nx.DiGraph()
+        g = nx.MultiDiGraph()
         result = _resolve_room_name(g, "a dingy stable, a temporary building with canvas walls")
         assert result == "dingy stable"
         result2 = _resolve_room_name(g, "on a jousting field; an acre of firm meadow")
@@ -569,7 +570,7 @@ class TestNullRoomHandling:
 
 class TestStuckAnomalyLoop:
     def test_hard_failure_on_goal_action_removes_anomaly(self, stub_child):
-        g = nx.DiGraph()
+        g = nx.MultiDiGraph()
         g.add_node("Garbage Pile")
         state = make_state(
             current_room="Garbage Pile",
@@ -587,7 +588,7 @@ class TestStuckAnomalyLoop:
         assert "rubbish" not in state["unresolved_anomalies"]
 
     def test_success_on_goal_action_keeps_anomaly_for_llm_to_resolve(self, stub_child):
-        g = nx.DiGraph()
+        g = nx.MultiDiGraph()
         g.add_node("Garbage Pile")
         state = make_state(
             current_room="Garbage Pile",
@@ -714,7 +715,9 @@ class TestMarkEdgeFutile:
         state["world_graph"].add_edge("Hall", "Unknown (north from Hall)", label="north")
         _mark_edge_futile(state, "Hall", "north")
         data = state["world_graph"].get_edge_data("Hall", "Unknown (north from Hall)")
-        assert data.get("futile") is True
+        assert data is not None
+        # MultiDiGraph: get_edge_data returns {key: data_dict}
+        assert any(d.get("futile") for d in data.values())
 
     def test_no_crash_when_edge_absent(self):
         state = make_state(current_room="Hall")
@@ -818,7 +821,7 @@ class TestNavCommand:
 
 class TestActiveGoalNavigation:
     def _goal_state(self):
-        g = nx.DiGraph()
+        g = nx.MultiDiGraph()
         g.add_node("Hall")
         g.add_node("Courtyard")
         g.add_edge("Hall", "Courtyard", label="north")
@@ -837,7 +840,7 @@ class TestActiveGoalNavigation:
             assert determine_next_action(self._goal_state())[0] == "run to Courtyard"
 
     def test_active_goal_uses_graph_nav_for_unvisited_room(self):
-        g = nx.DiGraph()
+        g = nx.MultiDiGraph()
         g.add_node("Hall")
         g.add_node("Courtyard")
         g.add_edge("Hall", "Courtyard", label="north")
@@ -905,7 +908,7 @@ class TestPositionLost:
         """State where determine_next_action will emit a direction (north) to explore."""
         import networkx as nx
         state = make_state()
-        g = nx.DiGraph()
+        g = nx.MultiDiGraph()
         g.add_node("Forest")
         g.add_edge("Forest", "Unknown (north from Forest)", label="north")
         state["world_graph"] = g

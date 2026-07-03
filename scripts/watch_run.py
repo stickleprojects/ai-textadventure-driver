@@ -71,10 +71,14 @@ def make_initial_state(strategy_path=STRATEGY_PATH):
         for name, verbs in strategy.get("entity_verb_outcomes", {}).items()
     }
     wg_data = strategy.get("world_graph", {"nodes": [], "edges": []})
-    world_graph = nx.DiGraph()
+    world_graph = nx.MultiDiGraph()
     world_graph.add_nodes_from(wg_data.get("nodes", []))
     for u, v, label in wg_data.get("edges", []):
-        world_graph.add_edge(u, v, label=label)
+        for part in label.split("/"):
+            if part:
+                existing = {d["label"] for d in (world_graph.get_edge_data(u, v) or {}).values()}
+                if part not in existing:
+                    world_graph.add_edge(u, v, label=part)
     return {
         "current_room": "Unknown Location",
         "inventory": [],

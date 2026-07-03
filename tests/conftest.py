@@ -14,7 +14,7 @@ def make_state(**overrides):
         "known_entities": {},
         "known_npcs": {},
         "unresolved_anomalies": {},
-        "world_graph": nx.DiGraph(),
+        "world_graph": nx.MultiDiGraph(),
         "uninspected_objects": [],
         "current_inspection": {"target": None, "sequence": config.inspection_sequence, "step_index": 0},
         "active_goal": None,
