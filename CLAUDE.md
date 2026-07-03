@@ -49,7 +49,7 @@ The app defaults to:
 | `scripts/watch_run.py` | Headless runner; `--detect/--review/--architect` flags; cloud LLM via env vars |
 | `scripts/detect_anomalies.py` | Stage 1: deterministic anomaly detectors → `anomaly_report.json` |
 | `scripts/llm_review.py` | Stage 1b: LLM review of the run log, appends findings to report |
-| `scripts/architect.py` | Stage 2: anomaly → fix plan; deduplicates via `plans/index.json` |
+| `scripts/architect.py` | Stage 2: anomaly → fix plan; deduplicates by scanning `plans/P*.json` |
 | `scripts/generate_evals.py` | Generate eval fixtures from a saved game log (requires `ANTHROPIC_API_KEY`) |
 | `scripts/generate_map.py` | Regenerate a map PNG from a saved run log |
 | `scripts/agent_dev_loop.py` | Dev orchestrator: detect → architect → dev → verify (feature 56) |
@@ -62,7 +62,7 @@ The app defaults to:
 | `configs/knight_orc_strategy.json` | `futile_edges` + `run_history` (cross-run persistence) |
 | `configs/knight_orc_rooms.json` | World graph sidecar (nodes + edges) |
 | `configs/knight_orc_items.json` | Entity verb outcomes sidecar |
-| `plans/index.json` | Central fix-plan registry; dedup by anomaly type |
+| `plans.md` | Human-facing fix-plan index (table); regenerated from `plans/P*.json` on every architect run |
 | `schemas/` | JSON Schema Draft-7 files validating all of the above |
 
 **`game_engine.py`** — `start_level9` spawns `glklevel9` via `pexpect` and returns `(child, initial_text)`. `execute_game_command(child, command)` sends a line and reads until the `What now?` prompt. ANSI escape codes are stripped before output is passed to the LLM.

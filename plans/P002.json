@@ -1,6 +1,9 @@
 {
   "schema": "fix_plan/v1",
   "anomaly_id": "a3",
+  "title": "Zigzag navigation between two rooms",
+  "anomaly_type": "repetitive_zigzag_navigation",
+  "severity": "medium",
   "root_cause_hypothesis": "The nearest-unexplored-room navigation repeatedly re-selects a target reached via a sw/east edge pair whose 'Unknown' exits keep re-appearing (or never clear), so the agent oscillates between two rooms without ever exhausting or de-prioritizing that oscillating pair.",
   "target_files": [
     "agent.py"
@@ -14,5 +17,12 @@
   ],
   "risk_notes": "Marking an oscillating edge futile risks pruning a legitimately needed corridor if the two rooms genuinely connect to distinct unexplored areas whose Unknown placeholders simply weren't cleared; guard by only marking futile after the alternation exceeds a threshold and both legs show no room-count/entity gains. Ensure the new logic treats direction aliases (sw==southwest) consistently via _DIRECTION_NORMALIZE, and confirm futile edges here are direction-invalid-for-navigation state, not a permanent verb 'invalid' \u2014 only (room,direction) navigation futility should be persisted, never a 'blocked' state-dependent outcome.",
   "status": "fixed",
-  "plan_id": "P002"
+  "plan_id": "P002",
+  "source_runs": [
+    "watch_20260702_152816"
+  ],
+  "anomaly_ids": [
+    "watch_20260702_152816/a3"
+  ],
+  "fixed_in": "PR #45 — direction-diversity scoring added to navigation target selection (path_len + min_recent_dir_frequency)"
 }

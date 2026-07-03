@@ -1,6 +1,9 @@
 {
   "schema": "fix_plan/v1",
   "anomaly_id": "a4",
+  "title": "Futile up/down direction probing",
+  "anomaly_type": "futile_direction_probing",
+  "severity": "low",
   "root_cause_hypothesis": "The unknown-exit exploration loop in determine_next_action generates Unknown placeholder edges for directions the LLM never listed among the room's exits, so the agent probes 'up'/'down' that have no basis in the described environment.",
   "target_files": [
     "agent.py"
@@ -13,5 +16,12 @@
   ],
   "risk_notes": "Rooms where the LLM under-reports exits (misses a real 'up'/'down') will no longer be probed, potentially leaving a genuine exit unexplored; mitigate by relying on later re-visits/look refreshing the exits list. Ensure reverse-edge wiring for previous_room still functions when the return direction is legitimately absent from the current room's exits, so back-navigation is not broken.",
   "status": "fixed",
-  "plan_id": "P003"
+  "plan_id": "P003",
+  "source_runs": [
+    "watch_20260702_152816"
+  ],
+  "anomaly_ids": [
+    "watch_20260702_152816/a4"
+  ],
+  "fixed_in": "PR #45 — up/down filtered from extracted exits unless those words appear literally in the response text"
 }

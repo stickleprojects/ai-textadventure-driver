@@ -53,20 +53,14 @@ def test_eval_fixture_ids_unique():
 
 # ── plan files ────────────────────────────────────────────────────────────────
 
-def test_plan_index_valid():
-    jsonschema.validate(_load(PLANS / "index.json"), _schema("plan_index.schema.json"))
-
-
 @pytest.mark.parametrize("plan_file", sorted(PLANS.glob("P*.json")))
 def test_plan_files_valid(plan_file):
     jsonschema.validate(_load(plan_file), _schema("plan.schema.json"))
 
 
-def test_plan_index_ids_match_files():
-    index = _load(PLANS / "index.json")
-    indexed = {p["plan_id"] for p in index["plans"]}
-    on_disk = {p.stem for p in PLANS.glob("P*.json")}
-    assert indexed == on_disk, f"Index/file mismatch — index-only: {indexed - on_disk}, file-only: {on_disk - indexed}"
+def test_plan_ids_match_filenames():
+    for plan_file in PLANS.glob("P*.json"):
+        assert _load(plan_file)["plan_id"] == plan_file.stem, f"plan_id mismatch in {plan_file}"
 
 
 # ── all JSON files parse ──────────────────────────────────────────────────────
