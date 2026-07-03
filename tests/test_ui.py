@@ -6,7 +6,6 @@ Covers:
   - Sidebar shows the correct fields for each provider mode
   - Session state is initialised with the expected keys
 """
-import sys
 import os
 import pytest
 from unittest.mock import MagicMock, patch
