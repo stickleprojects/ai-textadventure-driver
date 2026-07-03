@@ -92,21 +92,19 @@ The app defaults to:
 
 ## Known Issues
 
-Issues are tracked in three files:
-- `bugs.md` — incorrect or broken behaviour
-- `requirements.md` — agent gameplay capabilities not yet implemented
-- `features.md` — enhancements, tooling, infrastructure
+Issues are tracked in `docs/` with one file per issue:
+- [`docs/bugs.md`](docs/bugs.md) — incorrect or broken behaviour (individual files in `docs/bugs/`)
+- [`docs/requirements.md`](docs/requirements.md) — agent gameplay capabilities (individual files in `docs/requirements/`)
+- [`docs/features.md`](docs/features.md) — enhancements, tooling, infrastructure (individual files in `docs/features/`)
 
 Current open issues of note:
-- Agent doesn't distinguish NPCs from objects (tries to `read` or `look inside` horses, knights)
-- NPC interaction (greet, ask for help) is not implemented
-- `"you can see X"` is not reliably parsed as room contents vs. inventory
-- Object visibility ≠ possession; agent sometimes assumes seen items are in inventory
-- Wearable items / disguises (e.g. hood) not handled
+- Bug 45: maze rooms with non-unique names collapse to a single graph node, causing loops
+- Requirement 2: NPC interaction (greet, ask for help) not implemented
+- Requirement 21: cannot execute timed multi-step NPC strategies
 
 ## Planning
 
-When designing or documenting an implementation plan (in memory, issues.md, or a design session), always include a **"How will we know it worked?"** section. This must describe what you would actually observe during a live runthrough of the game — not test results, not log file contents alone, but visible agent behaviour:
+When designing or documenting an implementation plan (in memory, in a `docs/` issue file, or a design session), always include a **"How will we know it worked?"** section. This must describe what you would actually observe during a live runthrough of the game — not test results, not log file contents alone, but visible agent behaviour:
 
 - Which action(s) should appear (or stop appearing) in the step log
 - What the agent should do differently compared to before the change
@@ -117,7 +115,7 @@ This section is required for any plan that touches agent behaviour, the LLM extr
 
 ## Journal
 
-`JOURNAL.md` in the project root records non-obvious findings, rejected approaches, and design decisions. Add an entry whenever:
+`docs/JOURNAL.md` records non-obvious findings, rejected approaches, and design decisions. Add an entry whenever:
 - An approach was considered and rejected (and why)
 - A surprising behaviour was observed in the game or LLM
 - A non-obvious architectural decision was made

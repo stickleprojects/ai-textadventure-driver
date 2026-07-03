@@ -244,4 +244,4 @@ tools/glklevel9             Level 9 interpreter binary (Linux x86-64)
 - `"you can see X"` not reliably parsed as room contents vs. inventory
 - Wearable items and disguises (e.g. the hood) not handled
 
-Full issue tracking: `bugs.md`, `requirements.md`, `features.md`
+Full issue tracking: [`docs/bugs.md`](docs/bugs.md), [`docs/requirements.md`](docs/requirements.md), [`docs/features.md`](docs/features.md)
