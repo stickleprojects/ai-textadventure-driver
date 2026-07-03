@@ -147,6 +147,29 @@ def _display_label(node_id):
     return "\n".join(textwrap.wrap(node_id, width=_LABEL_WRAP_WIDTH) or [node_id])
 
 
+def _iter_display_edges(g):
+    """Yield (u, v, label, bidirectional) for rendering.
+
+    When both (u, v) and (v, u) exist, yield them once as a single bidirectional
+    entry with a combined label (e.g. "north/south"). One-way edges are yielded
+    as-is with bidirectional=False.
+    """
+    seen = set()
+    for u, v, data in g.edges(data=True):
+        if (u, v) in seen:
+            continue
+        label = data.get("label", "")
+        rev = g.get_edge_data(v, u)
+        if rev is not None:
+            rev_label = rev.get("label", "")
+            combined = f"{label}/{rev_label}" if label != rev_label else label
+            yield u, v, combined, True
+            seen.add((v, u))
+        else:
+            yield u, v, label, False
+        seen.add((u, v))
+
+
 def render_graph(state):
     g = state["world_graph"]
 
@@ -178,8 +201,9 @@ def render_graph(state):
             borderWidth=3 if node == current_room else 1,
         )
 
-    for u, v, data in g.edges(data=True):
-        net.add_edge(u, v, label=data.get("label", ""), color="#4a4a6a",
+    for u, v, label, bidir in _iter_display_edges(g):
+        net.add_edge(u, v, label=label, color="#4a4a6a",
+                     arrows="to, from" if bidir else "to",
                      font={"size": 10, "color": "#a78bfa", "strokeWidth": 0})
 
     net.set_options("""{
