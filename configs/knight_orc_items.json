@@ -162,7 +162,8 @@
     "unlock": "invalid"
   },
   "straw": {
-    "close": "invalid"
+    "close": "invalid",
+    "take": "invalid"
   },
   "spear": {
     "take": "invalid"
@@ -183,6 +184,9 @@
     "take": "invalid"
   },
   "treasures": {
+    "take": "invalid"
+  },
+  "rope": {
     "take": "invalid"
   }
 }

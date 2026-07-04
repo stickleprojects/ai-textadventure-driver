@@ -327,6 +327,41 @@ class TestProcessAgentStepOutcomes:
         assert state["known_entities"]["key"]["verb_outcomes"].get("take") == "succeeded"
         assert state["current_inspection"]["target"] == "key"
 
+    def test_take_unrecognized_response_triggers_recheck_not_succeeded(self, stub_child):
+        # "That's too heavy." matches neither hard nor soft failure patterns, and
+        # extraction correctly did not add the item to inventory -- must not be
+        # silently recorded as "succeeded" (that's how the agent kept re-taking
+        # "pile of garbage" forever: never blacklisted since never "invalid").
+        state = make_state(uninspected_objects=["pile of garbage"])
+        state["known_entities"]["pile of garbage"] = {
+            "status": "discovered", "location": "Field", "verb_outcomes": {},
+        }
+        with patch("agent.execute_game_command", return_value="That's too heavy."), \
+             patch("agent.extract_knowledge", return_value={"added_to_inventory": []}):
+            process_agent_step(state, stub_child, None)
+        assert "take" not in state["known_entities"]["pile of garbage"]["verb_outcomes"]
+        assert state["recheck_inventory"] is True
+        assert state["current_inspection"]["target"] is None
+        assert state["game_log"][-1]["unrecognized_failure"] == {
+            "target": "pile of garbage",
+            "action": "take pile of garbage",
+            "response": "That's too heavy.",
+        }
+
+    def test_take_confirmed_by_extraction_records_succeeded_even_with_no_keyword_match(self, stub_child):
+        # Regression guard: a genuine success with unusual phrasing (no "Taken."
+        # keyword) must still record "succeeded" via added_to_inventory, and must
+        # NOT be treated as unrecognized.
+        state = make_state(uninspected_objects=["putty knife"])
+        state["known_entities"]["putty knife"] = {
+            "status": "discovered", "location": "Hall", "verb_outcomes": {},
+        }
+        with patch("agent.execute_game_command", return_value="You slip the putty knife into your pocket."), \
+             patch("agent.extract_knowledge", return_value={"added_to_inventory": ["putty knife"]}):
+            process_agent_step(state, stub_child, None)
+        assert state["known_entities"]["putty knife"]["verb_outcomes"].get("take") == "succeeded"
+        assert "unrecognized_failure" not in state["game_log"][-1]
+
     def test_hard_failure_records_invalid_does_not_clear_inspection(self, stub_child):
         state = make_state(current_inspection={
             "target": "sword", "sequence": ["read", "wear"], "step_index": 0,

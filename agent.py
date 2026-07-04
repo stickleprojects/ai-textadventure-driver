@@ -425,23 +425,13 @@ def process_agent_step(state, child, llm_instance):
 
     response = execute_game_command(child, action_taken)
 
-    # Record verb outcomes and handle take failure
-    if insp_verb and effective_target:
-        if insp_verb == "take":
-            if _is_soft_failure(response):
-                # State-dependent (e.g. "you're already carrying that", hands full) —
-                # may succeed on a later attempt/run, so never persist as permanent.
-                _record_verb_outcome(state, effective_target, "take", "blocked")
-                state["current_inspection"]["target"] = None
-                state["current_inspection"]["step_index"] = 0
-            elif _is_hard_failure(response):
-                # Permanently un-takeable (e.g. scenery) — safe to persist cross-run.
-                _record_verb_outcome(state, effective_target, "take", "invalid")
-                state["current_inspection"]["target"] = None
-                state["current_inspection"]["step_index"] = 0
-            else:
-                _record_verb_outcome(state, effective_target, "take", "succeeded")
-        elif _is_soft_failure(response):
+    # Record verb outcomes for non-take inspection verbs. "take" is handled
+    # after extraction below, since it needs added_to_inventory to tell a
+    # confirmed success apart from an unrecognized response (see bug: "That's
+    # too heavy." matched no failure pattern and was silently recorded as
+    # "succeeded" even though the item was never actually taken).
+    if insp_verb and effective_target and insp_verb != "take":
+        if _is_soft_failure(response):
             # Valid verb, blocked by current game state — retry later
             _record_verb_outcome(state, effective_target, insp_verb, "blocked")
         elif _is_hard_failure(response):
@@ -453,6 +443,39 @@ def process_agent_step(state, child, llm_instance):
     extracted = extract_knowledge(response, action_taken, llm_instance)
     token_usage = extracted.pop("_usage", {"input_tokens": 0, "output_tokens": 0})
     llm_trace = extracted.pop("_trace", None)
+
+    unrecognized_failure = None
+    if insp_verb == "take" and effective_target:
+        if _is_soft_failure(response):
+            # State-dependent (e.g. "you're already carrying that", hands full) —
+            # may succeed on a later attempt/run, so never persist as permanent.
+            _record_verb_outcome(state, effective_target, "take", "blocked")
+            state["current_inspection"]["target"] = None
+            state["current_inspection"]["step_index"] = 0
+        elif _is_hard_failure(response):
+            # Permanently un-takeable (e.g. scenery) — safe to persist cross-run.
+            _record_verb_outcome(state, effective_target, "take", "invalid")
+            state["current_inspection"]["target"] = None
+            state["current_inspection"]["step_index"] = 0
+        else:
+            taken = {i.lower() for i in extracted.get("added_to_inventory", [])}
+            if effective_target.lower() in taken:
+                _record_verb_outcome(state, effective_target, "take", "succeeded")
+            else:
+                # Neither a known failure pattern nor confirmed by extraction as
+                # actually taken — don't guess. Verify via INVENTORY (see
+                # "Handling uncertainty" in docs/agent_behavior_spec.md) instead
+                # of assuming success, and surface the raw response so a new
+                # failure pattern can be classified and reviewed later (see
+                # anomaly_detector._unrecognized_failure_responses).
+                state["recheck_inventory"] = True
+                state["current_inspection"]["target"] = None
+                state["current_inspection"]["step_index"] = 0
+                unrecognized_failure = {
+                    "target": effective_target,
+                    "action": action_taken,
+                    "response": response,
+                }
 
     # Deliberately doesn't try to determine who the "victim" is (the game can
     # narrate the player in third person, not just "you") — instead, any item
@@ -589,6 +612,8 @@ def process_agent_step(state, child, llm_instance):
     }
     if llm_trace:
         entry["llm_trace"] = llm_trace
+    if unrecognized_failure:
+        entry["unrecognized_failure"] = unrecognized_failure
     state["game_log"].append(entry)
 
     loop_action = _detect_loop(state["game_log"])
