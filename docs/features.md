@@ -20,3 +20,4 @@ Enhancements, new functionality, tooling, and infrastructure improvements.
 | 56 | [56.md](features/56.md) | Dev-loop orchestrator not built | 🔲 Open |
 | 57 | [57.md](features/57.md) | CI tests for Streamlit UI | 🔲 Open |
 | 58 | [58.md](features/58.md) | Merge bidirectional edges in Spatial Matrix | ✅ Fixed |
+| 59 | [59.md](features/59.md) | Split agent/state code into reusable library vs. Knight-Orc-bespoke layers, add spec-driven tests | 🔲 Open |

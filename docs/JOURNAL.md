@@ -124,3 +124,17 @@ The fix required separating two kinds of memory that had been collapsed into one
 A second, related bug surfaced during the fix: the `take` outcome classifier used the broad `_is_failure_response` (hard OR soft) and recorded *any* failure as `"invalid"`, unlike every other verb which already split hard (permanent) from soft (state-dependent, "blocked", never persisted). A state-dependent take failure — e.g. "you're already carrying that", or a future carry-capacity limit — would have been wrongly persisted as a permanent fact and blacklisted the object cross-run. Fixed by giving `take` the same hard/soft split already used elsewhere.
 
 Lesson: when a single dict (`known_entities`) is used both as "things I remember learning" (cross-run) and "things relevant to my current state" (per-run), any check against bare membership in that dict is a latent bug. The fix is never "clear it every run" (that would also lose the legitimately-permanent verb-outcome memory) — it's identifying exactly which sub-fact is permanent and which is run-scoped, then gating on the right one.
+
+---
+
+## 2026-07-04
+
+### Feature 59's own cross-reference list understated how much of the spec was already implemented
+
+Before writing spec-driven fixtures, we checked how much of `docs/agent_behavior_spec.md` already had code behind it. Feature 59's doc lists open requirements (2, 21, 23, 25, 40) against several spec sections, implying most of the doc describes unimplemented behavior. In fact the generic `unresolved_anomalies` → `active_goal` mechanism in `agent.py` (`determine_next_action`) already handles three separate spec sections at once — locked exits, locked containers, and spells — because all three reduce to the same shape (a target with a `potential_solution` string matched against inventory/spellbook; `cast` vs `use` is picked by spellbook membership). Death/pearl-room handling (`recheck_inventory`, `position_lost`) is also real, not aspirational.
+
+The genuinely unimplemented sections are narrower than the doc's framing suggests: NPC interaction verbs (SAY/GIVE/TAKE FROM/FOLLOW — Requirement 2/21/40), NPC theft detection (Requirement 23), and landmark/`GO TO`-partial-block handling (Requirement 25). Decided to scope feature 59's first phase around exactly this gap — spec-traceable fixtures for the sections that already work (regression coverage) plus `xfail`'d fixtures for the three that don't (the actual punch list) — rather than starting with the code/spec split feature 59 describes first. The split is real future work, but doing it before there's any spec-traceable test coverage would mean refactoring blind.
+
+### Agent-level spec fixtures didn't need any new test infrastructure
+
+The natural worry going in was that testing *agent behavior* (as opposed to LLM extraction, which `tests/evals/` already covers) would require pulling a pure `apply_extraction(state, ...)` function out of the monolithic `process_agent_step` (which currently also calls `execute_game_command` and `extract_knowledge` directly). It didn't: `tests/test_agent.py` already tests `process_agent_step` end-to-end by patching `agent.execute_game_command` and `agent.extract_knowledge` with `unittest.mock.patch`, then asserting on the mutated `state`. Reusing that exact pattern, data-driven instead of hand-written per case, was enough — no `agent.py` refactor needed to get spec-scenario fixtures working (`tests/spec_scenarios/`).
