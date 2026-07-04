@@ -46,6 +46,8 @@ import subprocess
 import sys
 from pathlib import Path
 
+import jsonschema
+
 PROJECT_ROOT = Path(__file__).parent.parent
 LOG_DIR = PROJECT_ROOT / "logs"
 VENV_ACTIVATE = PROJECT_ROOT / ".venv" / "bin" / "activate"
@@ -54,6 +56,21 @@ SPEC_DOC = PROJECT_ROOT / "docs" / "agent_behavior_spec.md"
 SCENARIOS_FILE = PROJECT_ROOT / "tests" / "spec_scenarios" / "scenarios.json"
 BASE_BRANCH = "develop"
 PR_TITLE_PREFIX = "[fixer-agent]"
+
+# Cross-run state/fixture files the fixer might touch (directly, or as a side
+# effect of running the game/tests), keyed to the schema that defines "valid".
+# This catches the checkable slice of "corrupted state" — malformed JSON or
+# schema violations. It does not catch runtime corruption like an infinite
+# loop; see TEST_TIMEOUT_SECS / SCENARIO_TEST_TIMEOUT_SECS for that.
+STATE_FILE_SCHEMAS = {
+    "configs/knight_orc.json":          "game_config.schema.json",
+    "configs/knight_orc_strategy.json": "strategy.schema.json",
+    "configs/knight_orc_rooms.json":    "rooms.schema.json",
+    "configs/knight_orc_items.json":    "items.schema.json",
+    "tests/spec_scenarios/scenarios.json": "spec_scenario.schema.json",
+}
+TEST_TIMEOUT_SECS = 180
+SCENARIO_TEST_TIMEOUT_SECS = 90
 
 
 # ── Tool implementations ──────────────────────────────────────────────────────
@@ -194,7 +211,17 @@ Rules:
 - For LLM extraction issues: prefer prompt edits in llm.py over logic changes in agent.py.
 - Do not refactor or add features beyond what the reported issues require.
 - Do not add explanatory comments about what you changed.
-- If an issue is ambiguous, make a conservative fix and note your uncertainty in the summary.\
+- If an issue is ambiguous, make a conservative fix and note your uncertainty in the summary.
+- configs/*.json and tests/spec_scenarios/scenarios.json are schema-validated
+  (schemas/*.schema.json, checked by tests/test_json_schemas.py). If you edit any
+  of them, keep them valid JSON matching their schema — the harness independently
+  checks this after you finish and reverts the file (discarding your edit to it)
+  if it's broken, so a corrupted state file never blocks the rest of your fix.
+- Never introduce an unbounded loop (`while True`, unbounded retry/recursion)
+  without a guaranteed exit condition. A prior incident (see docs/JOURNAL.md,
+  "drain_game_buffer infinite loop in test suite") hung the test suite this way;
+  the harness now times out and treats a hang as a failed attempt, but a timeout
+  wastes the whole iteration, so avoid it in the first place.\
 """
 
 
@@ -279,18 +306,57 @@ def _run_analysis(steps, game_config=None):
 
 
 def _run_tests():
-    result = subprocess.run(
-        f"source {VENV_ACTIVATE} && python -m pytest tests/ -x -q --ignore=tests/test_evals.py",
-        shell=True,
-        cwd=PROJECT_ROOT,
-        capture_output=True,
-        text=True,
-        executable="/bin/bash",
-    )
+    try:
+        result = subprocess.run(
+            f"source {VENV_ACTIVATE} && python -m pytest tests/ -x -q --ignore=tests/test_evals.py",
+            shell=True,
+            cwd=PROJECT_ROOT,
+            capture_output=True,
+            text=True,
+            executable="/bin/bash",
+            timeout=TEST_TIMEOUT_SECS,
+        )
+    except subprocess.TimeoutExpired:
+        print(f"Test suite did not finish within {TEST_TIMEOUT_SECS}s — possible infinite "
+              "loop in the fixer's change.", file=sys.stderr)
+        return False
     print(result.stdout.strip())
     if result.returncode != 0:
         print(result.stderr.strip(), file=sys.stderr)
     return result.returncode == 0
+
+
+def _state_files_corrupted():
+    """Return [(rel_path, problem), ...] for any tracked state/fixture file that
+    is no longer valid JSON or no longer matches its schema."""
+    problems = []
+    for rel_path, schema_name in STATE_FILE_SCHEMAS.items():
+        path = PROJECT_ROOT / rel_path
+        if not path.exists():
+            problems.append((rel_path, "file is missing"))
+            continue
+        try:
+            data = json.loads(path.read_text())
+        except json.JSONDecodeError as e:
+            problems.append((rel_path, f"invalid JSON: {e}"))
+            continue
+        schema = json.loads((PROJECT_ROOT / "schemas" / schema_name).read_text())
+        try:
+            jsonschema.validate(data, schema)
+        except jsonschema.ValidationError as e:
+            problems.append((rel_path, f"schema violation: {e.message}"))
+    return problems
+
+
+def _revert_state_files(rel_paths):
+    _run(["git", "checkout", "--", *rel_paths])
+
+
+def _report_and_revert_corruption(problems):
+    print("\nFixer left state/fixture file(s) invalid — reverting before checking tests:")
+    for rel_path, problem in problems:
+        print(f"  {rel_path}: {problem}")
+    _revert_state_files([p for p, _ in problems])
 
 
 # ── Spec-target mode (feature 59) ──────────────────────────────────────────────
@@ -410,14 +476,20 @@ def _scenario_still_xfail(scenario_id):
 
 
 def _run_scenario_test(scenario_id):
-    result = subprocess.run(
-        f"source {VENV_ACTIVATE} && python -m pytest tests/test_spec_scenarios.py -k {scenario_id} -q",
-        shell=True,
-        cwd=PROJECT_ROOT,
-        capture_output=True,
-        text=True,
-        executable="/bin/bash",
-    )
+    try:
+        result = subprocess.run(
+            f"source {VENV_ACTIVATE} && python -m pytest tests/test_spec_scenarios.py -k {scenario_id} -q",
+            shell=True,
+            cwd=PROJECT_ROOT,
+            capture_output=True,
+            text=True,
+            executable="/bin/bash",
+            timeout=SCENARIO_TEST_TIMEOUT_SECS,
+        )
+    except subprocess.TimeoutExpired:
+        print(f"Scenario test did not finish within {SCENARIO_TEST_TIMEOUT_SECS}s — possible "
+              "infinite loop in the fixer's change.", file=sys.stderr)
+        return False
     print(result.stdout.strip())
     if result.returncode != 0:
         print(result.stderr.strip(), file=sys.stderr)
@@ -477,6 +549,14 @@ def run_spec_target(scenario_id, iterations, model, dry_run):
             print(f"  #{pr['number']} {pr['title']!r} ({pr['headRefName']}) — {pr['url']}")
         sys.exit(1)
 
+    pre_existing_problems = _state_files_corrupted()
+    if pre_existing_problems:
+        sys.exit(
+            "State/fixture file(s) are already invalid before starting — fix these "
+            "first, this isn't the fixer's doing:\n"
+            + "\n".join(f"  {p}: {msg}" for p, msg in pre_existing_problems)
+        )
+
     _ensure_clean_worktree()
     original_branch = _current_branch()
     branch = _create_scenario_branch(scenario_id)
@@ -488,6 +568,10 @@ def run_spec_target(scenario_id, iterations, model, dry_run):
         print(f"{'='*60}\n")
 
         summary = run_fixer_agent(prompt, model=model)
+
+        corruption = _state_files_corrupted()
+        if corruption:
+            _report_and_revert_corruption(corruption)
 
         print("\nChecking scenario test...")
         scenario_passed = _run_scenario_test(scenario_id)
@@ -562,6 +646,10 @@ def main():
 
         print("[3/4] Fixer agent editing code...")
         run_fixer_agent(analysis, model=args.model)
+
+        corruption = _state_files_corrupted()
+        if corruption:
+            _report_and_revert_corruption(corruption)
 
         print("\n[4/4] Running tests...")
         if not _run_tests():
