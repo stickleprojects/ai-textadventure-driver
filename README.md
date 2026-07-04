@@ -145,6 +145,7 @@ before/after metrics attached:
 
 ```bash
 ./run_dev_loop.sh --spec-target <scenario_id>
+./run_dev_loop.sh --spec-target                 # first open (xfail'd) scenario
 ```
 
 Requires: a clean working tree, `gh` CLI authenticated, no PR already open
