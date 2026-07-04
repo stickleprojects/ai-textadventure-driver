@@ -19,8 +19,10 @@ Exit code:
 """
 import argparse
 import json
+import logging
 import os
 import sys
+import time
 from datetime import datetime
 from pathlib import Path
 
@@ -33,6 +35,11 @@ from log_analyzer import analyze_log
 from agent import process_agent_step
 from game_engine import start_level9
 from llm import load_llm
+
+# Suppress Streamlit's "missing ScriptRunContext" warning — harmless outside a
+# Streamlit session; @st.cache_resource just runs without caching.
+# Must be after imports: streamlit resets its logger levels at import time.
+logging.getLogger("streamlit.runtime.scriptrunner_utils.script_run_context").setLevel(logging.ERROR)
 
 INTERPRETER_PATH = os.environ.get("LEVEL9_INTERPRETER", "./tools/glklevel9")
 ROM_PATH = os.environ.get("LEVEL9_ROM", "./gamefiles/knight-orc/GAMEDAT1.DAT")
@@ -67,7 +74,7 @@ def _make_initial_state():
     }
 
 
-def run(steps=50):
+def run(steps=50, verbose=True):
     LOG_DIR.mkdir(exist_ok=True)
 
     child, initial_text = start_level9(INTERPRETER_PATH, ROM_PATH)
@@ -76,12 +83,27 @@ def run(steps=50):
         _write_report(issues, [], datetime.now().strftime("%Y%m%d_%H%M%S"), None)
         return [], issues
 
+    if verbose:
+        print(f"Started game. Running {steps} steps...", file=sys.stderr)
+
     llm = load_llm(MODEL_PATH)
     state = _make_initial_state()
+    run_start = time.monotonic()
 
-    for _ in range(steps):
+    for i in range(steps):
         process_agent_step(state, child, llm)
-        if state["game_log"][-1].get("loop_detected"):
+        last = state["game_log"][-1]
+        if verbose:
+            room = state.get("current_room") or "?"
+            flag = ""
+            if "WARNING" in last["response"] or "CRITICAL" in last["response"]:
+                flag = "  ⚠ TIMEOUT/ERROR"
+            elif last.get("loop_detected"):
+                flag = f"  ✗ LOOP ({last['loop_detected']!r})"
+            elapsed = time.monotonic() - run_start
+            print(f"[{i+1:>3}/{steps}] {last['action']:<28} {room}{flag}  [elapsed {elapsed:.0f}s]",
+                  file=sys.stderr)
+        if last.get("loop_detected"):
             break
 
     if child.isalive():
