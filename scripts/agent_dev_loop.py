@@ -24,7 +24,7 @@ is outstanding, so two scenario branches can't drift out of sync with each
 other. Requires a clean working tree and the `gh` CLI to be authenticated.
 
 On success it also runs one real playthrough (scripts/watch_run.py,
---playthrough-steps, default 30) and attaches a "Playthrough evidence"
+--playthrough-steps, default 50) and attaches a "Playthrough evidence"
 table to the PR — locations/NPCs/treasure/puzzles discovered and puzzles
 solved, compared against the best prior value of each already recorded in
 configs/knight_orc_strategy.json's run_history. This is best-effort: if the
@@ -712,11 +712,11 @@ def main():
     parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     parser.add_argument("--steps",      type=int, default=50,          help="Game steps per run (default: 50)")
     parser.add_argument("--iterations", type=int, default=5,           help="Max fix iterations (default: 5)")
-    parser.add_argument("--model",      default="claude-sonnet-4-6",   help="Claude model for fixer agent")
+    parser.add_argument("--model",      default="claude-sonnet-5",     help="Claude model for fixer agent (default: claude-sonnet-5)")
     parser.add_argument("--config",     metavar="PATH",                help="Game config JSON (default: built-in Knight Orc values)")
     parser.add_argument("--dry-run",    action="store_true",           help="Analyze only, skip auto-fix")
     parser.add_argument("--spec-target", metavar="SCENARIO_ID",        help="Build toward one tests/spec_scenarios/scenarios.json scenario instead of the anomaly-based loop")
-    parser.add_argument("--playthrough-steps", type=int, default=30,   help="Steps for the post-fix evidence playthrough in --spec-target mode (default: 30)")
+    parser.add_argument("--playthrough-steps", type=int, default=50,   help="Steps for the post-fix evidence playthrough in --spec-target mode (default: 50)")
     args = parser.parse_args()
 
     if args.spec_target:
