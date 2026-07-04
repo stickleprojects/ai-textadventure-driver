@@ -56,6 +56,7 @@ import os
 import re
 import subprocess
 import sys
+import threading
 from pathlib import Path
 
 import jsonschema
@@ -89,6 +90,7 @@ STATE_FILE_SCHEMAS = {
 TEST_TIMEOUT_SECS = 180
 SCENARIO_TEST_TIMEOUT_SECS = 90
 PLAYTHROUGH_TIMEOUT_SECS = 900
+ANALYSIS_TIMEOUT_SECS = 600
 
 
 # ── Tool implementations ──────────────────────────────────────────────────────
@@ -314,42 +316,63 @@ def run_fixer_agent(analysis_md, model, verbose=True):
 
 # ── Main loop ─────────────────────────────────────────────────────────────────
 
+def _stream(cmd, timeout, shell=False):
+    """Run cmd, printing its combined stdout/stderr live as it happens (so a
+    long-running game/LLM step is never silently invisible for minutes), and
+    return (returncode, combined_output_text) once it finishes.
+
+    Kills the process and raises subprocess.TimeoutExpired if it runs longer
+    than timeout — enforced by a background timer independent of output, so
+    a process that hangs *without* printing anything still gets caught (not
+    just a slow-but-chatty one).
+    """
+    proc = subprocess.Popen(
+        cmd,
+        shell=shell,
+        cwd=PROJECT_ROOT,
+        stdout=subprocess.PIPE,
+        stderr=subprocess.STDOUT,
+        text=True,
+        bufsize=1,
+        executable="/bin/bash" if shell else None,
+    )
+    timed_out = threading.Event()
+    timer = threading.Timer(timeout, lambda: (timed_out.set(), proc.kill()))
+    timer.start()
+    lines = []
+    try:
+        for line in proc.stdout:
+            print(line, end="")
+            lines.append(line)
+        proc.wait()
+    finally:
+        timer.cancel()
+    if timed_out.is_set():
+        raise subprocess.TimeoutExpired(cmd, timeout)
+    return proc.returncode, "".join(lines)
+
+
 def _run_analysis(steps, game_config=None):
     cmd = [str(VENV_PYTHON), "scripts/run_and_analyze.py", str(steps)]
     if game_config:
         cmd += ["--config", game_config]
-    result = subprocess.run(
-        cmd,
-        cwd=PROJECT_ROOT,
-        capture_output=True,
-        text=True,
-        timeout=600,
-    )
-    print(result.stdout.strip())
-    if result.stderr.strip():
-        print(result.stderr.strip(), file=sys.stderr)
-    return result.returncode
+    try:
+        returncode, _ = _stream(cmd, timeout=ANALYSIS_TIMEOUT_SECS)
+    except subprocess.TimeoutExpired:
+        print(f"run_and_analyze.py did not finish within {ANALYSIS_TIMEOUT_SECS}s.", file=sys.stderr)
+        return 1
+    return returncode
 
 
 def _run_tests():
+    cmd = f"source {VENV_ACTIVATE} && python -m pytest tests/ -x -q --ignore=tests/test_evals.py"
     try:
-        result = subprocess.run(
-            f"source {VENV_ACTIVATE} && python -m pytest tests/ -x -q --ignore=tests/test_evals.py",
-            shell=True,
-            cwd=PROJECT_ROOT,
-            capture_output=True,
-            text=True,
-            executable="/bin/bash",
-            timeout=TEST_TIMEOUT_SECS,
-        )
+        returncode, _ = _stream(cmd, timeout=TEST_TIMEOUT_SECS, shell=True)
     except subprocess.TimeoutExpired:
         print(f"Test suite did not finish within {TEST_TIMEOUT_SECS}s — possible infinite "
               "loop in the fixer's change.", file=sys.stderr)
         return False
-    print(result.stdout.strip())
-    if result.returncode != 0:
-        print(result.stderr.strip(), file=sys.stderr)
-    return result.returncode == 0
+    return returncode == 0
 
 
 def _state_files_corrupted():
@@ -438,22 +461,15 @@ def _run_playthrough(steps):
     success or (None, error_message) on any failure — never raises, since a
     missing local LLM/model on this machine shouldn't block landing an
     otherwise-good fix, only mean no evidence is attached this time."""
+    cmd = f"source {VENV_ACTIVATE} && python scripts/watch_run.py {steps}"
     try:
-        result = subprocess.run(
-            f"source {VENV_ACTIVATE} && python scripts/watch_run.py {steps}",
-            shell=True,
-            cwd=PROJECT_ROOT,
-            capture_output=True,
-            text=True,
-            executable="/bin/bash",
-            timeout=PLAYTHROUGH_TIMEOUT_SECS,
-        )
+        _, output = _stream(cmd, timeout=PLAYTHROUGH_TIMEOUT_SECS, shell=True)
     except subprocess.TimeoutExpired:
         return None, f"watch_run.py did not finish within {PLAYTHROUGH_TIMEOUT_SECS}s"
 
-    match = re.search(r"Run ID: (\S+)", result.stderr)
+    match = re.search(r"Run ID: (\S+)", output)
     if not match:
-        return None, f"watch_run.py did not report a Run ID:\n{result.stdout}\n{result.stderr}"
+        return None, f"watch_run.py did not report a Run ID:\n{output}"
 
     run_id = match.group(1)
     run_record_path = RUNS_DIR / f"{run_id}.json"
@@ -581,24 +597,14 @@ def _scenario_still_xfail(scenario_id):
 
 
 def _run_scenario_test(scenario_id):
+    cmd = f"source {VENV_ACTIVATE} && python -m pytest tests/test_spec_scenarios.py -k {scenario_id} -q"
     try:
-        result = subprocess.run(
-            f"source {VENV_ACTIVATE} && python -m pytest tests/test_spec_scenarios.py -k {scenario_id} -q",
-            shell=True,
-            cwd=PROJECT_ROOT,
-            capture_output=True,
-            text=True,
-            executable="/bin/bash",
-            timeout=SCENARIO_TEST_TIMEOUT_SECS,
-        )
+        returncode, _ = _stream(cmd, timeout=SCENARIO_TEST_TIMEOUT_SECS, shell=True)
     except subprocess.TimeoutExpired:
         print(f"Scenario test did not finish within {SCENARIO_TEST_TIMEOUT_SECS}s — possible "
               "infinite loop in the fixer's change.", file=sys.stderr)
         return False
-    print(result.stdout.strip())
-    if result.returncode != 0:
-        print(result.stderr.strip(), file=sys.stderr)
-    return result.returncode == 0
+    return returncode == 0
 
 
 def _spec_target_prompt(scenario):
