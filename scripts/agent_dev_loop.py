@@ -15,6 +15,14 @@ relevant docs/agent_behavior_spec.md section plus the fixture, and succeeds
 when that scenario's xfail is lifted, its test passes, and the full suite
 still passes.
 
+Each --spec-target run gets its own branch (feat/59-scenario-<id>, off
+origin/develop) and, on success, its own PR — one scenario fix per PR, so
+concurrent fixes never land in the same diff. PR titles are prefixed with
+"[fixer-agent]" so they're easy to spot later. Before starting, it checks
+for open PRs against develop and refuses to start a new scenario while one
+is outstanding, so two scenario branches can't drift out of sync with each
+other. Requires a clean working tree and the `gh` CLI to be authenticated.
+
 Usage:
     python scripts/agent_dev_loop.py [--steps N] [--iterations N] [--model MODEL] [--dry-run]
     python scripts/agent_dev_loop.py --spec-target SCENARIO_ID [--iterations N] [--model MODEL] [--dry-run]
@@ -44,6 +52,8 @@ VENV_ACTIVATE = PROJECT_ROOT / ".venv" / "bin" / "activate"
 VENV_PYTHON = PROJECT_ROOT / ".venv" / "bin" / "python"
 SPEC_DOC = PROJECT_ROOT / "docs" / "agent_behavior_spec.md"
 SCENARIOS_FILE = PROJECT_ROOT / "tests" / "spec_scenarios" / "scenarios.json"
+BASE_BRANCH = "develop"
+PR_TITLE_PREFIX = "[fixer-agent]"
 
 
 # ── Tool implementations ──────────────────────────────────────────────────────
@@ -285,6 +295,82 @@ def _run_tests():
 
 # ── Spec-target mode (feature 59) ──────────────────────────────────────────────
 
+def _run(cmd, check=True):
+    try:
+        result = subprocess.run(cmd, cwd=PROJECT_ROOT, capture_output=True, text=True)
+    except FileNotFoundError as e:
+        sys.exit(f"command not found: {e.filename} — is it installed and on PATH?")
+    if check and result.returncode != 0:
+        sys.exit(f"`{' '.join(cmd)}` failed:\n{result.stdout}{result.stderr}")
+    return result
+
+
+def _current_branch():
+    return _run(["git", "rev-parse", "--abbrev-ref", "HEAD"]).stdout.strip()
+
+
+def _branch_exists(branch):
+    return _run(["git", "rev-parse", "--verify", "--quiet", branch], check=False).returncode == 0
+
+
+def _ensure_clean_worktree():
+    status = _run(["git", "status", "--porcelain"]).stdout
+    if status.strip():
+        sys.exit(
+            "Working tree has uncommitted changes — commit or stash them first. "
+            "Each --spec-target scenario needs a clean starting point since it "
+            f"branches off origin/{BASE_BRANCH}:\n{status}"
+        )
+
+
+def _open_prs(base=BASE_BRANCH):
+    result = _run(["gh", "pr", "list", "--base", base, "--state", "open",
+                   "--json", "number,title,url,headRefName"])
+    return json.loads(result.stdout)
+
+
+def _create_scenario_branch(scenario_id):
+    branch = f"feat/59-scenario-{scenario_id}"
+    if _branch_exists(branch):
+        sys.exit(
+            f"Branch {branch!r} already exists — likely a leftover from a previous "
+            "unresolved attempt at this scenario. Inspect/delete it before retrying."
+        )
+    _run(["git", "fetch", "origin", BASE_BRANCH])
+    _run(["git", "checkout", "-b", branch, f"origin/{BASE_BRANCH}"])
+    return branch
+
+
+def _commit_push_pr(scenario, branch, summary):
+    _run(["git", "add", "-A"])
+    commit_msg = (
+        f"Resolve spec scenario {scenario['id']} ({scenario['spec_ref']})\n\n"
+        f"{summary}\n\n"
+        "Co-Authored-By: Claude Sonnet 5 <noreply@anthropic.com>"
+    )
+    _run(["git", "commit", "-m", commit_msg])
+    _run(["git", "push", "-u", "origin", branch])
+
+    requirement_line = (
+        f" (Requirement {scenario['requirement_ref']})" if scenario.get("requirement_ref") else ""
+    )
+    pr_body = f"""\
+## Summary
+- Resolves spec scenario `{scenario['id']}` — `{scenario['spec_ref']}`{requirement_line}
+- {summary}
+
+## Test plan
+- [x] `pytest tests/test_spec_scenarios.py -k {scenario['id']} -q` passes, xfail removed
+- [x] `pytest tests/ -q --ignore=tests/test_evals.py` passes (full-suite regression guard)
+
+Opened automatically by the fixer agent (`scripts/agent_dev_loop.py --spec-target {scenario['id']}`) — not written by a human.
+"""
+    result = _run(["gh", "pr", "create", "--base", BASE_BRANCH, "--head", branch,
+                   "--title", f"{PR_TITLE_PREFIX} Fix spec scenario: {scenario['id']}",
+                   "--body", pr_body])
+    return result.stdout.strip()
+
+
 def _slugify(heading):
     return re.sub(r"[^a-z0-9]+", "-", heading.strip().lower()).strip("-")
 
@@ -383,12 +469,25 @@ def run_spec_target(scenario_id, iterations, model, dry_run):
         print(f"Scenario {scenario_id!r} has no 'xfail' key — nothing to build toward.")
         return
 
+    open_prs = _open_prs()
+    if open_prs:
+        print(f"Open PR(s) against {BASE_BRANCH} — resolve these before starting a new "
+              "scenario fix (prevents two scenario branches drifting out of sync):")
+        for pr in open_prs:
+            print(f"  #{pr['number']} {pr['title']!r} ({pr['headRefName']}) — {pr['url']}")
+        sys.exit(1)
+
+    _ensure_clean_worktree()
+    original_branch = _current_branch()
+    branch = _create_scenario_branch(scenario_id)
+    print(f"Branched {branch!r} off origin/{BASE_BRANCH}\n")
+
     for iteration in range(1, iterations + 1):
         print(f"\n{'='*60}")
         print(f"  Spec-target iteration {iteration}/{iterations}: {scenario_id}")
         print(f"{'='*60}\n")
 
-        run_fixer_agent(prompt, model=model)
+        summary = run_fixer_agent(prompt, model=model)
 
         print("\nChecking scenario test...")
         scenario_passed = _run_scenario_test(scenario_id)
@@ -397,8 +496,18 @@ def run_spec_target(scenario_id, iterations, model, dry_run):
         if scenario_passed and not still_xfail:
             print("\nRunning full suite to guard against regressions...")
             if not _run_tests():
-                sys.exit("Full suite failed after spec-target fix — stopping. Review changes above.")
+                sys.exit(
+                    f"Full suite failed after spec-target fix on branch {branch!r} — "
+                    "stopping without opening a PR. Review changes above."
+                )
             print(f"\nScenario {scenario_id!r} now passes and the full suite is green.")
+
+            print("Committing and opening PR...")
+            pr_url = _commit_push_pr(scenario, branch, summary)
+            print(f"\nOpened PR: {pr_url}")
+
+            _run(["git", "checkout", original_branch])
+            print(f"Back on {original_branch!r}.")
             return
 
         if still_xfail:
@@ -407,6 +516,8 @@ def run_spec_target(scenario_id, iterations, model, dry_run):
             print(f"\nScenario {scenario_id!r} xfail was removed but the test still fails.")
 
     print(f"\nReached max iterations ({iterations}) without resolving {scenario_id!r}.")
+    print(f"Branch {branch!r} has the unresolved attempt — inspect it or discard it manually "
+          f"(git checkout {original_branch!r} first; nothing was committed on {branch!r}).")
     sys.exit(1)
 
 
