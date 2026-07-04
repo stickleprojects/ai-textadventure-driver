@@ -37,6 +37,17 @@ from llm import load_llm, load_cloud_llm
 from run_evaluator import classify_run, compute_playthrough_metrics, load_strategy, merge_run_record
 from ui import save_graph_image
 
+# Load the on-disk Knight Orc config by default (bare GameConfig() Python
+# defaults are a stale, impoverished subset — e.g. missing the bug-58
+# "probably just scenery" hard-failure pattern and theft_patterns). Runs at
+# import time so it applies whether this module is run directly or imported
+# (run_and_analyze.py calls watch_run.run() directly, bypassing __main__'s
+# own --config handling below). GAME_CONFIG lets this point at a different
+# game's config; an explicit --config on the CLI layers on top of this.
+GAME_CONFIG_PATH = os.environ.get("GAME_CONFIG", "configs/knight_orc.json")
+if GAME_CONFIG_PATH and os.path.isfile(GAME_CONFIG_PATH):
+    config.load_from_file(GAME_CONFIG_PATH)
+
 # Suppress Streamlit's "missing ScriptRunContext" warning — harmless outside a
 # Streamlit session; @st.cache_resource just runs without caching.
 # Must be after imports: streamlit resets its logger levels at import time.

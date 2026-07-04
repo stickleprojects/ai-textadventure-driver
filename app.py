@@ -17,9 +17,9 @@ from llm import LLAMA_AVAILABLE, OPENAI_AVAILABLE, extract_knowledge, load_llm, 
 from run_evaluator import load_strategy
 from ui import generate_json_log, generate_markdown_log, render_graph
 
-_config_path = os.environ.get("GAME_CONFIG")
+_config_path = os.environ.get("GAME_CONFIG", "configs/knight_orc.json")
 _strategy_path = os.environ.get("STRATEGY_PATH", "configs/knight_orc_strategy.json")
-if _config_path:
+if _config_path and os.path.isfile(_config_path):
     config.load_from_file(_config_path)
 
 LLM_PROVIDER = os.environ.get("LLM_PROVIDER", "local")
@@ -138,7 +138,7 @@ with st.sidebar:
         if st.session_state.level9_process is not None:
             st.session_state.level9_process.terminate(force=True)
             st.session_state.level9_process = None
-        if _config_path:
+        if _config_path and os.path.isfile(_config_path):
             config.load_from_file(_config_path)
         st.session_state.system_state = _make_clean_state()
         state = st.session_state.system_state
