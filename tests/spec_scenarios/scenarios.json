@@ -1,0 +1,105 @@
+[
+  {
+    "id": "locked_door_use_key",
+    "spec_ref": "locked-exits-and-keys",
+    "requirement_ref": null,
+    "mode": "decision",
+    "initial_state": {
+      "current_room": "Courtyard",
+      "inventory": ["iron key"],
+      "unresolved_anomalies": {
+        "north door": {"room": "Courtyard", "reason": "the door is locked", "potential_solution": "iron key"}
+      }
+    },
+    "expect_action_startswith": "use iron key on north door"
+  },
+  {
+    "id": "locked_container_use_key",
+    "spec_ref": "locked-containers",
+    "requirement_ref": null,
+    "mode": "decision",
+    "initial_state": {
+      "current_room": "Cellar",
+      "inventory": ["brass key"],
+      "unresolved_anomalies": {
+        "oak chest": {"room": "Cellar", "reason": "the chest is locked", "potential_solution": "brass key"}
+      }
+    },
+    "expect_action_startswith": "use brass key on oak chest"
+  },
+  {
+    "id": "spell_cast_on_target",
+    "spec_ref": "spells",
+    "requirement_ref": null,
+    "mode": "decision",
+    "initial_state": {
+      "current_room": "Dark Passage",
+      "spellbook": ["LIGHT"],
+      "unresolved_anomalies": {
+        "passage": {"room": "Dark Passage", "reason": "too dark to see", "potential_solution": "LIGHT"}
+      }
+    },
+    "expect_action_startswith": "cast LIGHT on passage"
+  },
+  {
+    "id": "death_sets_recheck_inventory",
+    "spec_ref": "death-and-the-pearl-room",
+    "requirement_ref": null,
+    "mode": "step",
+    "initial_state": {
+      "current_room": "Great Hall",
+      "inventory": ["sword", "shield"]
+    },
+    "mock_response": "A ghastly blow strikes you down. You have died and are transported to the pearl room.",
+    "mock_extracted": {"room": "Pearl Room"},
+    "expect_state_equals": {
+      "recheck_inventory": true,
+      "current_room": "Pearl Room"
+    }
+  },
+  {
+    "id": "npc_theft_removes_from_inventory",
+    "spec_ref": "npcs-stealing-items",
+    "requirement_ref": 23,
+    "mode": "step",
+    "initial_state": {
+      "current_room": "Great Hall",
+      "inventory": ["sword"]
+    },
+    "mock_response": "Grendel just stole the sword from you.",
+    "mock_extracted": {},
+    "expect_absent": {
+      "inventory": ["sword"]
+    },
+    "xfail": "Requirement 23: no NPC-theft-narration detection/state update yet"
+  },
+  {
+    "id": "landmark_recorded_from_description",
+    "spec_ref": "discovering-locations",
+    "requirement_ref": 25,
+    "mode": "step",
+    "initial_state": {
+      "current_room": "Forest Path"
+    },
+    "mock_response": "You are in a forest. In the distance you can see a tower.",
+    "mock_extracted": {},
+    "expect_contains": {
+      "known_landmarks": ["tower"]
+    },
+    "xfail": "Requirement 25: landmarks mentioned in descriptions aren't tracked as go-to-able locations yet"
+  },
+  {
+    "id": "npc_interaction_greet",
+    "spec_ref": "npc-interaction",
+    "requirement_ref": 2,
+    "mode": "decision",
+    "initial_state": {
+      "current_room": "Great Hall",
+      "known_npcs": {
+        "Grendel": {"location": "Great Hall", "greeted": false}
+      }
+    },
+    "expect_action_startswith": "say hello to Grendel",
+    "xfail": "Requirement 2: no priority-stack step chooses NPC interaction verbs (SAY/GIVE/TAKE FROM/FOLLOW) yet"
+  }
+]

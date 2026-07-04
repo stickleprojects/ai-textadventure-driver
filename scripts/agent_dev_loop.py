@@ -9,8 +9,15 @@ Uses the Anthropic API with tool use. Each iteration:
   5. Run the pytest suite to verify no regressions
   6. Loop
 
+With --spec-target SCENARIO_ID, the loop instead targets one scenario from
+tests/spec_scenarios/scenarios.json (feature 59): it hands the fixer the
+relevant docs/agent_behavior_spec.md section plus the fixture, and succeeds
+when that scenario's xfail is lifted, its test passes, and the full suite
+still passes.
+
 Usage:
     python scripts/agent_dev_loop.py [--steps N] [--iterations N] [--model MODEL] [--dry-run]
+    python scripts/agent_dev_loop.py --spec-target SCENARIO_ID [--iterations N] [--model MODEL] [--dry-run]
 
 Environment:
     ANTHROPIC_API_KEY   required (for the fixer agent)
@@ -21,18 +28,22 @@ Environment:
 Example:
     ANTHROPIC_API_KEY=sk-... python scripts/agent_dev_loop.py --steps 50 --iterations 3
     ANTHROPIC_API_KEY=sk-... python scripts/agent_dev_loop.py --steps 20 --dry-run
+    ANTHROPIC_API_KEY=sk-... python scripts/agent_dev_loop.py --spec-target npc_theft_removes_from_inventory
 """
 import argparse
 import json
 import os
+import re
 import subprocess
 import sys
 from pathlib import Path
 
 PROJECT_ROOT = Path(__file__).parent.parent
 LOG_DIR = PROJECT_ROOT / "logs"
-VENV_ACTIVATE = PROJECT_ROOT / ".env" / "bin" / "activate"
-VENV_PYTHON = PROJECT_ROOT / ".env" / "bin" / "python"
+VENV_ACTIVATE = PROJECT_ROOT / ".venv" / "bin" / "activate"
+VENV_PYTHON = PROJECT_ROOT / ".venv" / "bin" / "python"
+SPEC_DOC = PROJECT_ROOT / "docs" / "agent_behavior_spec.md"
+SCENARIOS_FILE = PROJECT_ROOT / "tests" / "spec_scenarios" / "scenarios.json"
 
 
 # ── Tool implementations ──────────────────────────────────────────────────────
@@ -94,7 +105,7 @@ _TOOLS = [
         "name": "bash",
         "description": (
             "Run a shell command in the project root. "
-            "Activate the virtualenv with: source .env/bin/activate && <cmd>. "
+            "Activate the virtualenv with: source .venv/bin/activate && <cmd>. "
             "Returns stdout + stderr."
         ),
         "input_schema": {
@@ -154,12 +165,17 @@ Project structure:
 - game_engine.py — pexpect subprocess interface, _is_failure_response()
 - ui.py          — pyvis map rendering
 - tests/         — pytest unit tests (no LLM required)
+- tests/spec_scenarios/scenarios.json — spec-driven agent behavior scenarios (feature 59);
+  each entry has a "spec_ref" into docs/agent_behavior_spec.md, and an "xfail" key when the
+  behavior isn't implemented yet. When your task is to make one of these scenarios pass,
+  remove its "xfail" key only once the underlying behavior is actually implemented and the
+  scenario's test genuinely passes — do not remove it just to silence the test.
 
 Your job each iteration:
 1. Read the analysis report to understand what the agent is doing wrong.
 2. Read the relevant source files to understand the current implementation.
 3. Apply the minimum change needed to fix the reported issues.
-4. Run: source .env/bin/activate && python -m pytest tests/ -x -q --ignore=tests/test_evals.py
+4. Run: source .venv/bin/activate && python -m pytest tests/ -x -q --ignore=tests/test_evals.py
 5. Fix any test failures before finishing.
 6. Write a brief summary of what you changed and why.
 
@@ -267,6 +283,133 @@ def _run_tests():
     return result.returncode == 0
 
 
+# ── Spec-target mode (feature 59) ──────────────────────────────────────────────
+
+def _slugify(heading):
+    return re.sub(r"[^a-z0-9]+", "-", heading.strip().lower()).strip("-")
+
+
+def _spec_section_text(spec_ref):
+    """Return the docs/agent_behavior_spec.md ### section matching spec_ref, heading included."""
+    lines = SPEC_DOC.read_text().splitlines()
+    start = None
+    end = len(lines)
+    for i, line in enumerate(lines):
+        if not line.startswith("### "):
+            continue
+        if start is not None:
+            end = i
+            break
+        if _slugify(line[4:]) == spec_ref:
+            start = i
+    if start is None:
+        sys.exit(f"No '### ' heading in {SPEC_DOC} slugifies to spec_ref {spec_ref!r}")
+    return "\n".join(lines[start:end]).strip()
+
+
+def _load_scenario(scenario_id):
+    scenarios = json.loads(SCENARIOS_FILE.read_text())
+    for scenario in scenarios:
+        if scenario["id"] == scenario_id:
+            return scenario
+    sys.exit(f"No scenario with id {scenario_id!r} in {SCENARIOS_FILE}")
+
+
+def _scenario_still_xfail(scenario_id):
+    scenarios = json.loads(SCENARIOS_FILE.read_text())
+    for scenario in scenarios:
+        if scenario["id"] == scenario_id:
+            return bool(scenario.get("xfail"))
+    sys.exit(f"No scenario with id {scenario_id!r} in {SCENARIOS_FILE}")
+
+
+def _run_scenario_test(scenario_id):
+    result = subprocess.run(
+        f"source {VENV_ACTIVATE} && python -m pytest tests/test_spec_scenarios.py -k {scenario_id} -q",
+        shell=True,
+        cwd=PROJECT_ROOT,
+        capture_output=True,
+        text=True,
+        executable="/bin/bash",
+    )
+    print(result.stdout.strip())
+    if result.returncode != 0:
+        print(result.stderr.strip(), file=sys.stderr)
+    return result.returncode == 0
+
+
+def _spec_target_prompt(scenario):
+    section = _spec_section_text(scenario["spec_ref"])
+    return f"""\
+Target: make the spec-driven scenario test "{scenario['id']}" pass for real
+(not by weakening the assertions or the fixture).
+
+Relevant section of docs/agent_behavior_spec.md ({scenario['spec_ref']}):
+
+{section}
+
+Scenario fixture (tests/spec_scenarios/scenarios.json, id={scenario['id']}):
+
+{json.dumps(scenario, indent=2)}
+
+The fixture's "mode" field means:
+- "decision": tests/test_spec_scenarios.py builds state from "initial_state" via
+  tests.conftest.make_state(), calls agent.determine_next_action(state), and
+  checks the returned action against "expect_action_startswith"/"expect_action_equals".
+- "step": same state, but tests/test_spec_scenarios.py patches
+  agent.execute_game_command to return "mock_response" and agent.extract_knowledge
+  to return "mock_extracted", calls agent.process_agent_step(state, stub_child, None),
+  and checks the resulting state against "expect_state_equals"/"expect_contains"/
+  "expect_absent".
+
+Implement the behavior described in the spec section so this scenario's test
+passes, then remove the "xfail" key for id={scenario['id']} in
+tests/spec_scenarios/scenarios.json. Verify with:
+  source .venv/bin/activate && python -m pytest tests/test_spec_scenarios.py -k {scenario['id']} -q
+"""
+
+
+def run_spec_target(scenario_id, iterations, model, dry_run):
+    scenario = _load_scenario(scenario_id)
+    prompt = _spec_target_prompt(scenario)
+    print(f"Targeting spec scenario {scenario_id!r} (spec_ref={scenario['spec_ref']!r})\n")
+
+    if dry_run:
+        print("[dry-run] Prompt that would be sent to the fixer agent:\n")
+        print(prompt)
+        return
+
+    if not scenario.get("xfail"):
+        print(f"Scenario {scenario_id!r} has no 'xfail' key — nothing to build toward.")
+        return
+
+    for iteration in range(1, iterations + 1):
+        print(f"\n{'='*60}")
+        print(f"  Spec-target iteration {iteration}/{iterations}: {scenario_id}")
+        print(f"{'='*60}\n")
+
+        run_fixer_agent(prompt, model=model)
+
+        print("\nChecking scenario test...")
+        scenario_passed = _run_scenario_test(scenario_id)
+        still_xfail = _scenario_still_xfail(scenario_id)
+
+        if scenario_passed and not still_xfail:
+            print("\nRunning full suite to guard against regressions...")
+            if not _run_tests():
+                sys.exit("Full suite failed after spec-target fix — stopping. Review changes above.")
+            print(f"\nScenario {scenario_id!r} now passes and the full suite is green.")
+            return
+
+        if still_xfail:
+            print(f"\nScenario {scenario_id!r} is still marked xfail — behavior not yet implemented.")
+        else:
+            print(f"\nScenario {scenario_id!r} xfail was removed but the test still fails.")
+
+    print(f"\nReached max iterations ({iterations}) without resolving {scenario_id!r}.")
+    sys.exit(1)
+
+
 def main():
     parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     parser.add_argument("--steps",      type=int, default=50,          help="Game steps per run (default: 50)")
@@ -274,7 +417,12 @@ def main():
     parser.add_argument("--model",      default="claude-sonnet-4-6",   help="Claude model for fixer agent")
     parser.add_argument("--config",     metavar="PATH",                help="Game config JSON (default: built-in Knight Orc values)")
     parser.add_argument("--dry-run",    action="store_true",           help="Analyze only, skip auto-fix")
+    parser.add_argument("--spec-target", metavar="SCENARIO_ID",        help="Build toward one tests/spec_scenarios/scenarios.json scenario instead of the anomaly-based loop")
     args = parser.parse_args()
+
+    if args.spec_target:
+        run_spec_target(args.spec_target, args.iterations, args.model, args.dry_run)
+        return
 
     LOG_DIR.mkdir(exist_ok=True)
 

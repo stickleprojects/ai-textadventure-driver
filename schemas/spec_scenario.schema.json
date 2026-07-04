@@ -1,0 +1,25 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "Spec-driven agent behavior scenario list",
+  "type": "array",
+  "items": {
+    "type": "object",
+    "required": ["id", "spec_ref", "mode", "initial_state"],
+    "additionalProperties": false,
+    "properties": {
+      "id":               { "type": "string", "minLength": 1 },
+      "spec_ref":         { "type": "string", "minLength": 1, "description": "kebab-case slug of the docs/agent_behavior_spec.md ### heading this scenario covers" },
+      "requirement_ref":  { "type": ["integer", "null"], "description": "docs/requirements/<n>.md this scenario is blocked on, if any" },
+      "mode":             { "type": "string", "enum": ["decision", "step"] },
+      "initial_state":    { "type": "object", "description": "overrides merged onto tests.conftest.make_state()" },
+      "mock_response":    { "type": "string", "description": "required for mode=step: raw text returned by the (mocked) game engine" },
+      "mock_extracted":   { "type": "object", "description": "required for mode=step: dict returned by the (mocked) LLM extraction" },
+      "expect_action_startswith": { "type": "string", "description": "decision mode: the chosen action must start with this string" },
+      "expect_action_equals":     { "type": "string", "description": "decision mode: the chosen action must equal this string" },
+      "expect_state_equals":      { "type": "object", "description": "post-step state[key] must equal value" },
+      "expect_contains":          { "type": "object", "description": "post-step state[key] (list or dict) must contain each given value/key" },
+      "expect_absent":            { "type": "object", "description": "post-step state[key] (list or dict) must NOT contain each given value/key" },
+      "xfail":            { "type": ["string", "null"], "description": "if present, the scenario is marked pytest.xfail with this reason instead of being run" }
+    }
+  }
+}

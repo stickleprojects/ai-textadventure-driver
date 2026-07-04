@@ -10,6 +10,7 @@ SCHEMAS = ROOT / "schemas"
 CONFIGS = ROOT / "configs"
 PLANS = ROOT / "plans"
 EVALS = ROOT / "tests" / "evals"
+SPEC_SCENARIOS = ROOT / "tests" / "spec_scenarios"
 
 
 def _load(path: Path):
@@ -51,6 +52,18 @@ def test_eval_fixture_ids_unique():
     assert len(ids) == len(set(ids)), f"Duplicate fixture IDs: {[i for i in ids if ids.count(i) > 1]}"
 
 
+# ── spec scenario fixtures ────────────────────────────────────────────────────
+
+def test_spec_scenarios_valid():
+    jsonschema.validate(_load(SPEC_SCENARIOS / "scenarios.json"), _schema("spec_scenario.schema.json"))
+
+
+def test_spec_scenario_ids_unique():
+    scenarios = _load(SPEC_SCENARIOS / "scenarios.json")
+    ids = [s["id"] for s in scenarios]
+    assert len(ids) == len(set(ids)), f"Duplicate scenario IDs: {[i for i in ids if ids.count(i) > 1]}"
+
+
 # ── plan files ────────────────────────────────────────────────────────────────
 
 @pytest.mark.parametrize("plan_file", sorted(PLANS.glob("P*.json")))
@@ -73,6 +86,7 @@ _ALL_JSON = [
         list(CONFIGS.glob("*.json"))
         + list(PLANS.glob("*.json"))
         + list(EVALS.glob("*.json"))
+        + list(SPEC_SCENARIOS.glob("*.json"))
     )
     if not any(s in f.name for s in _MERGE_SUFFIXES)
 ]
