@@ -155,7 +155,12 @@
     [
       "alder clump",
       "alder ghostwood",
-      "south/se/south/se"
+      "se"
+    ],
+    [
+      "alder clump",
+      "alder ghostwood",
+      "south"
     ],
     [
       "alder clump",
@@ -185,7 +190,12 @@
     [
       "alder ghostwood",
       "alder clump",
-      "nw/north/nw/north"
+      "north"
+    ],
+    [
+      "alder ghostwood",
+      "alder clump",
+      "nw"
     ],
     [
       "alder ghostwood",
@@ -635,7 +645,12 @@
     [
       "dismal fairground in a rowan coppice",
       "public bar of the Orc's Head Inn",
-      "in/east"
+      "east"
+    ],
+    [
+      "dismal fairground in a rowan coppice",
+      "public bar of the Orc's Head Inn",
+      "in"
     ],
     [
       "elder clump",
@@ -1220,7 +1235,12 @@
     [
       "huge pile of garbage",
       "trampled field",
-      "down/down/out"
+      "down"
+    ],
+    [
+      "huge pile of garbage",
+      "trampled field",
+      "out"
     ],
     [
       "jousting field",
@@ -1750,7 +1770,12 @@
     [
       "public bar of the Orc's Head Inn",
       "dismal fairground in a rowan coppice",
-      "west/out"
+      "out"
+    ],
+    [
+      "public bar of the Orc's Head Inn",
+      "dismal fairground in a rowan coppice",
+      "west"
     ],
     [
       "rowan deadwood",
