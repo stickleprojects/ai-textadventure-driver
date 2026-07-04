@@ -389,6 +389,16 @@
       "treasure_discovered": 0,
       "puzzles_discovered": 0,
       "puzzles_solved": 0
+    },
+    {
+      "run_id": "watch_20260704_180148",
+      "outcome": "ambiguous",
+      "final_score": null,
+      "locations_discovered": 4,
+      "npcs_discovered": 7,
+      "treasure_discovered": 0,
+      "puzzles_discovered": 0,
+      "puzzles_solved": 0
     }
   ]
 }

@@ -329,6 +329,7 @@ if __name__ == "__main__":
     parser.add_argument("--detect", action="store_true", help="Run anomaly detection after the run")
     parser.add_argument("--review", action="store_true", help="Run LLM log review after detection (implies --detect; requires ANTHROPIC_API_KEY)")
     parser.add_argument("--architect", action="store_true", help="Run architect to produce a fix plan if anomalies found (implies --detect)")
+    parser.add_argument("--classify-patterns", action="store_true", help="Classify unrecognized take-failure responses, confidence-gated autofix (implies --detect; requires ANTHROPIC_API_KEY, gh CLI)")
     args = parser.parse_args()
 
     if args.config:
@@ -337,7 +338,7 @@ if __name__ == "__main__":
     findings, run_id = run(steps=args.steps, verbose=True)
     print(json.dumps(findings, indent=2))
 
-    if run_id and (args.detect or args.review or args.architect):
+    if run_id and (args.detect or args.review or args.architect or args.classify_patterns):
         _scripts_dir = os.path.dirname(os.path.abspath(__file__))
         if _scripts_dir not in sys.path:
             sys.path.insert(0, _scripts_dir)
@@ -349,5 +350,8 @@ if __name__ == "__main__":
         if args.architect and report["anomalies"]:
             from architect import architect
             architect(run_id)
+        if args.classify_patterns and report["anomalies"]:
+            from classify_failure_patterns import classify
+            classify(run_id)
 
     sys.exit(1 if findings else 0)
