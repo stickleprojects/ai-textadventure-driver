@@ -8,6 +8,11 @@ Environment:
     LEVEL9_INTERPRETER  path to glklevel9 binary  (default: ./tools/glklevel9)
     LEVEL9_ROM          path to game ROM           (default: ./gamefiles/knight-orc/GAMEDAT1.DAT)
     EVAL_MODEL_PATH     path to LLM .gguf          (default: ../models/Phi-3.5-mini-instruct-Q3_K_M.gguf)
+    LLM_PROVIDER        "local" (default) or a cloud provider (e.g. "deepseek", "openai")
+    LLM_MODEL           cloud model id                          (default: deepseek-chat)
+    LLM_API_KEY         cloud provider API key                  (required if LLM_PROVIDER != local)
+    LLM_BASE_URL        override API base URL                   (optional)
+    LLM_JSON_MODE       "0" to disable JSON mode for providers that don't support it
 
 Output:
     logs/run_TIMESTAMP.json   full game log
@@ -34,7 +39,7 @@ from game_config import config
 from log_analyzer import analyze_log
 from agent import process_agent_step
 from game_engine import start_level9
-from llm import load_llm
+from llm import load_llm, load_cloud_llm
 
 # Suppress Streamlit's "missing ScriptRunContext" warning — harmless outside a
 # Streamlit session; @st.cache_resource just runs without caching.
@@ -45,6 +50,15 @@ INTERPRETER_PATH = os.environ.get("LEVEL9_INTERPRETER", "./tools/glklevel9")
 ROM_PATH = os.environ.get("LEVEL9_ROM", "./gamefiles/knight-orc/GAMEDAT1.DAT")
 MODEL_PATH = os.environ.get("EVAL_MODEL_PATH", "../models/Phi-3.5-mini-instruct-Q3_K_M.gguf")
 LOG_DIR = Path("logs")
+
+# Cloud LLM selection — leave LLM_PROVIDER unset (or "local") to use llama.cpp.
+# Matches scripts/watch_run.py's env vars so both scripts read the same .env:
+#   export LLM_PROVIDER=deepseek LLM_API_KEY=sk-... LLM_MODEL=deepseek-chat
+LLM_PROVIDER = os.environ.get("LLM_PROVIDER", "local")
+LLM_MODEL = os.environ.get("LLM_MODEL", "deepseek-chat")
+LLM_API_KEY = os.environ.get("LLM_API_KEY", "")
+LLM_BASE_URL = os.environ.get("LLM_BASE_URL", "")   # leave blank to use provider default
+LLM_JSON_MODE = os.environ.get("LLM_JSON_MODE", "1") != "0"  # default on for cloud
 
 
 def _make_initial_state():
@@ -86,7 +100,17 @@ def run(steps=50, verbose=True):
     if verbose:
         print(f"Started game. Running {steps} steps...", file=sys.stderr)
 
-    llm = load_llm(MODEL_PATH)
+    if LLM_PROVIDER == "local":
+        llm = load_llm(MODEL_PATH)
+    else:
+        llm = load_cloud_llm(
+            LLM_PROVIDER, LLM_MODEL, LLM_API_KEY,
+            base_url=LLM_BASE_URL or None,
+            json_mode=LLM_JSON_MODE,
+        )
+    if verbose and LLM_PROVIDER != "local":
+        print(f"Using cloud LLM: {LLM_PROVIDER} / {LLM_MODEL}", file=sys.stderr)
+
     state = _make_initial_state()
     run_start = time.monotonic()
 
