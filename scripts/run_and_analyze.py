@@ -46,7 +46,7 @@ def _make_initial_state():
         "inventory": [],
         "spellbook": [],
         "known_entities": {},
-        "world_graph": nx.DiGraph(),
+        "world_graph": nx.MultiDiGraph(),
         "uninspected_objects": [],
         "current_inspection": {
             "target": None,
@@ -58,6 +58,12 @@ def _make_initial_state():
         "active_goal": None,
         "game_log": [],
         "is_running": False,
+        "current_score": None,
+        "max_score": None,
+        "futile_edges": set(),
+        "pending_npc_tasks": [],
+        "visited_rooms": set(),
+        "recheck_inventory": False,
     }
 
 
