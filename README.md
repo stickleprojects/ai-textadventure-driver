@@ -130,15 +130,12 @@ implementation. `tests/spec_scenarios/scenarios.json` has one fixture per
 spec section, each tagged with the `### ` heading it covers (`spec_ref`);
 sections not yet implemented are marked `"xfail"`.
 
-List what's still unimplemented:
+List all scenarios (id, spec section, requirement, status) or just what's
+still unimplemented:
 
 ```bash
-python3 -c "
-import json
-for s in json.load(open('tests/spec_scenarios/scenarios.json')):
-    if s.get('xfail'):
-        print(s['id'], '-', s['xfail'])
-"
+./run_dev_loop.sh --list-scenarios
+./run_dev_loop.sh --list-scenarios --xfail-only
 ```
 
 Build toward one of them — the fixer agent edits code until that scenario's
@@ -239,6 +236,7 @@ scripts/
   architect.py              Stage 2: anomaly → fix plan
   generate_evals.py         Generate eval fixtures from game logs
   generate_map.py           Regenerate map PNG from a run log
+  list_scenarios.py         List spec scenarios (id, spec section, status)
   agent_dev_loop.py         Dev orchestrator: anomaly-based loop, or --spec-target
                             to build toward one tests/spec_scenarios/ scenario
                             (own branch + PR per scenario, playthrough evidence attached)
