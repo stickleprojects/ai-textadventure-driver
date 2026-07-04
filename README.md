@@ -123,6 +123,36 @@ EVAL_MODEL_PATH=../models/other.gguf ./run_evals.sh
 
 Checks the model file exists before running and prints the active path and threshold. Set `EVAL_MODEL_PATH` in `.env` or inline to override the default.
 
+### Building toward the behavior spec
+
+`docs/agent_behavior_spec.md` describes target agent behavior independent of
+implementation. `tests/spec_scenarios/scenarios.json` has one fixture per
+spec section, each tagged with the `### ` heading it covers (`spec_ref`);
+sections not yet implemented are marked `"xfail"`.
+
+List all scenarios (id, spec section, requirement, status) or just what's
+still unimplemented:
+
+```bash
+./run_dev_loop.sh --list-scenarios
+./run_dev_loop.sh --list-scenarios --xfail-only
+```
+
+Build toward one of them — the fixer agent edits code until that scenario's
+`xfail` is lifted, its test passes, and the full suite is still green, then
+opens a PR (`[fixer-agent]`-prefixed title) with a real playthrough's
+before/after metrics attached:
+
+```bash
+./run_dev_loop.sh --spec-target <scenario_id>
+```
+
+Requires: a clean working tree, `gh` CLI authenticated, no PR already open
+against `develop` (refuses to start a second scenario branch until the
+current one merges), and — for the playthrough evidence step — a working
+LLM/interpreter/ROM setup same as `run_watch.sh`. Add `--dry-run` to preview
+the prompt the fixer will receive without spending anything.
+
 ### Anomaly detection pipeline
 
 After a run, trigger the full detect → review → architect pipeline:
@@ -206,23 +236,28 @@ scripts/
   architect.py              Stage 2: anomaly → fix plan
   generate_evals.py         Generate eval fixtures from game logs
   generate_map.py           Regenerate map PNG from a run log
-  agent_dev_loop.py         Dev orchestrator (detect → architect → dev → verify)
+  list_scenarios.py         List spec scenarios (id, spec section, status)
+  agent_dev_loop.py         Dev orchestrator: anomaly-based loop, or --spec-target
+                            to build toward one tests/spec_scenarios/ scenario
+                            (own branch + PR per scenario, playthrough evidence attached)
 
 configs/
-  knight_orc.json           Game config (verbs, failure patterns, nav commands)
-  knight_orc_strategy.json  Cross-run persistence: futile edges + run history
+  knight_orc.json           Game config (verbs, failure patterns, theft patterns, nav commands)
+  knight_orc_strategy.json  Cross-run persistence: futile edges + run history (with discovery metrics)
   knight_orc_rooms.json     World graph sidecar
   knight_orc_items.json     Entity verb outcomes sidecar
 
 schemas/                    JSON Schema Draft-7 files for all tracked JSON files
 plans/                      Fix plan documents (P<N>.json); plans.md is the generated index table
-tests/                      pytest suite; evals/fixtures.json for LLM evals
-docs/                       Per-issue docs (bugs/, requirements/, features/)
+tests/                      pytest suite; evals/fixtures.json for LLM evals;
+                            spec_scenarios/scenarios.json for spec-driven agent behavior tests
+docs/                       Per-issue docs (bugs/, requirements/, features/); agent_behavior_spec.md
 .github/workflows/ci.yml    GitHub Actions CI (lint + test on every PR)
 pyproject.toml              Ruff lint config
 run_app.sh                  Start the Streamlit UI
 run_watch.sh                Run the headless agent
 run_evals.sh                Run LLM extraction evals
+run_dev_loop.sh             Run agent_dev_loop.py (--spec-target or the anomaly-based loop)
 gamefiles/                  Knight Orc ROM files (user-supplied)
 tools/glklevel9             Level 9 interpreter binary (Linux x86-64)
 ```
@@ -232,8 +267,9 @@ tools/glklevel9             Level 9 interpreter binary (Linux x86-64)
 ## Known issues / roadmap
 
 - Agent does not distinguish NPCs from objects — tries to `examine` or `read` characters
-- NPC interaction (greet, ask for help, trade) not yet implemented
+- NPC interaction (greet, ask for help, trade) not yet implemented — tracked as spec scenario `npc_interaction_greet`
+- Landmarks mentioned in room descriptions aren't tracked as go-to-able locations — tracked as spec scenario `landmark_recorded_from_description`
 - `"you can see X"` not reliably parsed as room contents vs. inventory
 - Wearable items and disguises (e.g. the hood) not handled
 
-Full issue tracking: [`docs/bugs.md`](docs/bugs.md), [`docs/requirements.md`](docs/requirements.md), [`docs/features.md`](docs/features.md)
+See "Building toward the behavior spec" above for the current unimplemented-scenario list (`tests/spec_scenarios/scenarios.json`) and how to build toward one. Full issue tracking: [`docs/bugs.md`](docs/bugs.md), [`docs/requirements.md`](docs/requirements.md), [`docs/features.md`](docs/features.md)
