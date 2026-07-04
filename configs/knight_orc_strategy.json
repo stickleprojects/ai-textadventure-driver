@@ -334,6 +334,11 @@
       "run_id": "watch_20260702_154524",
       "outcome": "game_ended",
       "final_score": null
+    },
+    {
+      "run_id": "watch_20260703_151838",
+      "outcome": "ambiguous",
+      "final_score": null
     }
   ]
 }
