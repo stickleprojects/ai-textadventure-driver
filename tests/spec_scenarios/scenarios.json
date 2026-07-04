@@ -73,6 +73,36 @@
     }
   },
   {
+    "id": "npc_theft_third_person_victim_still_removes_from_inventory",
+    "spec_ref": "npcs-stealing-items",
+    "requirement_ref": 23,
+    "mode": "step",
+    "initial_state": {
+      "current_room": "Great Hall",
+      "inventory": ["silver plate"]
+    },
+    "mock_response": "Grendel just stole the silver plate from a vile orc.",
+    "mock_extracted": {},
+    "expect_absent": {
+      "inventory": ["silver plate"]
+    }
+  },
+  {
+    "id": "npc_theft_item_not_ours_is_not_removed",
+    "spec_ref": "npcs-stealing-items",
+    "requirement_ref": 23,
+    "mode": "step",
+    "initial_state": {
+      "current_room": "Great Hall",
+      "inventory": ["sword"]
+    },
+    "mock_response": "The ghost takes the lantern from the innkeeper.",
+    "mock_extracted": {},
+    "expect_contains": {
+      "inventory": ["sword"]
+    }
+  },
+  {
     "id": "landmark_recorded_from_description",
     "spec_ref": "discovering-locations",
     "requirement_ref": 25,

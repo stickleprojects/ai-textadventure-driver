@@ -80,12 +80,6 @@ def _is_death(text):
     return bool(config.death_pattern.search(text))
 
 
-_NPC_THEFT_RE = re.compile(
-    r"\b(?:just\s+)?stole\s+(?:the\s+)?(.+?)\s+from\s+you\b"
-    r"|\btakes?\s+(?:the\s+)?(.+?)\s+from\s+you\b",
-    re.IGNORECASE,
-)
-
 _CARRYING_RE = re.compile(r"carrying[:\s]+(.+?)(?:\.\s*$|$)", re.IGNORECASE | re.DOTALL)
 _NOT_CARRYING_RE = re.compile(r"not carrying|carrying nothing|nothing", re.IGNORECASE)
 
@@ -460,11 +454,16 @@ def process_agent_step(state, child, llm_instance):
     token_usage = extracted.pop("_usage", {"input_tokens": 0, "output_tokens": 0})
     llm_trace = extracted.pop("_trace", None)
 
-    for m in _NPC_THEFT_RE.finditer(response):
-        stolen = (m.group(1) or m.group(2) or "").strip().rstrip(".")
-        if stolen:
-            state["inventory"] = [item for item in state["inventory"]
-                                   if item.lower() != stolen.lower()]
+    # Deliberately doesn't try to determine who the "victim" is (the game can
+    # narrate the player in third person, not just "you") — instead, any item
+    # a theft pattern matches is removed from inventory only if we actually
+    # hold it, using our own state as ground truth rather than parsing prose.
+    for pattern in config.theft_patterns:
+        for m in pattern.finditer(response):
+            stolen = (m.groupdict().get("item") or "").strip().rstrip(".")
+            if stolen:
+                state["inventory"] = [item for item in state["inventory"]
+                                       if item.lower() != stolen.lower()]
 
     if extracted.get("room"):
         state["current_room"] = _resolve_room_name(state["world_graph"], extracted["room"])
