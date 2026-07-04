@@ -101,7 +101,11 @@ def load_strategy(strategy_path):
 
     Returns dict with:
         futile_edges         — set of (room, direction) tuples
-        run_history          — list of {run_id, outcome, final_score} dicts
+        run_history          — list of {run_id, outcome, final_score,
+                                locations_discovered, npcs_discovered,
+                                treasure_discovered, puzzles_discovered,
+                                puzzles_solved} dicts (the metrics fields are
+                                optional/None on older entries)
         entity_verb_outcomes — {entity_name: {verb: "invalid"}} persisted hard failures
         world_graph          — {"nodes": [...], "edges": [[src, dst, label], ...]}
     """
@@ -133,6 +137,66 @@ def load_strategy(strategy_path):
     }
 
 
+_COMPARISON_METRICS = [
+    "final_score",
+    "locations_discovered",
+    "npcs_discovered",
+    "treasure_discovered",
+    "puzzles_discovered",
+    "puzzles_solved",
+]
+
+
+def compute_playthrough_metrics(state, game_log):
+    """Return discovery/progress metrics for a finished run.
+
+    Derived entirely from game_log (per-step "extracted" dicts) plus
+    visited_rooms/known_npcs, both of which are fresh per run — unlike
+    known_entities, which is pre-seeded from cross-run strategy (bug 64) and
+    would double-count history as "discovered this run" if used here.
+    Treasure is a name heuristic (Knight Orc treasure objects are all named
+    with "silver"), not a separate extraction field.
+    """
+    treasure, discovered, solved = set(), set(), set()
+    for entry in game_log:
+        extracted = entry.get("extracted") or {}
+        for name in list(extracted.get("objects", [])) + list(extracted.get("added_to_inventory", [])):
+            if "silver" in name.lower():
+                treasure.add(name.lower())
+        for anomaly in extracted.get("anomalies", []):
+            target = anomaly.get("target")
+            if target:
+                discovered.add(target)
+        for resolved in extracted.get("resolved_anomalies", []):
+            solved.add(resolved)
+    return {
+        "locations_discovered": len(state.get("visited_rooms", set())),
+        "npcs_discovered": len(state.get("known_npcs", {})),
+        "treasure_discovered": len(treasure),
+        "puzzles_discovered": len(discovered),
+        "puzzles_solved": len(solved & discovered),
+    }
+
+
+def compare_to_history(run_record, run_history):
+    """Compare one run's metrics against the best prior value of each metric
+    already recorded in run_history. Mirrors anomaly_detector._regression()'s
+    current-vs-best-prior-score pattern, generalised to all playthrough metrics.
+
+    Returns {metric: {"current": v, "best_prior": v|None}} — best_prior is
+    None (not 0) when no prior run recorded that metric, so callers can tell
+    "no history yet" apart from "history says 0".
+    """
+    comparison = {}
+    for metric in _COMPARISON_METRICS:
+        scored = [h[metric] for h in run_history if h.get(metric) is not None]
+        comparison[metric] = {
+            "current": run_record.get(metric),
+            "best_prior": max(scored) if scored else None,
+        }
+    return comparison
+
+
 def merge_run_record(run_record, strategy_path):
     """Merge a completed run's data into the accumulated strategy file.
 
@@ -156,6 +220,11 @@ def merge_run_record(run_record, strategy_path):
         "run_id": run_record["run_id"],
         "outcome": run_record["outcome"],
         "final_score": run_record.get("final_score"),
+        "locations_discovered": run_record.get("locations_discovered"),
+        "npcs_discovered": run_record.get("npcs_discovered"),
+        "treasure_discovered": run_record.get("treasure_discovered"),
+        "puzzles_discovered": run_record.get("puzzles_discovered"),
+        "puzzles_solved": run_record.get("puzzles_solved"),
     })
 
     # Merge world graph — union nodes; each (src, dst, direction) triplet stored
