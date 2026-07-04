@@ -168,6 +168,40 @@ class TestRegression:
         assert "regression" not in [a["type"] for a in anomalies]
 
 
+class TestUnrecognizedFailureResponses:
+    def _uf_entry(self, target, response, room="Field"):
+        entry = _entry(f"take {target}", response=response, room=room)
+        entry["unrecognized_failure"] = {"target": target, "action": f"take {target}", "response": response}
+        return entry
+
+    def test_flags_unrecognized_take_failure(self):
+        log = [self._uf_entry("pile of garbage", "That's too heavy.")]
+        anomalies = detect_anomalies(log, {}, {})
+        types = [a["type"] for a in anomalies]
+        assert "unrecognized_failure_response" in types
+        anomaly = next(a for a in anomalies if a["type"] == "unrecognized_failure_response")
+        assert anomaly["evidence"] == {
+            "target": "pile of garbage", "response": "That's too heavy.", "occurrences": 1,
+        }
+
+    def test_dedupes_repeated_occurrences_into_one_anomaly(self):
+        log = [
+            self._uf_entry("pile of garbage", "That's too heavy."),
+            _entry("examine pile of garbage", response="A pile of garbage."),
+            self._uf_entry("pile of garbage", "That's too heavy."),
+        ]
+        anomalies = detect_anomalies(log, {}, {})
+        uf_anomalies = [a for a in anomalies if a["type"] == "unrecognized_failure_response"]
+        assert len(uf_anomalies) == 1
+        assert uf_anomalies[0]["evidence"]["occurrences"] == 2
+        assert uf_anomalies[0]["step_range"] == [1, 3]
+
+    def test_no_unrecognized_failures_not_flagged(self):
+        log = [_entry("take sword", response="Taken.")]
+        anomalies = detect_anomalies(log, {}, {})
+        assert "unrecognized_failure_response" not in [a["type"] for a in anomalies]
+
+
 class TestBuildReport:
     def test_report_shape_and_ids(self):
         log = [_entry("push gate", utility="futile"),

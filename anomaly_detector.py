@@ -193,6 +193,34 @@ def _regression(run_record, strategy):
     return []
 
 
+def _unrecognized_failure_responses(game_log):
+    """Flag "take X" responses agent.py couldn't classify as a known failure or
+    a confirmed success (see agent.py's `unrecognized_failure` game_log field).
+    One anomaly per unique (target, response) pair, deduped across repeats in
+    this run — evidence only, no hard/soft judgement here (that's
+    scripts/classify_failure_patterns.py's job, run separately)."""
+    seen = {}
+    for i, entry in enumerate(game_log):
+        uf = entry.get("unrecognized_failure")
+        if not uf:
+            continue
+        key = (uf["target"], uf["response"])
+        seen.setdefault(key, []).append(i + 1)
+    return [
+        {
+            "type": "unrecognized_failure_response",
+            "severity": "medium",
+            "step_range": [steps[0], steps[-1]],
+            "summary": (
+                f"'take {target}' -> {response!r} not in any failure pattern, "
+                f"item never confirmed added to inventory ({len(steps)}x)"
+            ),
+            "evidence": {"target": target, "response": response, "occurrences": len(steps)},
+        }
+        for (target, response), steps in seen.items()
+    ]
+
+
 def detect_anomalies(game_log, run_record, strategy):
     """Return the anomaly list (with ids assigned) for the anomaly_report/v1 contract."""
     anomalies = _from_log_analyzer(game_log)
@@ -200,6 +228,7 @@ def detect_anomalies(game_log, run_record, strategy):
     anomalies += _utility_streaks(game_log, "redundant")
     anomalies += _productive_thrash(game_log)
     anomalies += _regression(run_record, strategy)
+    anomalies += _unrecognized_failure_responses(game_log)
     for idx, anomaly in enumerate(anomalies, start=1):
         anomaly["id"] = f"a{idx}"
     return anomalies
