@@ -1,17 +1,33 @@
 #!/usr/bin/env python3
-"""Run the agent headlessly, save a timestamped log, and write an issue analysis.
+"""Run the agent headlessly via watch_run.py, then write an issue analysis.
+
+Thin wrapper around scripts/watch_run.py's run() — delegates all game-running
+mechanics (initial state incl. cross-run strategy load, cloud/local LLM
+selection, per-step verbose output, cross-run strategy merge, map images) to
+it instead of maintaining a second implementation that drifts out of sync
+(see docs/bugs/65.md, docs/bugs/66.md — this script had fallen behind
+watch_run.py three separate times before this). Adds the log_analyzer-based
+issue report (logs/latest_analysis.md) that agent_dev_loop.py's anomaly-based
+loop consumes — that's this script's one remaining distinct job.
 
 Usage:
     python scripts/run_and_analyze.py [steps] [--config PATH]
 
-Environment:
-    LEVEL9_INTERPRETER  path to glklevel9 binary  (default: ./tools/glklevel9)
-    LEVEL9_ROM          path to game ROM           (default: ./gamefiles/knight-orc/GAMEDAT1.DAT)
-    EVAL_MODEL_PATH     path to LLM .gguf          (default: ../models/Phi-3.5-mini-instruct-Q3_K_M.gguf)
+Environment: same as scripts/watch_run.py (LEVEL9_INTERPRETER, LEVEL9_ROM,
+EVAL_MODEL_PATH, LLM_PROVIDER/LLM_MODEL/LLM_API_KEY/LLM_BASE_URL/LLM_JSON_MODE,
+GAME_STRATEGY) — importing watch_run runs its module-level .env load, so
+there's nothing extra to configure here.
 
 Output:
-    logs/run_TIMESTAMP.json   full game log
-    logs/latest_analysis.md   issue report consumed by agent_dev_loop.py
+    logs/<run_id>.json         full game log (written by watch_run.py)
+    runs/<run_id>.json         run record (written by watch_run.py)
+    logs/<run_id>_map.png      map image (written by watch_run.py)
+    logs/latest_analysis.md    issue report consumed by agent_dev_loop.py
+
+Every run now also merges into configs/knight_orc_strategy.json's cross-run
+learning (futile_edges, entity_verb_outcomes, world_graph, run_history) —
+previously this script ran in isolation and neither benefited from nor
+contributed to it.
 
 Exit code:
     0  clean run (no issues detected)
@@ -19,104 +35,34 @@ Exit code:
 """
 import argparse
 import json
-import logging
-import os
 import sys
-import time
 from datetime import datetime
 from pathlib import Path
 
-import networkx as nx
-
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
+import watch_run
 from game_config import config
 from log_analyzer import analyze_log
-from agent import process_agent_step
-from game_engine import start_level9
-from llm import load_llm
 
-# Suppress Streamlit's "missing ScriptRunContext" warning — harmless outside a
-# Streamlit session; @st.cache_resource just runs without caching.
-# Must be after imports: streamlit resets its logger levels at import time.
-logging.getLogger("streamlit.runtime.scriptrunner_utils.script_run_context").setLevel(logging.ERROR)
-
-INTERPRETER_PATH = os.environ.get("LEVEL9_INTERPRETER", "./tools/glklevel9")
-ROM_PATH = os.environ.get("LEVEL9_ROM", "./gamefiles/knight-orc/GAMEDAT1.DAT")
-MODEL_PATH = os.environ.get("EVAL_MODEL_PATH", "../models/Phi-3.5-mini-instruct-Q3_K_M.gguf")
-LOG_DIR = Path("logs")
-
-
-def _make_initial_state():
-    return {
-        "current_room": "Unknown Location",
-        "inventory": [],
-        "spellbook": [],
-        "known_entities": {},
-        "world_graph": nx.MultiDiGraph(),
-        "uninspected_objects": [],
-        "current_inspection": {
-            "target": None,
-            "sequence": config.inspection_sequence,
-            "step_index": 0,
-        },
-        "known_npcs": {},
-        "unresolved_anomalies": {},
-        "active_goal": None,
-        "game_log": [],
-        "is_running": False,
-        "current_score": None,
-        "max_score": None,
-        "futile_edges": set(),
-        "pending_npc_tasks": [],
-        "visited_rooms": set(),
-        "recheck_inventory": False,
-    }
+LOG_DIR = watch_run.LOG_DIR
 
 
 def run(steps=50, verbose=True):
-    LOG_DIR.mkdir(exist_ok=True)
+    findings, run_id = watch_run.run(steps=steps, verbose=verbose)
 
-    child, initial_text = start_level9(INTERPRETER_PATH, ROM_PATH)
-    if child is None:
-        issues = [{"type": "startup_error", "description": initial_text}]
+    if run_id is None:
+        issues = [{"type": f.get("type", "startup_error"), "description": f.get("message", "")}
+                  for f in findings]
         _write_report(issues, [], datetime.now().strftime("%Y%m%d_%H%M%S"), None)
         return [], issues
 
-    if verbose:
-        print(f"Started game. Running {steps} steps...", file=sys.stderr)
+    log_path = LOG_DIR / f"{run_id}.json"
+    game_log = json.loads(log_path.read_text())
 
-    llm = load_llm(MODEL_PATH)
-    state = _make_initial_state()
-    run_start = time.monotonic()
-
-    for i in range(steps):
-        process_agent_step(state, child, llm)
-        last = state["game_log"][-1]
-        if verbose:
-            room = state.get("current_room") or "?"
-            flag = ""
-            if "WARNING" in last["response"] or "CRITICAL" in last["response"]:
-                flag = "  ⚠ TIMEOUT/ERROR"
-            elif last.get("loop_detected"):
-                flag = f"  ✗ LOOP ({last['loop_detected']!r})"
-            elapsed = time.monotonic() - run_start
-            print(f"[{i+1:>3}/{steps}] {last['action']:<28} {room}{flag}  [elapsed {elapsed:.0f}s]",
-                  file=sys.stderr)
-        if last.get("loop_detected"):
-            break
-
-    if child.isalive():
-        child.close()
-
-    ts = datetime.now().strftime("%Y%m%d_%H%M%S")
-    log_path = LOG_DIR / f"run_{ts}.json"
-    with open(log_path, "w") as f:
-        json.dump(state["game_log"], f, indent=2)
-
-    issues = analyze_log(state["game_log"])
-    _write_report(issues, state["game_log"], ts, log_path)
-    return state["game_log"], issues
+    issues = analyze_log(game_log)
+    _write_report(issues, game_log, run_id.removeprefix("watch_"), log_path)
+    return game_log, issues
 
 
 def _write_report(issues, game_log, ts, log_path):
