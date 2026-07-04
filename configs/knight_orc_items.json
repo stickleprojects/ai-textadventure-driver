@@ -169,5 +169,20 @@
   },
   "gripper": {
     "take": "invalid"
+  },
+  "cabbage": {
+    "take": "invalid"
+  },
+  "beef": {
+    "take": "invalid"
+  },
+  "bread": {
+    "take": "invalid"
+  },
+  "pile of mixed treasures": {
+    "take": "invalid"
+  },
+  "treasures": {
+    "take": "invalid"
   }
 }
