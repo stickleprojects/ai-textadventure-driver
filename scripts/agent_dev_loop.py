@@ -236,7 +236,15 @@ Rules:
   without a guaranteed exit condition. A prior incident (see docs/JOURNAL.md,
   "drain_game_buffer infinite loop in test suite") hung the test suite this way;
   the harness now times out and treats a hang as a failed attempt, but a timeout
-  wastes the whole iteration, so avoid it in the first place.\
+  wastes the whole iteration, so avoid it in the first place.
+- When a spec section's prose uses a placeholder (a pronoun, a generic name)
+  that doesn't appear in that section's own quoted example text, do not invent
+  literal matching text for it — match against the quoted examples specifically,
+  and where possible verify against actual state instead of parsing narration
+  for identity (e.g. "was this item in our inventory?", not "did the text say
+  'from you'?"). A prior incident (see docs/JOURNAL.md, "Fixer agent invented a
+  literal \"from you\" that the spec never said") hardcoded a word the spec
+  never actually used, missing narration the game really produces.\
 """
 
 

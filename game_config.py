@@ -22,6 +22,14 @@ JSON schema (all keys optional — missing keys keep their defaults):
     "npc_commands": {
         "wait_for_command":   string  — template to wait for a specific NPC (e.g. "wait for {npc}"); omit if game has no such command
     },
+    "theft_patterns":        [str]   — regex fragments matching "<npc> stole/takes <item> from <anyone>"
+                                       narration; each must have a named group (?P<item>...).
+                                       Matched item is removed from inventory only if it's
+                                       currently held — deliberately does not try to parse who
+                                       the "victim" is (the game may narrate the player in
+                                       third person, e.g. by creature name, not just "you"),
+                                       so add new phrasings here rather than trying to also
+                                       identify the victim from text.
     "hints": [str]  — user-authored strategy hints injected into the LLM prompt as additional context
 }
 
@@ -71,6 +79,14 @@ class GameConfig:
             r"can'?t do that yet",
             r"not yet",
         ]
+        # Deliberately does not try to capture/parse who the theft's "victim" is —
+        # the game can narrate the player in third person (e.g. by creature name),
+        # not just "you", so it's unreliable to key off that text. Instead any
+        # matched item is removed from inventory only if currently held.
+        self._theft_patterns = [
+            r"(?:just\s+)?stole\s+(?:the\s+)?(?P<item>.+?)\s+from\s+",
+            r"takes?\s+(?:the\s+)?(?P<item>.+?)\s+from\s+",
+        ]
         self.end_state_patterns = {
             k: [re.compile(p, re.IGNORECASE) for p in patterns]
             for k, patterns in self._DEFAULT_END_STATE_PATTERNS.items()
@@ -93,6 +109,9 @@ class GameConfig:
         )
         death_pats = self._DEFAULT_END_STATE_PATTERNS["death"]
         self.death_pattern = re.compile("|".join(death_pats), re.IGNORECASE)
+        # Each pattern compiled separately (not OR-joined) since named groups
+        # can't repeat within a single compiled pattern.
+        self.theft_patterns = [re.compile(p, re.IGNORECASE) for p in self._theft_patterns]
 
     @property
     def inspection_sequence(self):
@@ -120,6 +139,9 @@ class GameConfig:
             recompile = True
         if "soft_failure_patterns" in data:
             self._soft_failure_patterns = list(data["soft_failure_patterns"])
+            recompile = True
+        if "theft_patterns" in data:
+            self._theft_patterns = list(data["theft_patterns"])
             recompile = True
         if recompile:
             self._compile()

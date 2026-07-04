@@ -454,6 +454,17 @@ def process_agent_step(state, child, llm_instance):
     token_usage = extracted.pop("_usage", {"input_tokens": 0, "output_tokens": 0})
     llm_trace = extracted.pop("_trace", None)
 
+    # Deliberately doesn't try to determine who the "victim" is (the game can
+    # narrate the player in third person, not just "you") — instead, any item
+    # a theft pattern matches is removed from inventory only if we actually
+    # hold it, using our own state as ground truth rather than parsing prose.
+    for pattern in config.theft_patterns:
+        for m in pattern.finditer(response):
+            stolen = (m.groupdict().get("item") or "").strip().rstrip(".")
+            if stolen:
+                state["inventory"] = [item for item in state["inventory"]
+                                       if item.lower() != stolen.lower()]
+
     if extracted.get("room"):
         state["current_room"] = _resolve_room_name(state["world_graph"], extracted["room"])
         extracted["room"] = state["current_room"]
