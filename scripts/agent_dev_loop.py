@@ -23,9 +23,18 @@ for open PRs against develop and refuses to start a new scenario while one
 is outstanding, so two scenario branches can't drift out of sync with each
 other. Requires a clean working tree and the `gh` CLI to be authenticated.
 
+On success it also runs one real playthrough (scripts/watch_run.py,
+--playthrough-steps, default 30) and attaches a "Playthrough evidence"
+table to the PR — locations/NPCs/treasure/puzzles discovered and puzzles
+solved, compared against the best prior value of each already recorded in
+configs/knight_orc_strategy.json's run_history. This is best-effort: if the
+playthrough can't run (no LLM/model/interpreter configured on this
+machine), the PR still opens with an "evidence unavailable" note instead of
+being blocked on it.
+
 Usage:
     python scripts/agent_dev_loop.py [--steps N] [--iterations N] [--model MODEL] [--dry-run]
-    python scripts/agent_dev_loop.py --spec-target SCENARIO_ID [--iterations N] [--model MODEL] [--dry-run]
+    python scripts/agent_dev_loop.py --spec-target SCENARIO_ID [--iterations N] [--model MODEL] [--dry-run] [--playthrough-steps N]
 
 Environment:
     ANTHROPIC_API_KEY   required (for the fixer agent)
@@ -48,12 +57,17 @@ from pathlib import Path
 
 import jsonschema
 
+sys.path.insert(0, str(Path(__file__).parent.parent))
+from run_evaluator import compare_to_history  # noqa: E402
+
 PROJECT_ROOT = Path(__file__).parent.parent
 LOG_DIR = PROJECT_ROOT / "logs"
 VENV_ACTIVATE = PROJECT_ROOT / ".venv" / "bin" / "activate"
 VENV_PYTHON = PROJECT_ROOT / ".venv" / "bin" / "python"
 SPEC_DOC = PROJECT_ROOT / "docs" / "agent_behavior_spec.md"
 SCENARIOS_FILE = PROJECT_ROOT / "tests" / "spec_scenarios" / "scenarios.json"
+STRATEGY_FILE = PROJECT_ROOT / "configs" / "knight_orc_strategy.json"
+RUNS_DIR = PROJECT_ROOT / "runs"
 BASE_BRANCH = "develop"
 PR_TITLE_PREFIX = "[fixer-agent]"
 
@@ -71,6 +85,7 @@ STATE_FILE_SCHEMAS = {
 }
 TEST_TIMEOUT_SECS = 180
 SCENARIO_TEST_TIMEOUT_SECS = 90
+PLAYTHROUGH_TIMEOUT_SECS = 900
 
 
 # ── Tool implementations ──────────────────────────────────────────────────────
@@ -407,7 +422,75 @@ def _create_scenario_branch(scenario_id):
     return branch
 
 
-def _commit_push_pr(scenario, branch, summary):
+def _run_playthrough(steps):
+    """Run one real playthrough via watch_run.py. Returns (run_record, None) on
+    success or (None, error_message) on any failure — never raises, since a
+    missing local LLM/model on this machine shouldn't block landing an
+    otherwise-good fix, only mean no evidence is attached this time."""
+    try:
+        result = subprocess.run(
+            f"source {VENV_ACTIVATE} && python scripts/watch_run.py {steps}",
+            shell=True,
+            cwd=PROJECT_ROOT,
+            capture_output=True,
+            text=True,
+            executable="/bin/bash",
+            timeout=PLAYTHROUGH_TIMEOUT_SECS,
+        )
+    except subprocess.TimeoutExpired:
+        return None, f"watch_run.py did not finish within {PLAYTHROUGH_TIMEOUT_SECS}s"
+
+    match = re.search(r"Run ID: (\S+)", result.stderr)
+    if not match:
+        return None, f"watch_run.py did not report a Run ID:\n{result.stdout}\n{result.stderr}"
+
+    run_id = match.group(1)
+    run_record_path = RUNS_DIR / f"{run_id}.json"
+    if not run_record_path.exists():
+        return None, f"expected {run_record_path} but it wasn't written"
+
+    return json.loads(run_record_path.read_text()), None
+
+
+def _format_playthrough_evidence(run_record, comparison, steps):
+    metric_labels = {
+        "final_score": "Score",
+        "locations_discovered": "Locations discovered",
+        "npcs_discovered": "NPCs discovered",
+        "treasure_discovered": "Treasure discovered (silver items)",
+        "puzzles_discovered": "Puzzles discovered",
+        "puzzles_solved": "Puzzles solved",
+    }
+    rows = []
+    for metric, label in metric_labels.items():
+        current = comparison[metric]["current"]
+        best_prior = comparison[metric]["best_prior"]
+        if best_prior is None:
+            delta = "n/a (no prior history)"
+        else:
+            diff = (current or 0) - best_prior
+            delta = f"{diff:+d}"
+        rows.append(f"| {label} | {current if current is not None else 'n/a'} | "
+                     f"{best_prior if best_prior is not None else 'n/a'} | {delta} |")
+
+    log_path = f"logs/{run_record['run_id']}.json"
+    return f"""\
+## Playthrough evidence ({steps}-step run after the fix)
+
+Run ID: `{run_record['run_id']}` — outcome: `{run_record.get('outcome')}` — log: `{log_path}`
+
+| Metric | This run | Best prior | Δ |
+|---|---|---|---|
+{chr(10).join(rows)}
+
+Note: this is a whole-playthrough signal from one real run, not a targeted
+check that this scenario's specific mechanic fired — the agent may or may
+not encounter the exact situation (e.g. an NPC to steal from) depending on
+where this particular run happens to go.
+"""
+
+
+def _commit_push_pr(scenario, branch, summary, evidence_md):
     _run(["git", "add", "-A"])
     commit_msg = (
         f"Resolve spec scenario {scenario['id']} ({scenario['spec_ref']})\n\n"
@@ -429,6 +512,7 @@ def _commit_push_pr(scenario, branch, summary):
 - [x] `pytest tests/test_spec_scenarios.py -k {scenario['id']} -q` passes, xfail removed
 - [x] `pytest tests/ -q --ignore=tests/test_evals.py` passes (full-suite regression guard)
 
+{evidence_md}
 Opened automatically by the fixer agent (`scripts/agent_dev_loop.py --spec-target {scenario['id']}`) — not written by a human.
 """
     result = _run(["gh", "pr", "create", "--base", BASE_BRANCH, "--head", branch,
@@ -527,7 +611,7 @@ tests/spec_scenarios/scenarios.json. Verify with:
 """
 
 
-def run_spec_target(scenario_id, iterations, model, dry_run):
+def run_spec_target(scenario_id, iterations, model, dry_run, playthrough_steps):
     scenario = _load_scenario(scenario_id)
     prompt = _spec_target_prompt(scenario)
     print(f"Targeting spec scenario {scenario_id!r} (spec_ref={scenario['spec_ref']!r})\n")
@@ -586,8 +670,19 @@ def run_spec_target(scenario_id, iterations, model, dry_run):
                 )
             print(f"\nScenario {scenario_id!r} now passes and the full suite is green.")
 
+            print(f"\nRunning a {playthrough_steps}-step playthrough for evidence...")
+            prior_history = json.loads(STRATEGY_FILE.read_text()).get("run_history", []) \
+                if STRATEGY_FILE.exists() else []
+            run_record, playthrough_error = _run_playthrough(playthrough_steps)
+            if run_record:
+                comparison = compare_to_history(run_record, prior_history)
+                evidence_md = _format_playthrough_evidence(run_record, comparison, playthrough_steps)
+            else:
+                print(f"Playthrough evidence unavailable: {playthrough_error}")
+                evidence_md = f"## Playthrough evidence\n\n_Unavailable: {playthrough_error}_\n"
+
             print("Committing and opening PR...")
-            pr_url = _commit_push_pr(scenario, branch, summary)
+            pr_url = _commit_push_pr(scenario, branch, summary, evidence_md)
             print(f"\nOpened PR: {pr_url}")
 
             _run(["git", "checkout", original_branch])
@@ -613,10 +708,11 @@ def main():
     parser.add_argument("--config",     metavar="PATH",                help="Game config JSON (default: built-in Knight Orc values)")
     parser.add_argument("--dry-run",    action="store_true",           help="Analyze only, skip auto-fix")
     parser.add_argument("--spec-target", metavar="SCENARIO_ID",        help="Build toward one tests/spec_scenarios/scenarios.json scenario instead of the anomaly-based loop")
+    parser.add_argument("--playthrough-steps", type=int, default=30,   help="Steps for the post-fix evidence playthrough in --spec-target mode (default: 30)")
     args = parser.parse_args()
 
     if args.spec_target:
-        run_spec_target(args.spec_target, args.iterations, args.model, args.dry_run)
+        run_spec_target(args.spec_target, args.iterations, args.model, args.dry_run, args.playthrough_steps)
         return
 
     LOG_DIR.mkdir(exist_ok=True)

@@ -26,7 +26,12 @@
             "type": "string",
             "enum": ["score_improved", "ambiguous", "interrupted", "completed", "death", "agent_failure", "game_ended"]
           },
-          "final_score": { "type": ["number", "null"] }
+          "final_score": { "type": ["number", "null"] },
+          "locations_discovered": { "type": ["integer", "null"] },
+          "npcs_discovered": { "type": ["integer", "null"] },
+          "treasure_discovered": { "type": ["integer", "null"] },
+          "puzzles_discovered": { "type": ["integer", "null"] },
+          "puzzles_solved": { "type": ["integer", "null"] }
         }
       }
     }

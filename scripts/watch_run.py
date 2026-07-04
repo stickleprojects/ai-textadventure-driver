@@ -34,7 +34,7 @@ from game_config import config
 from agent import process_agent_step
 from game_engine import start_level9
 from llm import load_llm, load_cloud_llm
-from run_evaluator import classify_run, load_strategy, merge_run_record
+from run_evaluator import classify_run, compute_playthrough_metrics, load_strategy, merge_run_record
 from ui import save_graph_image
 
 # Suppress Streamlit's "missing ScriptRunContext" warning — harmless outside a
@@ -281,6 +281,7 @@ def run(steps=50, verbose=False):
             "futile_edges": [list(e) for e in sorted(state.get("futile_edges", set()))],
             "entity_verb_outcomes": entity_verb_outcomes,
             "world_graph": world_graph_record,
+            **compute_playthrough_metrics(state, state["game_log"]),
         }
         total_input = sum(e.get("token_usage", {}).get("input_tokens", 0) for e in state["game_log"])
         total_output = sum(e.get("token_usage", {}).get("output_tokens", 0) for e in state["game_log"])

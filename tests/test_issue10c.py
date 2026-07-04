@@ -112,7 +112,11 @@ class TestMergeRunRecord:
         merge_run_record(_make_record(), strategy_path)
         result = load_strategy(strategy_path)
         entry = result["run_history"][0]
-        assert set(entry.keys()) == {"run_id", "outcome", "final_score"}
+        assert set(entry.keys()) == {
+            "run_id", "outcome", "final_score",
+            "locations_discovered", "npcs_discovered", "treasure_discovered",
+            "puzzles_discovered", "puzzles_solved",
+        }
 
 
 # ── make_initial_state startup load ──────────────────────────────────────────
