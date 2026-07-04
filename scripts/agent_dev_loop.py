@@ -9,11 +9,13 @@ Uses the Anthropic API with tool use. Each iteration:
   5. Run the pytest suite to verify no regressions
   6. Loop
 
-With --spec-target SCENARIO_ID, the loop instead targets one scenario from
+With --spec-target [SCENARIO_ID], the loop instead targets one scenario from
 tests/spec_scenarios/scenarios.json (feature 59): it hands the fixer the
 relevant docs/agent_behavior_spec.md section plus the fixture, and succeeds
 when that scenario's xfail is lifted, its test passes, and the full suite
-still passes.
+still passes. Omit SCENARIO_ID to use the first open (xfail'd) scenario in
+file order — see scripts/list_scenarios.py / run_dev_loop.sh --list-scenarios
+for what's open.
 
 Each --spec-target run gets its own branch (feat/59-scenario-<id>, off
 origin/develop) and, on success, its own PR — one scenario fix per PR, so
@@ -24,7 +26,7 @@ is outstanding, so two scenario branches can't drift out of sync with each
 other. Requires a clean working tree and the `gh` CLI to be authenticated.
 
 On success it also runs one real playthrough (scripts/watch_run.py,
---playthrough-steps, default 30) and attaches a "Playthrough evidence"
+--playthrough-steps, default 50) and attaches a "Playthrough evidence"
 table to the PR — locations/NPCs/treasure/puzzles discovered and puzzles
 solved, compared against the best prior value of each already recorded in
 configs/knight_orc_strategy.json's run_history. This is best-effort: if the
@@ -34,7 +36,7 @@ being blocked on it.
 
 Usage:
     python scripts/agent_dev_loop.py [--steps N] [--iterations N] [--model MODEL] [--dry-run]
-    python scripts/agent_dev_loop.py --spec-target SCENARIO_ID [--iterations N] [--model MODEL] [--dry-run] [--playthrough-steps N]
+    python scripts/agent_dev_loop.py --spec-target [SCENARIO_ID] [--iterations N] [--model MODEL] [--dry-run] [--playthrough-steps N]
 
 Environment:
     ANTHROPIC_API_KEY   required (for the fixer agent)
@@ -46,6 +48,7 @@ Example:
     ANTHROPIC_API_KEY=sk-... python scripts/agent_dev_loop.py --steps 50 --iterations 3
     ANTHROPIC_API_KEY=sk-... python scripts/agent_dev_loop.py --steps 20 --dry-run
     ANTHROPIC_API_KEY=sk-... python scripts/agent_dev_loop.py --spec-target npc_theft_removes_from_inventory
+    ANTHROPIC_API_KEY=sk-... python scripts/agent_dev_loop.py --spec-target   # first open scenario
 """
 import argparse
 import json
@@ -559,6 +562,16 @@ def _load_scenario(scenario_id):
     sys.exit(f"No scenario with id {scenario_id!r} in {SCENARIOS_FILE}")
 
 
+def _first_open_scenario_id():
+    """Return the id of the first scenario in file order that still has an
+    "xfail" key, or None if every scenario is already implemented."""
+    scenarios = json.loads(SCENARIOS_FILE.read_text())
+    for scenario in scenarios:
+        if scenario.get("xfail"):
+            return scenario["id"]
+    return None
+
+
 def _scenario_still_xfail(scenario_id):
     scenarios = json.loads(SCENARIOS_FILE.read_text())
     for scenario in scenarios:
@@ -712,15 +725,22 @@ def main():
     parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     parser.add_argument("--steps",      type=int, default=50,          help="Game steps per run (default: 50)")
     parser.add_argument("--iterations", type=int, default=5,           help="Max fix iterations (default: 5)")
-    parser.add_argument("--model",      default="claude-sonnet-4-6",   help="Claude model for fixer agent")
+    parser.add_argument("--model",      default="claude-sonnet-5",     help="Claude model for fixer agent (default: claude-sonnet-5)")
     parser.add_argument("--config",     metavar="PATH",                help="Game config JSON (default: built-in Knight Orc values)")
     parser.add_argument("--dry-run",    action="store_true",           help="Analyze only, skip auto-fix")
-    parser.add_argument("--spec-target", metavar="SCENARIO_ID",        help="Build toward one tests/spec_scenarios/scenarios.json scenario instead of the anomaly-based loop")
-    parser.add_argument("--playthrough-steps", type=int, default=30,   help="Steps for the post-fix evidence playthrough in --spec-target mode (default: 30)")
+    parser.add_argument("--spec-target", nargs="?", const="", metavar="SCENARIO_ID",
+                         help="Build toward one tests/spec_scenarios/scenarios.json scenario instead of "
+                              "the anomaly-based loop. Omit SCENARIO_ID to use the first open (xfail'd) scenario.")
+    parser.add_argument("--playthrough-steps", type=int, default=50,   help="Steps for the post-fix evidence playthrough in --spec-target mode (default: 50)")
     args = parser.parse_args()
 
-    if args.spec_target:
-        run_spec_target(args.spec_target, args.iterations, args.model, args.dry_run, args.playthrough_steps)
+    if args.spec_target is not None:
+        scenario_id = args.spec_target or _first_open_scenario_id()
+        if not scenario_id:
+            sys.exit(f"No open (xfail'd) scenarios left in {SCENARIOS_FILE} — nothing to build toward.")
+        if not args.spec_target:
+            print(f"No SCENARIO_ID given — using first open scenario: {scenario_id!r}\n")
+        run_spec_target(scenario_id, args.iterations, args.model, args.dry_run, args.playthrough_steps)
         return
 
     LOG_DIR.mkdir(exist_ok=True)

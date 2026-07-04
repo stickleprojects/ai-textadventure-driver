@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # Run the agentic dev loop via agent_dev_loop.py.
 # Usage: ./run_dev_loop.sh --list-scenarios [--xfail-only]
-#        ./run_dev_loop.sh --spec-target SCENARIO_ID [--iterations N] [--model MODEL] [--dry-run] [...]
+#        ./run_dev_loop.sh --spec-target [SCENARIO_ID] [--iterations N] [--model MODEL] [--dry-run] [...]
 #        ./run_dev_loop.sh [--steps N] [--iterations N] [--model MODEL] [--dry-run]   # anomaly-based loop
 #
 # --list-scenarios shows every tests/spec_scenarios/scenarios.json scenario's
@@ -11,11 +11,13 @@
 # --spec-target builds toward one scenario: own branch off develop, opens a
 # PR (with real-playthrough evidence attached) once the scenario's xfail is
 # lifted and the full suite passes. Requires a clean working tree, no PR
-# already open against develop, and the `gh` CLI authenticated.
+# already open against develop, and the `gh` CLI authenticated. Omit
+# SCENARIO_ID to use the first open (xfail'd) scenario in file order.
 #
 # Examples:
 #   ./run_dev_loop.sh --list-scenarios
 #   ./run_dev_loop.sh --list-scenarios --xfail-only
+#   ./run_dev_loop.sh --spec-target                    # first open scenario
 #   ./run_dev_loop.sh --spec-target npc_interaction_greet
 #   ./run_dev_loop.sh --spec-target npc_interaction_greet --dry-run
 #   ./run_dev_loop.sh --steps 50 --iterations 3
