@@ -70,8 +70,7 @@
     "mock_extracted": {},
     "expect_absent": {
       "inventory": ["sword"]
-    },
-    "xfail": "Requirement 23: no NPC-theft-narration detection/state update yet"
+    }
   },
   {
     "id": "landmark_recorded_from_description",

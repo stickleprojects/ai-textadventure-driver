@@ -339,6 +339,16 @@
       "run_id": "watch_20260703_151838",
       "outcome": "ambiguous",
       "final_score": null
+    },
+    {
+      "run_id": "watch_20260704_154429",
+      "outcome": "ambiguous",
+      "final_score": null,
+      "locations_discovered": 3,
+      "npcs_discovered": 8,
+      "treasure_discovered": 0,
+      "puzzles_discovered": 1,
+      "puzzles_solved": 0
     }
   ]
 }
