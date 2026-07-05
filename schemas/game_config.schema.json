@@ -10,6 +10,7 @@
     "creature_words": { "type": "array", "items": { "type": "string" }, "minItems": 1 },
     "hard_failure_patterns": { "type": "array", "items": { "type": "string" } },
     "soft_failure_patterns": { "type": "array", "items": { "type": "string" } },
+    "scenery_patterns": { "type": "array", "items": { "type": "string" } },
     "end_state_patterns": {
       "type": "object",
       "required": ["death", "finished", "score"],

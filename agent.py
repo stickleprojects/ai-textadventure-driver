@@ -72,6 +72,10 @@ def _is_soft_failure(text):
     return bool(config.soft_failure_pattern.search(text))
 
 
+def _is_scenery_response(text):
+    return bool(config.scenery_pattern.search(text))
+
+
 def _is_failure_response(text):
     return bool(config.failure_pattern.search(text))
 
@@ -450,17 +454,17 @@ def process_agent_step(state, child, llm_instance):
 
     unrecognized_failure = None
     if insp_verb == "take" and effective_target:
+        take_failed = False
         if _is_soft_failure(response):
             # State-dependent (e.g. "you're already carrying that", hands full) —
             # may succeed on a later attempt/run, so never persist as permanent.
             _record_verb_outcome(state, effective_target, "take", "blocked")
-            state["current_inspection"]["target"] = None
-            state["current_inspection"]["step_index"] = 0
+            take_failed = True
         elif _is_hard_failure(response):
-            # Permanently un-takeable (e.g. scenery) — safe to persist cross-run.
+            # Permanently un-takeable (e.g. too heavy, fixed in place, scenery) —
+            # safe to persist cross-run.
             _record_verb_outcome(state, effective_target, "take", "invalid")
-            state["current_inspection"]["target"] = None
-            state["current_inspection"]["step_index"] = 0
+            take_failed = True
         else:
             taken = {i.lower() for i in extracted.get("added_to_inventory", [])}
             if effective_target.lower() in taken:
@@ -473,13 +477,19 @@ def process_agent_step(state, child, llm_instance):
                 # failure pattern can be classified and reviewed later (see
                 # anomaly_detector._unrecognized_failure_responses).
                 state["recheck_inventory"] = True
-                state["current_inspection"]["target"] = None
-                state["current_inspection"]["step_index"] = 0
+                take_failed = True
                 unrecognized_failure = {
                     "target": effective_target,
                     "action": action_taken,
                     "response": response,
                 }
+        # A failed take doesn't mean the object isn't worth examining — e.g. "too
+        # heavy" or "fixed in place" objects can still reveal sub-objects (bug 31)
+        # or other useful text. Only abandon the queued inspection sequence when
+        # the game itself says there's nothing there to look at (bug 70).
+        if take_failed and _is_scenery_response(response):
+            state["current_inspection"]["target"] = None
+            state["current_inspection"]["step_index"] = 0
 
     # Deliberately doesn't try to determine who the "victim" is (the game can
     # narrate the player in third person, not just "you") — instead, any item
