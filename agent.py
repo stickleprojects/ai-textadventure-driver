@@ -502,6 +502,27 @@ def process_agent_step(state, child, llm_instance):
                 state["inventory"] = [item for item in state["inventory"]
                                        if item.lower() != stolen.lower()]
 
+    # req 23: LLM-extracted NPC inventory transfers. Complements theft_patterns
+    # above rather than replacing it — theft_patterns catches known fixed
+    # phrasings reliably, this catches the author-written variety theft_patterns
+    # will never enumerate (and is the only mechanism for the gift direction,
+    # which has no regex equivalent). Removing an already-removed item is a
+    # harmless no-op, so overlap between the two is not a concern.
+    for gift in extracted.get("received_from_npc", []):
+        item = (gift.get("item") or "").strip() if isinstance(gift, dict) else None
+        if item and item not in state["inventory"]:
+            state["inventory"].append(item)
+            entity = state["known_entities"].get(item)
+            if entity is None:
+                state["known_entities"][item] = {"status": "held", "location": None, "verb_outcomes": {}}
+            else:
+                entity["status"] = "held"
+
+    for theft in extracted.get("taken_by_npc", []):
+        item = (theft.get("item") or "").strip() if isinstance(theft, dict) else None
+        if item:
+            state["inventory"] = [i for i in state["inventory"] if i.lower() != item.lower()]
+
     if extracted.get("room"):
         state["current_room"] = _resolve_room_name(state["world_graph"], extracted["room"])
         extracted["room"] = state["current_room"]
@@ -585,6 +606,20 @@ def process_agent_step(state, child, llm_instance):
                 "room": state["current_room"],
                 "reason": anomaly.get("reason"),
                 "potential_solution": anomaly.get("potential_solution") or "",
+            }
+
+    # req 25: route blockages ("You are blocked by the drawbridge") reuse the
+    # anomaly mechanism rather than futile_edges — an obstacle may have a
+    # solution (an item/spell that resolves it via the same inventory/spellbook
+    # matching determine_next_action already does for anomalies), whereas
+    # futile_edges permanently gives up on a direction with no way back.
+    for block in extracted.get("blocked_by", []):
+        obstacle = (block.get("obstacle") or "").strip() if isinstance(block, dict) else None
+        if obstacle and obstacle not in state["unresolved_anomalies"]:
+            state["unresolved_anomalies"][obstacle] = {
+                "room": state["current_room"],
+                "reason": block.get("blocking") or "route blocked",
+                "potential_solution": "",
             }
 
     for resolved in extracted.get("resolved_anomalies", []):

@@ -13,8 +13,8 @@ Agent gameplay capabilities — things the agent must be able to do to play Knig
 | 20  | [20.md](requirements/20.md)   | No mechanism for user strategy hints                | ✅ Fixed |
 | 21  | [21.md](requirements/21.md)   | Cannot execute timed multi-step NPC strategies      | 🔲 Open  |
 | 22  | [22.md](requirements/22.md)   | No detection of NPC movement events                 | 🔲 Open  |
-| 23  | [23.md](requirements/23.md)   | No detection of NPC inventory transfers             | 🔲 Open  |
-| 25  | [25.md](requirements/25.md)   | No response to route blockages                      | 🔲 Open  |
+| 23  | [23.md](requirements/23.md)   | No detection of NPC inventory transfers             | ✅ Fixed |
+| 25  | [25.md](requirements/25.md)   | No response to route blockages                      | ✅ Fixed |
 | 27  | [27.md](requirements/27.md)   | Verb failures re-learned from scratch each run      | ✅ Fixed |
 | 40  | [40.md](requirements/40.md)   | No handling of NPC-initiated dialogue               | 🔲 Open  |
 | 43  | [43.md](requirements/43.md)   | Hint system limited to inventory-solution anomalies | 🔲 Open  |
