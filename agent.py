@@ -228,7 +228,11 @@ def _nav_command(state, target, fast=True):
     the player enter. Unvisited targets fall back to graph-based step navigation.
     """
     template = config.fast_nav_command if fast else config.full_nav_command
-    if template and target in state.get("visited_rooms", set()):
+    if (
+        template
+        and target in state.get("visited_rooms", set())
+        and target not in state.get("nav_blacklist", set())
+    ):
         return template.format(target=target)
     return get_next_move_to_target(state, target)
 
@@ -518,6 +522,12 @@ def process_agent_step(state, child, llm_instance):
             if state["active_goal"]:
                 state["unresolved_anomalies"].pop(state["active_goal"].get("target", ""), None)
             state["active_goal"] = None
+            # The game rejected this room name for its native nav command — remember
+            # that so future navigation to the same target falls back to graph-based
+            # step movement instead of repeating the same rejected command forever.
+            prefix = "go to " if action_taken.startswith("go to ") else "run to "
+            nav_target = action_taken[len(prefix):]
+            state.setdefault("nav_blacklist", set()).add(nav_target)
 
     for npc in extracted.get("npcs", []):
         if npc not in state["known_npcs"]:

@@ -57,6 +57,8 @@ import re
 import subprocess
 import sys
 import threading
+import traceback
+from datetime import datetime
 from pathlib import Path
 
 import jsonschema
@@ -96,55 +98,92 @@ ANALYSIS_TIMEOUT_SECS = 600
 # ── Tool implementations ──────────────────────────────────────────────────────
 
 def _bash(command, timeout=120):
-    result = subprocess.run(
-        command,
-        shell=True,
-        cwd=PROJECT_ROOT,
-        capture_output=True,
-        text=True,
-        timeout=timeout,
-        executable="/bin/bash",
-    )
+    try:
+        result = subprocess.run(
+            command,
+            shell=True,
+            cwd=PROJECT_ROOT,
+            capture_output=True,
+            text=True,
+            timeout=timeout,
+            executable="/bin/bash",
+        )
+    except subprocess.TimeoutExpired:
+        return f"ERROR: command timed out after {timeout}s: {command[:200]}"
     return (result.stdout + result.stderr).strip() or "(no output)"
 
 
-def _read_file(path):
-    p = PROJECT_ROOT / path
+def _resolve_in_project(path):
+    """Resolve `path` under PROJECT_ROOT, rejecting any escape (.., symlinks, absolute paths)."""
+    p = (PROJECT_ROOT / path).resolve()
+    if not p.is_relative_to(PROJECT_ROOT.resolve()):
+        raise ValueError(f"path escapes project root: {path}")
+    return p
+
+
+def _text_editor(input_):
+    """Anthropic-defined text_editor_20250728 tool: view/create/str_replace/insert."""
+    command = input_.get("command")
+    path = input_.get("path")
+    if not path:
+        return "ERROR: missing path"
     try:
-        return p.read_text()
-    except FileNotFoundError:
-        return f"ERROR: not found: {path}"
-    except Exception as e:
+        p = _resolve_in_project(path)
+    except ValueError as e:
         return f"ERROR: {e}"
 
+    if command == "view":
+        if p.is_dir():
+            if not p.exists():
+                return f"ERROR: not found: {path}"
+            return "\n".join(sorted(e.name for e in p.iterdir()))
+        try:
+            content = p.read_text()
+        except FileNotFoundError:
+            return f"ERROR: not found: {path}"
+        view_range = input_.get("view_range")
+        if view_range:
+            lines = content.splitlines()
+            start, end = view_range
+            content = "\n".join(lines[start - 1:len(lines) if end == -1 else end])
+        return content
 
-def _edit_file(path, old_string, new_string):
-    p = PROJECT_ROOT / path
-    try:
-        content = p.read_text()
-    except FileNotFoundError:
-        return f"ERROR: not found: {path}"
-    count = content.count(old_string)
-    if count == 0:
-        return f"ERROR: old_string not found in {path}"
-    if count > 1:
-        return f"ERROR: old_string appears {count} times — add more surrounding context to make it unique"
-    p.write_text(content.replace(old_string, new_string, 1))
-    return f"OK: edited {path}"
+    if command == "create":
+        p.parent.mkdir(parents=True, exist_ok=True)
+        p.write_text(input_.get("file_text", ""))
+        return f"OK: created {path}"
 
+    if command == "str_replace":
+        old_str = input_.get("old_str", "")
+        new_str = input_.get("new_str", "")
+        try:
+            content = p.read_text()
+        except FileNotFoundError:
+            return f"ERROR: not found: {path}"
+        count = content.count(old_str)
+        if count == 0:
+            return f"ERROR: old_str not found in {path}"
+        if count > 1:
+            return f"ERROR: old_str appears {count} times — add more surrounding context to make it unique"
+        p.write_text(content.replace(old_str, new_str, 1))
+        return f"OK: edited {path}"
 
-def _write_file(path, content):
-    p = PROJECT_ROOT / path
-    p.parent.mkdir(parents=True, exist_ok=True)
-    p.write_text(content)
-    return f"OK: wrote {path}"
+    if command == "insert":
+        try:
+            content = p.read_text()
+        except FileNotFoundError:
+            return f"ERROR: not found: {path}"
+        lines = content.split("\n")
+        lines.insert(input_.get("insert_line", 0), input_.get("insert_text", ""))
+        p.write_text("\n".join(lines))
+        return f"OK: edited {path}"
+
+    return f"ERROR: unknown command: {command}"
 
 
 _DISPATCH = {
-    "bash":       lambda i: _bash(i["command"]),
-    "read_file":  lambda i: _read_file(i["path"]),
-    "edit_file":  lambda i: _edit_file(i["path"], i["old_string"], i["new_string"]),
-    "write_file": lambda i: _write_file(i["path"], i["content"]),
+    "bash": lambda i: _bash(i["command"]),
+    "str_replace_based_edit_tool": _text_editor,
 }
 
 _TOOLS = [
@@ -161,44 +200,9 @@ _TOOLS = [
             "required": ["command"],
         },
     },
-    {
-        "name": "read_file",
-        "description": "Read a file. Path is relative to the project root.",
-        "input_schema": {
-            "type": "object",
-            "properties": {"path": {"type": "string"}},
-            "required": ["path"],
-        },
-    },
-    {
-        "name": "edit_file",
-        "description": (
-            "Replace an exact string in a file. "
-            "old_string must match verbatim (whitespace and indentation included). "
-            "Returns an error if old_string is not found or appears more than once."
-        ),
-        "input_schema": {
-            "type": "object",
-            "properties": {
-                "path":       {"type": "string", "description": "File path relative to project root"},
-                "old_string": {"type": "string", "description": "Exact text to replace"},
-                "new_string": {"type": "string", "description": "Replacement text"},
-            },
-            "required": ["path", "old_string", "new_string"],
-        },
-    },
-    {
-        "name": "write_file",
-        "description": "Write (or overwrite) a file. Path relative to project root.",
-        "input_schema": {
-            "type": "object",
-            "properties": {
-                "path":    {"type": "string"},
-                "content": {"type": "string"},
-            },
-            "required": ["path", "content"],
-        },
-    },
+    # Anthropic-defined, schema-less tool — Claude already knows its commands
+    # (view/create/str_replace/insert) from training, so no input_schema.
+    {"type": "text_editor_20250728", "name": "str_replace_based_edit_tool"},
 ]
 
 _SYSTEM_PROMPT = """\
@@ -255,6 +259,65 @@ Rules:
 
 # ── Fixer agent ───────────────────────────────────────────────────────────────
 
+class FixerAgentError(RuntimeError):
+    """Raised when the fixer agent's tool-use loop can't continue.
+
+    Carries the message transcript so far so a caller can log it for
+    diagnosis — the traceback alone doesn't show what the agent was doing.
+    """
+
+    def __init__(self, message, transcript):
+        super().__init__(message)
+        self.transcript = transcript
+
+
+def _serialize_transcript(messages):
+    """Convert a fixer-agent message list (which may hold SDK response
+    objects) into something json.dumps can render for a diagnostic log."""
+    def convert(block):
+        if hasattr(block, "model_dump"):
+            return block.model_dump()
+        if hasattr(block, "to_dict"):
+            return block.to_dict()
+        return block
+
+    out = []
+    for m in messages:
+        content = m["content"]
+        if isinstance(content, list):
+            content = [convert(b) for b in content]
+        out.append({"role": m["role"], "content": content})
+    return out
+
+
+def _log_fixer_failure(exc, context):
+    """Write full diagnostic detail for a fixer-agent failure and return the log path."""
+    LOG_DIR.mkdir(exist_ok=True)
+    timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+    log_path = LOG_DIR / f"fixer_failure_{timestamp}.log"
+
+    lines = [
+        f"Fixer agent failure — {context}",
+        f"Timestamp: {timestamp}",
+        f"Exception: {type(exc).__name__}: {exc}",
+    ]
+    for attr in ("status_code", "request_id", "type"):
+        value = getattr(exc, attr, None)
+        if value is not None:
+            lines.append(f"{attr}: {value}")
+    lines.append("")
+    lines.append("Traceback:")
+    lines.append(traceback.format_exc())
+
+    transcript = getattr(exc, "transcript", None)
+    if transcript is not None:
+        lines.append("Message transcript leading up to the failure:")
+        lines.append(json.dumps(_serialize_transcript(transcript), indent=2, default=str))
+
+    log_path.write_text("\n".join(lines))
+    return log_path
+
+
 def run_fixer_agent(analysis_md, model, verbose=True):
     """Run a Claude tool-use agent that reads the analysis and fixes the code."""
     try:
@@ -278,13 +341,16 @@ def run_fixer_agent(analysis_md, model, verbose=True):
         print(f"  [fixer] starting ({model})...")
 
     while True:
-        response = client.messages.create(
-            model=model,
-            max_tokens=8096,
-            system=_SYSTEM_PROMPT,
-            tools=_TOOLS,
-            messages=messages,
-        )
+        try:
+            response = client.messages.create(
+                model=model,
+                max_tokens=8096,
+                system=_SYSTEM_PROMPT,
+                tools=_TOOLS,
+                messages=messages,
+            )
+        except Exception as e:
+            raise FixerAgentError(f"API call failed: {type(e).__name__}: {e}", messages) from e
 
         messages.append({"role": "assistant", "content": response.content})
 
@@ -295,8 +361,10 @@ def run_fixer_agent(analysis_md, model, verbose=True):
             return summary
 
         if response.stop_reason != "tool_use":
-            print(f"  [fixer] unexpected stop_reason: {response.stop_reason}", file=sys.stderr)
-            return ""
+            raise FixerAgentError(
+                f"unexpected stop_reason={response.stop_reason!r} (response id={getattr(response, 'id', None)})",
+                messages,
+            )
 
         tool_results = []
         for block in response.content:
@@ -304,12 +372,23 @@ def run_fixer_agent(analysis_md, model, verbose=True):
                 continue
             if verbose:
                 print(f"  [fixer] {block.name}({json.dumps(block.input)[:100]})")
-            result = _DISPATCH[block.name](block.input)
+            handler = _DISPATCH.get(block.name)
+            is_error = handler is None
+            if is_error:
+                result = f"ERROR: unknown tool '{block.name}'. Available tools: {', '.join(_DISPATCH)}"
+            else:
+                try:
+                    result = handler(block.input)
+                except Exception as e:
+                    raise FixerAgentError(
+                        f"tool '{block.name}' raised {type(e).__name__}: {e}", messages
+                    ) from e
             if verbose:
                 print(f"         → {str(result)[:160]}")
-            tool_results.append(
-                {"type": "tool_result", "tool_use_id": block.id, "content": str(result)}
-            )
+            tool_result = {"type": "tool_result", "tool_use_id": block.id, "content": str(result)}
+            if is_error:
+                tool_result["is_error"] = True
+            tool_results.append(tool_result)
 
         messages.append({"role": "user", "content": tool_results})
 
@@ -678,7 +757,16 @@ def run_spec_target(scenario_id, iterations, model, dry_run, playthrough_steps):
         print(f"  Spec-target iteration {iteration}/{iterations}: {scenario_id}")
         print(f"{'='*60}\n")
 
-        summary = run_fixer_agent(prompt, model=model)
+        try:
+            summary = run_fixer_agent(prompt, model=model)
+        except Exception as e:
+            log_path = _log_fixer_failure(
+                e, context=f"spec-target iteration {iteration}/{iterations}, scenario={scenario_id!r}, model={model}"
+            )
+            sys.exit(
+                f"Fixer agent failed on iteration {iteration}/{iterations} "
+                f"({type(e).__name__}: {e}) — full details in {log_path}"
+            )
 
         corruption = _state_files_corrupted()
         if corruption:
@@ -775,7 +863,16 @@ def main():
             return
 
         print("[3/4] Fixer agent editing code...")
-        run_fixer_agent(analysis, model=args.model)
+        try:
+            run_fixer_agent(analysis, model=args.model)
+        except Exception as e:
+            log_path = _log_fixer_failure(
+                e, context=f"anomaly loop iteration {iteration}/{args.iterations}, model={args.model}"
+            )
+            sys.exit(
+                f"Fixer agent failed on iteration {iteration}/{args.iterations} "
+                f"({type(e).__name__}: {e}) — full details in {log_path}"
+            )
 
         corruption = _state_files_corrupted()
         if corruption:

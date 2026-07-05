@@ -65,7 +65,8 @@ def analyze_log(game_log):
     suspicious = []
     for e in game_log:
         room = e["extracted"].get("room")
-        if room and _is_suspicious_room(room, e["action"]):
+        if (room and _is_suspicious_room(room, e["action"])
+                and room.lower() not in e["response"].lower()):
             suspicious.append({
                 "action": e["action"],
                 "hallucinated_room": room,

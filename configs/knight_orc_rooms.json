@@ -124,7 +124,22 @@
     "whitebeam grove",
     "rowan deadwood",
     "outside a cave in a juniper scrubland",
-    "vast hall of bright cloud"
+    "vast hall of bright cloud",
+    "juniper thicket",
+    "juniper heartwood",
+    "junipers",
+    "juniper clump",
+    "hawthorn thicket",
+    "hawthorn heartwood",
+    "hawthorn forest",
+    "hawthorn clump",
+    "blackthorn thicket",
+    "blackthorn heartwood",
+    "blackthorn forest",
+    "beech tangle",
+    "beech grove",
+    "crossroads in a beech woodland",
+    "outside an ugly castle in a hornbeam tangle"
   ],
   "edges": [
     [
@@ -283,14 +298,74 @@
       "south"
     ],
     [
+      "beech grove",
+      "beech tangle",
+      "south"
+    ],
+    [
+      "beech grove",
+      "blackthorn forest",
+      "east"
+    ],
+    [
+      "beech tangle",
+      "beech grove",
+      "north"
+    ],
+    [
+      "beech tangle",
+      "blackthorn heartwood",
+      "east"
+    ],
+    [
+      "beech tangle",
+      "crossroads in a beech woodland",
+      "south"
+    ],
+    [
+      "blackthorn forest",
+      "beech grove",
+      "west"
+    ],
+    [
+      "blackthorn forest",
+      "blackthorn ghostwood",
+      "east"
+    ],
+    [
+      "blackthorn forest",
+      "blackthorn heartwood",
+      "south"
+    ],
+    [
+      "blackthorn forest",
+      "blackthorn scrubland",
+      "se"
+    ],
+    [
+      "blackthorn ghostwood",
+      "blackthorn forest",
+      "west"
+    ],
+    [
       "blackthorn ghostwood",
       "blackthorn glade",
       "east"
     ],
     [
       "blackthorn ghostwood",
+      "blackthorn heartwood",
+      "sw"
+    ],
+    [
+      "blackthorn ghostwood",
       "blackthorn scrubland",
       "south"
+    ],
+    [
+      "blackthorn ghostwood",
+      "blackthorn spinney",
+      "se"
     ],
     [
       "blackthorn glade",
@@ -333,9 +408,39 @@
       "se"
     ],
     [
+      "blackthorn heartwood",
+      "beech tangle",
+      "west"
+    ],
+    [
+      "blackthorn heartwood",
+      "blackthorn forest",
+      "north"
+    ],
+    [
+      "blackthorn heartwood",
+      "blackthorn scrubland",
+      "east"
+    ],
+    [
+      "blackthorn heartwood",
+      "blackthorn thicket",
+      "south"
+    ],
+    [
       "blackthorn scrubland",
       "blackthorn ghostwood",
       "north"
+    ],
+    [
+      "blackthorn scrubland",
+      "blackthorn heartwood",
+      "west"
+    ],
+    [
+      "blackthorn scrubland",
+      "blackthorn spinney",
+      "east"
     ],
     [
       "blackthorn scrubland",
@@ -349,6 +454,16 @@
     ],
     [
       "blackthorn spinney",
+      "blackthorn scrubland",
+      "west"
+    ],
+    [
+      "blackthorn spinney",
+      "blackthorn tangle",
+      "east"
+    ],
+    [
+      "blackthorn spinney",
       "blackthorn wildwood",
       "south"
     ],
@@ -359,6 +474,11 @@
     ],
     [
       "blackthorn tangle",
+      "blackthorn spinney",
+      "west"
+    ],
+    [
+      "blackthorn tangle",
       "blackthorn woodland",
       "south"
     ],
@@ -366,6 +486,16 @@
       "blackthorn tangle",
       "cedar heartwood",
       "east"
+    ],
+    [
+      "blackthorn thicket",
+      "blackthorn heartwood",
+      "north"
+    ],
+    [
+      "blackthorn thicket",
+      "hawthorn clump",
+      "south"
     ],
     [
       "blackthorn underbrush",
@@ -608,6 +738,11 @@
       "east"
     ],
     [
+      "crossroads in a beech woodland",
+      "beech tangle",
+      "north"
+    ],
+    [
       "damp cellar",
       "Headhunters",
       "up"
@@ -798,6 +933,16 @@
       "north"
     ],
     [
+      "hawthorn clump",
+      "blackthorn thicket",
+      "north"
+    ],
+    [
+      "hawthorn clump",
+      "hawthorn forest",
+      "south"
+    ],
+    [
       "hawthorn coppice",
       "blackthorn underbrush",
       "north"
@@ -828,6 +973,16 @@
       "south"
     ],
     [
+      "hawthorn forest",
+      "hawthorn clump",
+      "north"
+    ],
+    [
+      "hawthorn forest",
+      "hawthorn heartwood",
+      "south"
+    ],
+    [
       "hawthorn ghostwood",
       "hawthorn coppice",
       "north"
@@ -858,6 +1013,16 @@
       "south"
     ],
     [
+      "hawthorn heartwood",
+      "hawthorn forest",
+      "north"
+    ],
+    [
+      "hawthorn heartwood",
+      "hawthorn thicket",
+      "south"
+    ],
+    [
       "hawthorn scrubland",
       "hawthorn ghostwood",
       "north"
@@ -885,6 +1050,16 @@
     [
       "hawthorn tangle",
       "hawthorn woodland",
+      "south"
+    ],
+    [
+      "hawthorn thicket",
+      "hawthorn heartwood",
+      "north"
+    ],
+    [
+      "hawthorn thicket",
+      "juniper clump",
       "south"
     ],
     [
@@ -1263,6 +1438,16 @@
       "east"
     ],
     [
+      "juniper clump",
+      "hawthorn thicket",
+      "north"
+    ],
+    [
+      "juniper clump",
+      "junipers",
+      "south"
+    ],
+    [
       "juniper coppice",
       "hawthorn underbrush",
       "north"
@@ -1353,6 +1538,26 @@
       "up"
     ],
     [
+      "juniper heartwood",
+      "juniper thicket",
+      "south"
+    ],
+    [
+      "juniper heartwood",
+      "junipers",
+      "north"
+    ],
+    [
+      "juniper heartwood",
+      "outside a cave in a juniper scrubland",
+      "east"
+    ],
+    [
+      "juniper heartwood",
+      "outside an ugly castle in a hornbeam tangle",
+      "west"
+    ],
+    [
       "juniper spinney",
       "juniper glade",
       "north"
@@ -1393,6 +1598,16 @@
       "east"
     ],
     [
+      "juniper thicket",
+      "juniper heartwood",
+      "north"
+    ],
+    [
+      "juniper thicket",
+      "juniper underbrush",
+      "east"
+    ],
+    [
       "juniper underbrush",
       "dismal fairground in a rowan coppice",
       "south"
@@ -1404,8 +1619,18 @@
     ],
     [
       "juniper underbrush",
+      "juniper thicket",
+      "west"
+    ],
+    [
+      "juniper underbrush",
       "juniper wildwood",
       "east"
+    ],
+    [
+      "juniper underbrush",
+      "outside a cave in a juniper scrubland",
+      "north"
     ],
     [
       "juniper wildwood",
@@ -1446,6 +1671,16 @@
       "juniper woodland",
       "larch thicket",
       "east"
+    ],
+    [
+      "junipers",
+      "juniper clump",
+      "north"
+    ],
+    [
+      "junipers",
+      "juniper heartwood",
+      "south"
     ],
     [
       "larch clump",
@@ -1759,7 +1994,22 @@
     ],
     [
       "outside a cave in a juniper scrubland",
+      "juniper heartwood",
+      "west"
+    ],
+    [
+      "outside a cave in a juniper scrubland",
       "juniper spinney",
+      "east"
+    ],
+    [
+      "outside a cave in a juniper scrubland",
+      "juniper underbrush",
+      "south"
+    ],
+    [
+      "outside an ugly castle in a hornbeam tangle",
+      "juniper heartwood",
       "east"
     ],
     [
