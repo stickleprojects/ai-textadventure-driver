@@ -50,3 +50,5 @@ Architect-generated anomaly plans are tracked separately in [plans.md](plans.md)
 | 65 | [65.md](bugs/65.md) | agent_dev_loop.py subprocess output invisible until the step finishes | ✅ Fixed |
 | 66 | [66.md](bugs/66.md) | run_and_analyze.py silent for the whole run (no per-step output, no warning suppression) | ✅ Fixed |
 | 67 | [67.md](bugs/67.md) | Fixer-agent dev loop crashes on an unrecognized tool call | ✅ Fixed |
+| 68 | [68.md](bugs/68.md) | LLM invents a room name for `run to X` responses with no room description | ✅ Fixed |
+| 69 | [69.md](bugs/69.md) | Agent loops forever on a `run to X` the game's nav command rejects | ✅ Fixed |

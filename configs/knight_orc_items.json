@@ -19,7 +19,8 @@
     "unlock": "invalid",
     "lock": "invalid",
     "pull": "invalid",
-    "turn on": "invalid"
+    "turn on": "invalid",
+    "turn off": "invalid"
   },
   "garbage": {
     "eat": "invalid",
@@ -140,13 +141,15 @@
     "close": "invalid",
     "lock": "invalid",
     "turn on": "invalid",
-    "turn off": "invalid"
+    "turn off": "invalid",
+    "take": "invalid"
   },
   "pavilions": {
     "close": "invalid",
     "lock": "invalid",
     "turn on": "invalid",
-    "turn off": "invalid"
+    "turn off": "invalid",
+    "take": "invalid"
   },
   "grandstand": {
     "close": "invalid",
@@ -187,6 +190,9 @@
     "take": "invalid"
   },
   "rope": {
+    "take": "invalid"
+  },
+  "tented grandstand": {
     "take": "invalid"
   }
 }

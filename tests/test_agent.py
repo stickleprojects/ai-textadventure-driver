@@ -863,6 +863,47 @@ class TestFutileEdgesMarkedOnStep:
         assert len(state["futile_edges"]) == 0
 
 
+class TestNavBlacklistMarkedOnStep:
+    def _goal_state(self):
+        g = nx.MultiDiGraph()
+        g.add_node("Hall")
+        g.add_node("Courtyard")
+        g.add_edge("Hall", "Courtyard", label="north")
+        return make_state(
+            current_room="Hall",
+            inventory=["key"],
+            active_goal={"room": "Courtyard", "target": "door", "solution": "key"},
+            world_graph=g,
+            visited_rooms={"Courtyard"},
+        )
+
+    def test_nav_blacklist_updated_when_game_rejects_run_to(self, stub_child):
+        state = self._goal_state()
+        with patch.object(config, "fast_nav_command", "run to {target}"), \
+             patch("agent.execute_game_command", return_value="You can't do that."), \
+             patch("agent.extract_knowledge", return_value={}):
+            process_agent_step(state, stub_child, None)
+        assert "Courtyard" in state["nav_blacklist"]
+        assert state["active_goal"] is None
+
+    def test_nav_blacklist_not_updated_when_run_to_succeeds(self, stub_child):
+        state = self._goal_state()
+        with patch.object(config, "fast_nav_command", "run to {target}"), \
+             patch("agent.execute_game_command", return_value="You are in the Courtyard."), \
+             patch("agent.extract_knowledge", return_value={"room": "Courtyard", "exits": []}):
+            process_agent_step(state, stub_child, None)
+        assert "Courtyard" not in state.get("nav_blacklist", set())
+
+    def test_blacklisted_target_bypassed_on_next_step(self, stub_child):
+        state = self._goal_state()
+        state["nav_blacklist"] = {"Courtyard"}
+        with patch.object(config, "fast_nav_command", "run to {target}"), \
+             patch("agent.execute_game_command", return_value="You go north.") as mock_exec, \
+             patch("agent.extract_knowledge", return_value={"room": "Courtyard", "exits": []}):
+            process_agent_step(state, stub_child, None)
+        mock_exec.assert_called_once_with(stub_child, "north")
+
+
 # ── navigation config (_nav_command) ─────────────────────────────────────────
 
 class TestNavCommand:
@@ -897,6 +938,23 @@ class TestNavCommand:
         state["world_graph"].add_node("Hall")
         with patch.object(config, "fast_nav_command", None):
             assert _nav_command(state, "Courtyard", fast=True) is None
+
+    def test_blacklisted_target_falls_back_to_graph_even_if_visited(self):
+        state = make_state(
+            current_room="Hall", visited_rooms={"Courtyard"}, nav_blacklist={"Courtyard"}
+        )
+        state["world_graph"].add_node("Hall")
+        state["world_graph"].add_node("Courtyard")
+        state["world_graph"].add_edge("Hall", "Courtyard", label="north")
+        with patch.object(config, "fast_nav_command", "run to {target}"):
+            assert _nav_command(state, "Courtyard", fast=True) == "north"
+
+    def test_non_blacklisted_target_still_uses_fast_template(self):
+        state = make_state(
+            current_room="Hall", visited_rooms={"Courtyard"}, nav_blacklist={"Elsewhere"}
+        )
+        with patch.object(config, "fast_nav_command", "run to {target}"):
+            assert _nav_command(state, "Courtyard", fast=True) == "run to Courtyard"
 
 
 class TestActiveGoalNavigation:
