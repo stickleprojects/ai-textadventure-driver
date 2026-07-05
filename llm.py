@@ -54,6 +54,14 @@ IMPORTANT distinctions:
   Note: compound descriptions like "outside a cave" or "top of the hill" ARE valid room names.
 - If examining an object reveals another distinct item (e.g. "fastened to it is a halyard",
   "inside is a key", "a note is attached"), include that item in "objects" too.
+- If an NPC gives, hands, or offers you an item ("Denzyl gives you a spear"), put it in
+  "received_from_npc" — do NOT also put it in "added_to_inventory".
+- If an NPC takes, steals, snatches, or grabs an item away from you ("The troll snatches the
+  gold plate from you"), put it in "taken_by_npc". Only report items you were actually holding —
+  not items an NPC takes from someone/something else, or from the room.
+- If the game says a specific obstacle is preventing movement ("You are blocked by the
+  drawbridge", "The gate bars your way"), put it in "blocked_by". This is distinct from a plain
+  "you can't do that" — only use it when a specific obstacle is named as the reason.
 
 Schema required:
 {{
@@ -66,12 +74,17 @@ Schema required:
     "anomalies": [
         {{"target": "object name", "reason": "why it's blocked", "potential_solution": "item/spell needed"}}
     ],
-    "resolved_anomalies": ["list of targets that are no longer blocked"]
+    "resolved_anomalies": ["list of targets that are no longer blocked"],
+    "received_from_npc": [{{"item": "item name", "npc": "npc name"}}],
+    "taken_by_npc": [{{"item": "item name", "npc": "npc name"}}],
+    "blocked_by": [{{"obstacle": "obstacle name", "blocking": "what it's blocking, e.g. 'route to castle'"}}]
 }}
 
 Examples:
 Action: "take sword"  Output: "Taken."  → {{"added_to_inventory": ["sword"]}}
 Action: "look"  Output: "Exits: north, east."  → {{"exits": ["north", "east"]}}
+Action: "ask denzyl for help"  Output: "Denzyl gives you a spear."  → {{"received_from_npc": [{{"item": "spear", "npc": "Denzyl"}}]}}
+Action: "north"  Output: "You are blocked by the drawbridge."  → {{"blocked_by": [{{"obstacle": "drawbridge", "blocking": "route north"}}]}}
 """
 
 
@@ -211,7 +224,8 @@ def extract_knowledge(text, action_taken, llm_instance):
                 result = json.loads(json_match.group(0))
                 if result:
                     for field in ("exits", "objects", "npcs", "added_to_inventory",
-                                  "learned_spells", "anomalies", "resolved_anomalies"):
+                                  "learned_spells", "anomalies", "resolved_anomalies",
+                                  "received_from_npc", "taken_by_npc", "blocked_by"):
                         if field in result and not isinstance(result[field], list):
                             result[field] = []
                     attempt["parsed"] = True

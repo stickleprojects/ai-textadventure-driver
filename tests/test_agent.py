@@ -519,6 +519,90 @@ class TestProcessAgentStepOutcomes:
         assert state["current_inspection"]["target"] == "cloak"
 
 
+# ── requirement 23 — NPC inventory transfers ───────────────────────────────────
+
+class TestNpcInventoryTransfers:
+    def test_received_from_npc_adds_to_inventory(self, stub_child):
+        state = make_state()
+        with patch("agent.execute_game_command", return_value="Denzyl gives you a spear."), \
+             patch("agent.extract_knowledge",
+                   return_value={"received_from_npc": [{"item": "spear", "npc": "Denzyl"}]}):
+            process_agent_step(state, stub_child, None)
+        assert "spear" in state["inventory"]
+        assert state["known_entities"]["spear"]["status"] == "held"
+
+    def test_received_from_npc_does_not_duplicate_already_held_item(self, stub_child):
+        state = make_state(inventory=["spear"])
+        with patch("agent.execute_game_command", return_value="Denzyl gives you a spear."), \
+             patch("agent.extract_knowledge",
+                   return_value={"received_from_npc": [{"item": "spear", "npc": "Denzyl"}]}):
+            process_agent_step(state, stub_child, None)
+        assert state["inventory"].count("spear") == 1
+
+    def test_taken_by_npc_removes_from_inventory(self, stub_child):
+        state = make_state(inventory=["gold plate", "sword"])
+        with patch("agent.execute_game_command", return_value="The troll snatches the gold plate from you."), \
+             patch("agent.extract_knowledge",
+                   return_value={"taken_by_npc": [{"item": "gold plate", "npc": "troll"}]}):
+            process_agent_step(state, stub_child, None)
+        assert "gold plate" not in state["inventory"]
+        assert "sword" in state["inventory"]
+
+    def test_taken_by_npc_item_not_held_is_noop(self, stub_child):
+        state = make_state(inventory=["sword"])
+        with patch("agent.execute_game_command", return_value="The troll snatches the gold plate from you."), \
+             patch("agent.extract_knowledge",
+                   return_value={"taken_by_npc": [{"item": "gold plate", "npc": "troll"}]}):
+            process_agent_step(state, stub_child, None)
+        assert state["inventory"] == ["sword"]
+
+
+# ── requirement 25 — route blockages ───────────────────────────────────────────
+
+class TestRouteBlockages:
+    def test_blocked_by_adds_unresolved_anomaly(self, stub_child):
+        state = make_state(current_room="Field")
+        with patch("agent.execute_game_command", return_value="You are blocked by the drawbridge."), \
+             patch("agent.extract_knowledge",
+                   return_value={"blocked_by": [{"obstacle": "drawbridge", "blocking": "route to castle"}]}):
+            process_agent_step(state, stub_child, None)
+        assert state["unresolved_anomalies"]["drawbridge"] == {
+            "room": "Field", "reason": "route to castle", "potential_solution": "",
+        }
+
+    def test_blocked_by_does_not_overwrite_existing_anomaly(self, stub_child):
+        state = make_state(
+            current_room="Field",
+            unresolved_anomalies={"drawbridge": {
+                "room": "Field", "reason": "route to castle", "potential_solution": "lever",
+            }},
+        )
+        with patch("agent.execute_game_command", return_value="You are blocked by the drawbridge."), \
+             patch("agent.extract_knowledge",
+                   return_value={"blocked_by": [{"obstacle": "drawbridge", "blocking": "route to castle"}]}):
+            process_agent_step(state, stub_child, None)
+        assert state["unresolved_anomalies"]["drawbridge"]["potential_solution"] == "lever"
+
+    def test_blocked_by_anomaly_resolves_via_existing_capability_matching(self):
+        # Integration check: blocked_by reuses the same unresolved_anomalies
+        # mechanism as "anomalies", so determine_next_action's existing
+        # inventory/spellbook matching picks it up with no new logic needed.
+        import networkx as nx
+        g = nx.MultiDiGraph()
+        g.add_edge("Field", "Castle", label="north")
+        state = make_state(
+            current_room="Field",
+            inventory=["lever"],
+            unresolved_anomalies={"drawbridge": {
+                "room": "Castle", "reason": "route to castle", "potential_solution": "lever",
+            }},
+            world_graph=g,
+        )
+        action, _ = determine_next_action(state)
+        assert action == "north"
+        assert state["active_goal"] == {"room": "Castle", "target": "drawbridge", "solution": "lever"}
+
+
 # ── issue 19 regression tests ─────────────────────────────────────────────────
 
 class TestNullRoomHandling:
