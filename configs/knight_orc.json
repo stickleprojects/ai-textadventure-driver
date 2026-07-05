@@ -72,7 +72,11 @@
         "while (you'?re|you are) (wearing|carrying|holding)",
         "can'?t do that yet",
         "not yet",
-        "can'?t[^.\\n]{0,80}because"
+        "can'?t[^.\\n]{0,80}because",
+        "too heavy"
+    ],
+    "scenery_patterns": [
+        "probably just scenery"
     ],
     "end_state_patterns": {
         "death": [

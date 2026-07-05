@@ -9,6 +9,7 @@ from agent import (
     _is_death,
     _is_failure_response,
     _is_hard_failure,
+    _is_scenery_response,
     _is_soft_failure,
     _mark_edge_futile,
     _nav_command,
@@ -91,6 +92,22 @@ class TestIsSoftFailure:
 
     def test_nothing_happens_not_soft(self):
         assert not _is_soft_failure("Nothing happens.")
+
+
+# ── _is_scenery_response ────────────────────────────────────────────────────────
+
+class TestIsSceneryResponse:
+    def test_probably_just_scenery_is_scenery(self):
+        assert _is_scenery_response("That's probably just scenery.")
+
+    def test_too_heavy_not_scenery(self):
+        assert not _is_scenery_response("That's too heavy.")
+
+    def test_cant_take_that_not_scenery(self):
+        assert not _is_scenery_response("You can't take that.")
+
+    def test_success_not_scenery(self):
+        assert not _is_scenery_response("Taken.")
 
 
 # ── _parse_inspection_action ──────────────────────────────────────────────────
@@ -294,14 +311,16 @@ class TestDetermineNextActionDynamicSequence:
 # ── process_agent_step — verb outcome recording (issue 18) ───────────────────
 
 class TestProcessAgentStepOutcomes:
-    def test_take_failure_records_invalid_and_clears_inspection(self, stub_child):
+    def test_take_hard_failure_records_invalid_keeps_inspecting(self, stub_child):
+        # Bug 70: "You can't take that." isn't scenery -- a permanently
+        # un-takeable object is still worth running the inspection sequence on.
         state = make_state(uninspected_objects=["wall"])
         state["known_entities"]["wall"] = {"status": "discovered", "location": "Hall", "verb_outcomes": {}}
         with patch("agent.execute_game_command", return_value="You can't take that."), \
              patch("agent.extract_knowledge", return_value={}):
             process_agent_step(state, stub_child, None)
         assert state["known_entities"]["wall"]["verb_outcomes"].get("take") == "invalid"
-        assert state["current_inspection"]["target"] is None
+        assert state["current_inspection"]["target"] == "wall"
 
     def test_take_scenery_clears_inspection(self, stub_child):
         # Bug 58: "probably just scenery" was not in hard_failure_patterns so take
@@ -318,6 +337,20 @@ class TestProcessAgentStepOutcomes:
         assert state["known_entities"]["grass"]["verb_outcomes"].get("take") == "invalid"
         assert state["current_inspection"]["target"] is None
 
+    def test_take_failure_then_next_action_is_examine_not_abandoned(self, stub_child):
+        # End-to-end regression for bug 70: after "take flagpole" hard-fails with a
+        # non-scenery response, the next decision should be the queued inspection
+        # verb (examine), not skip the object entirely.
+        state = make_state(uninspected_objects=["flagpole"])
+        state["known_entities"]["flagpole"] = {
+            "status": "discovered", "location": "Field", "verb_outcomes": {},
+        }
+        with patch("agent.execute_game_command", return_value="You can't take that."), \
+             patch("agent.extract_knowledge", return_value={}):
+            process_agent_step(state, stub_child, None)
+        next_action, _ = determine_next_action(state)
+        assert next_action == "examine flagpole"
+
     def test_take_success_records_succeeded(self, stub_child):
         state = make_state(uninspected_objects=["key"])
         state["known_entities"]["key"] = {"status": "discovered", "location": "Hall", "verb_outcomes": {}}
@@ -328,25 +361,32 @@ class TestProcessAgentStepOutcomes:
         assert state["current_inspection"]["target"] == "key"
 
     def test_take_unrecognized_response_triggers_recheck_not_succeeded(self, stub_child):
-        # "That's too heavy." matches neither hard nor soft failure patterns, and
-        # extraction correctly did not add the item to inventory -- must not be
-        # silently recorded as "succeeded" (that's how the agent kept re-taking
-        # "pile of garbage" forever: never blacklisted since never "invalid").
+        # A genuinely novel phrase the config doesn't classify as hard, soft, or
+        # scenery -- extraction correctly did not add the item to inventory, so
+        # this must not be silently recorded as "succeeded" (that's how the agent
+        # kept re-taking "pile of garbage" forever: never blacklisted since never
+        # "invalid"). Deliberately nonsense text, not a real game phrase like "too
+        # heavy" -- those get classified by configs/knight_orc.json (loaded as a
+        # side effect of importing scripts.watch_run elsewhere in a full test run,
+        # see bug 70), which would make this test's premise state-dependent.
         state = make_state(uninspected_objects=["pile of garbage"])
         state["known_entities"]["pile of garbage"] = {
             "status": "discovered", "location": "Field", "verb_outcomes": {},
         }
-        with patch("agent.execute_game_command", return_value="That's too heavy."), \
+        with patch("agent.execute_game_command", return_value="Zarglebop refuses."), \
              patch("agent.extract_knowledge", return_value={"added_to_inventory": []}):
             process_agent_step(state, stub_child, None)
         assert "take" not in state["known_entities"]["pile of garbage"]["verb_outcomes"]
         assert state["recheck_inventory"] is True
-        assert state["current_inspection"]["target"] is None
         assert state["game_log"][-1]["unrecognized_failure"] == {
             "target": "pile of garbage",
             "action": "take pile of garbage",
-            "response": "That's too heavy.",
+            "response": "Zarglebop refuses.",
         }
+        # Bug 70: an unrecognized (non-scenery) take failure must not abandon the
+        # object -- it's still worth running the queued inspection sequence on,
+        # just as soon as the pending inventory recheck is out of the way.
+        assert state["current_inspection"]["target"] == "pile of garbage"
 
     def test_take_confirmed_by_extraction_records_succeeded_even_with_no_keyword_match(self, stub_child):
         # Regression guard: a genuine success with unusual phrasing (no "Taken."
@@ -474,7 +514,9 @@ class TestProcessAgentStepOutcomes:
              patch("agent.extract_knowledge", return_value={}):
             process_agent_step(state, stub_child, None)
         assert state["known_entities"]["cloak"]["verb_outcomes"].get("take") == "blocked"
-        assert state["current_inspection"]["target"] is None
+        # Bug 70: a soft (non-scenery) take failure must not abandon inspection —
+        # the object is still there and still worth examining.
+        assert state["current_inspection"]["target"] == "cloak"
 
 
 # ── issue 19 regression tests ─────────────────────────────────────────────────

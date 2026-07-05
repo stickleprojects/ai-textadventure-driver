@@ -10,6 +10,12 @@ JSON schema (all keys optional — missing keys keep their defaults):
     "creature_words":         [str]   — words that identify living creatures (case-insensitive)
     "hard_failure_patterns":  [str]   — regex fragments; response matching any means verb is permanently invalid for this object
     "soft_failure_patterns":  [str]   — regex fragments; response matching any means verb is valid but blocked by current state
+    "scenery_patterns":       [str]   — regex fragments; response to a failed "take" matching any means the
+                                         object is non-interactive scenery with nothing further to reveal, so
+                                         the remaining queued inspection verbs (examine, read, ...) are skipped.
+                                         A failed take that does NOT match this still runs the full inspection
+                                         sequence — e.g. "too heavy" or "fixed in place" objects can still
+                                         reveal sub-objects when examined (see docs/bugs/70.md).
     "end_state_patterns":     {       — regex fragments keyed by category for run outcome detection
         "death":    [str],
         "finished": [str],
@@ -79,6 +85,9 @@ class GameConfig:
             r"can'?t do that yet",
             r"not yet",
         ]
+        self._scenery_patterns = [
+            r"probably just scenery",
+        ]
         # Deliberately does not try to capture/parse who the theft's "victim" is —
         # the game can narrate the player in third person (e.g. by creature name),
         # not just "you", so it's unreliable to key off that text. Instead any
@@ -102,6 +111,8 @@ class GameConfig:
             "|".join(self._hard_failure_patterns), re.IGNORECASE)
         self.soft_failure_pattern = re.compile(
             "|".join(self._soft_failure_patterns), re.IGNORECASE)
+        self.scenery_pattern = re.compile(
+            "|".join(self._scenery_patterns), re.IGNORECASE)
         # Union for backward compat — matches either hard or soft failure
         self.failure_pattern = re.compile(
             "|".join(self._hard_failure_patterns + self._soft_failure_patterns),
@@ -139,6 +150,9 @@ class GameConfig:
             recompile = True
         if "soft_failure_patterns" in data:
             self._soft_failure_patterns = list(data["soft_failure_patterns"])
+            recompile = True
+        if "scenery_patterns" in data:
+            self._scenery_patterns = list(data["scenery_patterns"])
             recompile = True
         if "theft_patterns" in data:
             self._theft_patterns = list(data["theft_patterns"])

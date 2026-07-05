@@ -139,7 +139,9 @@
     "beech tangle",
     "beech grove",
     "crossroads in a beech woodland",
-    "outside an ugly castle in a hornbeam tangle"
+    "outside an ugly castle in a hornbeam tangle",
+    "hermit's horrid little cave",
+    "juniper forest"
   ],
   "edges": [
     [
@@ -1253,6 +1255,11 @@
       "south"
     ],
     [
+      "hermit's horrid little cave",
+      "outside a cave in a juniper scrubland",
+      "out"
+    ],
+    [
       "holly clump",
       "elder thicket",
       "north"
@@ -1444,6 +1451,11 @@
     ],
     [
       "juniper clump",
+      "juniper coppice",
+      "east"
+    ],
+    [
+      "juniper clump",
       "junipers",
       "south"
     ],
@@ -1451,6 +1463,16 @@
       "juniper coppice",
       "hawthorn underbrush",
       "north"
+    ],
+    [
+      "juniper coppice",
+      "juniper clump",
+      "west"
+    ],
+    [
+      "juniper coppice",
+      "juniper deadwood",
+      "east"
     ],
     [
       "juniper coppice",
@@ -1464,6 +1486,16 @@
     ],
     [
       "juniper deadwood",
+      "juniper coppice",
+      "west"
+    ],
+    [
+      "juniper deadwood",
+      "juniper edgewood",
+      "east"
+    ],
+    [
+      "juniper deadwood",
       "juniper glade",
       "south"
     ],
@@ -1474,13 +1506,38 @@
     ],
     [
       "juniper edgewood",
+      "juniper deadwood",
+      "west"
+    ],
+    [
+      "juniper edgewood",
       "juniper grove",
       "south"
+    ],
+    [
+      "juniper edgewood",
+      "larch clump",
+      "east"
+    ],
+    [
+      "juniper forest",
+      "juniper clump",
+      "north"
+    ],
+    [
+      "juniper forest",
+      "juniper ghostwood",
+      "east"
     ],
     [
       "juniper ghostwood",
       "juniper coppice",
       "north"
+    ],
+    [
+      "juniper ghostwood",
+      "juniper forest",
+      "west"
     ],
     [
       "juniper ghostwood",
@@ -1689,6 +1746,16 @@
     ],
     [
       "larch clump",
+      "juniper edgewood",
+      "west"
+    ],
+    [
+      "larch clump",
+      "larch coppice",
+      "east"
+    ],
+    [
+      "larch clump",
       "larch forest",
       "south"
     ],
@@ -1696,6 +1763,11 @@
       "larch coppice",
       "hazel underbrush",
       "north"
+    ],
+    [
+      "larch coppice",
+      "larch clump",
+      "west"
     ],
     [
       "larch coppice",
@@ -1986,6 +2058,11 @@
       "oak coppice",
       "oak clump",
       "west"
+    ],
+    [
+      "outside a cave in a juniper scrubland",
+      "hermit's horrid little cave",
+      "in"
     ],
     [
       "outside a cave in a juniper scrubland",

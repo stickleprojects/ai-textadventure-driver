@@ -194,5 +194,19 @@
   },
   "tented grandstand": {
     "take": "invalid"
+  },
+  "golden disk": {
+    "wear": "invalid",
+    "drink": "invalid",
+    "open": "invalid",
+    "close": "invalid",
+    "unlock": "invalid",
+    "lock": "invalid",
+    "pull": "invalid",
+    "turn on": "invalid",
+    "turn off": "invalid"
+  },
+  "flexible metal sheet": {
+    "take": "invalid"
   }
 }
