@@ -128,7 +128,7 @@ Format: `## YYYY-MM-DD` heading, short subheading, 2–4 paragraphs covering wha
 
 **JSON validation** — `pytest tests/test_json_schemas.py`. Validates all config, plan, and eval fixture files against `schemas/*.schema.json`. Also checks fixture ID uniqueness and plan index/file consistency.
 
-**CI** — `.github/workflows/ci.yml` runs both jobs on every push/PR to `main` or `develop`. Tests run with `-m "not llm and not integration and not slow"`.
+**CI** — `.github/workflows/ci.yml` runs on every push/PR to `main` or `develop`. A `changes` job diffs the push/PR range first; `lint` and `test` are skipped (via `if:`) when every changed file is `.md`. Tests run with `-m "not llm and not integration and not slow"`.
 
 ## Game Files
 

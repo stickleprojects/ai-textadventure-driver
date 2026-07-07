@@ -123,6 +123,21 @@ EVAL_MODEL_PATH=../models/other.gguf ./run_evals.sh
 
 Checks the model file exists before running and prints the active path and threshold. Set `EVAL_MODEL_PATH` in `.env` or inline to override the default.
 
+### Multi-step simulations (requires a cloud LLM)
+
+```bash
+export LLM_PROVIDER=deepseek LLM_MODEL=deepseek-chat LLM_API_KEY=sk-...
+pytest tests/test_simulations.py -v -m llm
+```
+
+Unlike evals (single-step extraction scoring) or spec scenarios (single-step
+decisions with mocked extraction), simulations drive several consecutive
+`process_agent_step()` calls with real LLM extraction over a scripted
+sequence of game engine responses, to catch bugs that only surface once
+state has built up across turns (e.g. bug 45's room-identity collapse). See
+[`tests/simulations/README.md`](tests/simulations/README.md) for how they
+work and how to add one.
+
 ### Building toward the behavior spec
 
 `docs/agent_behavior_spec.md` describes target agent behavior independent of
@@ -251,7 +266,9 @@ configs/
 schemas/                    JSON Schema Draft-7 files for all tracked JSON files
 plans/                      Fix plan documents (P<N>.json); plans.md is the generated index table
 tests/                      pytest suite; evals/fixtures.json for LLM evals;
-                            spec_scenarios/scenarios.json for spec-driven agent behavior tests
+                            spec_scenarios/scenarios.json for spec-driven agent behavior tests;
+                            simulations/ for multi-step real-LLM regression tests (see
+                            tests/simulations/README.md)
 docs/                       Per-issue docs (bugs/, requirements/, features/); agent_behavior_spec.md
 .github/workflows/ci.yml    GitHub Actions CI (lint + test on every PR)
 pyproject.toml              Ruff lint config
