@@ -1,0 +1,28 @@
+{
+  "title": "Re-examine exits after combat-forced relocation",
+  "data_origin_layer": "decision_logic",
+  "productivity_check": "productive",
+  "root_cause_hypothesis": "The origin is decision_logic: the east move IS productive (it lands the agent in a new room, 'huge pile of garbage'), so no existing guard misfires \u2014 but determine_next_action has no rule to re-look/re-examine exits of a room after an unexpected combat-triggered relocation, and no such re-examination trigger exists today.",
+  "target_files": [
+    "agent.py"
+  ],
+  "change_summary": "The 'east' exit from 'dingy stable' is a real, productive move (it deposits the agent in a genuinely new room via a combat interlude), so futile-edge marking and loop-break logic are contraindicated and would wrongly discard a valid route. The real gap is that determine_next_action never revisits/re-examines the origin room's exit set after a forced relocation, so alternative exits from the stable are never explored. Add a selection-policy trigger: when a move's landing room differs from any Unknown-exit target the agent was navigating toward (i.e. a forced/unexpected relocation), set a flag so the next action re-looks at the room and re-scans its exits, rather than treating the destination as a normal frontier. This changes only priority ordering / navigation scoring, not any edge's futile state.",
+  "acceptance_criteria": [
+    "In a future run log, after 'east' from 'dingy stable' lands the agent in 'huge pile of garbage', a subsequent step issues a 'look' or re-examines the stable's remaining Unknown exits (visible in the action/reason fields).",
+    "No edge from 'dingy stable' (including 'east') is marked futile in knight_orc_strategy.json as a result of this relocation.",
+    "The stable's non-east Unknown exits are eventually explored (new exploration edges appear in the world_graph rather than the agent repeatedly re-taking east)."
+  ],
+  "risk_notes": "Must not trigger the re-look flag on ordinary successful moves (would waste turns on 'look'); scope the trigger narrowly to relocations that diverge from the intended navigation target or that co-occur with a combat/interlude marker. Watch for interaction with position_lost handling so the two flags don't cause redundant consecutive 'look' actions. Ensure no LLM call is added to the hot path \u2014 detection must be from existing extracted state diffs only.",
+  "schema": "fix_plan/v1",
+  "anomaly_id": "a5",
+  "anomaly_type": "nav_contradiction",
+  "severity": "medium",
+  "status": "open",
+  "plan_id": "P008",
+  "source_runs": [
+    "watch_20260707_133153"
+  ],
+  "anomaly_ids": [
+    "watch_20260707_133153/a5"
+  ]
+}

@@ -4,6 +4,34 @@ Running notes on findings, decisions, and things that surprised us during develo
 
 ---
 
+## 2026-07-07
+
+### A "productive" navigation loop can still be a loop (P004)
+
+The architect pipeline flagged a run where the agent shuttled between "dingy stable" and "jousting field" for dozens of steps. It never tripped `_detect_loop` or got an edge marked futile, because both of those safeguards are built around *futility*: `_detect_loop` explicitly excludes direction actions that changed the room (bug 14's fix), and `_compute_utility` only tags an action `futile` on a hard-failure response. Every step of the shuttle changed the room and succeeded, so by every existing metric it was "productive" — just productive at going nowhere new.
+
+The actual cause lived in two places in `determine_next_action`: the immediate current-room Unknown-exit scan just took the first unresolved edge it found, and the diversity-scored `best_target` search (which picks the nearest room with an Unknown exit when the current room has none left) only penalised overused *directions*, not overused *rooms*. Two adjacent rooms that both still had an unexplored exit of their own were nearest-neighbours of each other, so the two selection points kept volleying the agent back and forth.
+
+Fixed both spots with the same idea — penalise recency, don't forbid it. The current-room scan now defers (not skips) the Unknown exit whose direction reverses the move that just got us here, falling back to it only if it's the sole remaining option. The `best_target` score gained a `recent_room_visits` term (a `Counter` over the last 10 log entries' extracted rooms), so a farther but genuinely fresh frontier outscores a nearby room the agent has already been bouncing off of. Neither change touches `futile_edges` or the loop detector — this was a decision-logic problem, not a detection-logic one.
+
+---
+
+### `_DIRECTIONS` missing "in"/"out" broke futile-edge marking for two anomaly types (P005/P006)
+
+The very next watch run got stuck again, this time repeating `out` from "dingy stable" indefinitely. The architect produced two *separate* high-severity plans for it: P005 hypothesised the P004 fresh-exit guard was insufficient for the in/out pair, and P006 hypothesised `"You can't go that way."` was missing from `hard_failure_patterns`. Both hypotheses were wrong, and P006's own risk_notes said so — it explicitly flagged that the default pattern already looked like it should match and asked to confirm against the loaded config before assuming a code change was needed.
+
+Checked: `config.hard_failure_pattern.search("You can't go that way.")` returns `True`, and the run log shows `utility: "futile"` computed correctly on nearly every `out` attempt. So `_compute_utility` was doing its job. The actual break was one line away: `process_agent_step`'s futile-marking guard is `if utility == "futile" and action_taken in _DIRECTIONS`, and `_DIRECTIONS` — unlike `_REVERSE` and `_DIRECTION_NORMALIZE`, which both already treat "in"/"out" as real directions — never included them. So `down` (a cardinal direction, tried once in the same log) got marked futile correctly and was never retried, while `out` kept sailing past the guard and being re-offered forever. One-line fix (add "in"/"out" to `_DIRECTIONS`) resolved both plans at once, since they were the same root cause wearing two different anomaly-type labels.
+
+Lesson: an anomaly report's root-cause hypothesis is a starting point, not a diagnosis — verify against the actual config/state before writing a fix for the layer the architect blamed, especially when the plan's own risk_notes already flag doubt.
+
+### A false-positive anomaly: "redundant" verb retries vs. deliberate attempt-and-learn (P009)
+
+The same run also produced P009 ("verb sequence runs redundant inspection verbs after first non-informative response"), proposing to abort the inspection sequence early once `_compute_utility` classifies a step as `redundant`. This is not a bug — it's requirement 18's design working as intended. `docs/requirements/18.md`/`27.md` established attempt-and-learn deliberately: every verb in `candidate_verbs` is tried once per object so the *game* classifies it (`succeeded`/`blocked`/`invalid`), and only `invalid` is ever excluded, permanently, cross-run. `redundant` is a diff-based utility label for anomaly *detection*, not a verb-exclusion signal — it was never wired to gate future attempts, and a textually-similar response from one verb doesn't prove a different verb (e.g. `push`) wouldn't change game state in a way the diff check can't see from text alone (see the 2026-06-30 entry below).
+
+Deferred rather than fixed, with the reasoning written into `plans/P009.json` so the next architect run recognises it as already-considered instead of re-flagging it. It's effectively a duplicate of P001 (deferred earlier for the same underlying reason, under a different anomaly_type label) — the two should be re-evaluated together, not separately, if a future run shows this costing real progress rather than just step count.
+
+---
+
 ## 2026-07-01
 
 ### Prompt rule blocking "outside" caused room name paraphrasing and duplicates
