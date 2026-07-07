@@ -4,16 +4,6 @@ Running notes on findings, decisions, and things that surprised us during develo
 
 ---
 
-### An llm_review anomaly can misdiagnose its own evidence, but still stumble onto a real bug (P007)
-
-P007 claimed the agent lost track of its location for 13 consecutive steps (2–14) after a combat-forced move, never issuing a `look` to recover. Replaying the log against the actual state-transition rules showed this was wrong: steps 4–14 are `take`/`examine`/`read`/`wear`/`push` responses on two objects, which legitimately have no `room` field — that's normal for non-movement verbs (requirement 18's fixed inspection sequence), not evidence of a stale `current_room`. `position_lost` actually fired once at step 2 and was correctly resolved by the forced `look` at step 3 — one step of blindness, not thirteen.
-
-But the hypothesis the reviewer wrote to explain its (mistaken) evidence turned out to describe a real, separate defect: `determine_next_action` unconditionally cleared `position_lost` after issuing exactly one `look`, and the re-arm branch in `process_agent_step` only triggers on directional moves — so if that recovery `look` itself failed to yield a room (which didn't happen in this log, but easily could in a different one), the flag would clear anyway and the agent would carry on blind indefinitely with no further recovery attempt. Fixed by only clearing `position_lost` once a room is actually resolved, with a capped retry count (`_POSITION_LOST_MAX_ATTEMPTS = 3`) so a game state that genuinely never confirms a room can't loop forever.
-
-Lesson, paired with the P005/P006 entry below: treat an anomaly's cited evidence and its root-cause hypothesis as separable claims. The evidence here was wrong; the hypothesis, on independent inspection of the code, wasn't — worth fixing anyway, just not as "13 steps blind in this run."
-
----
-
 ## 2026-07-07
 
 ### A "productive" navigation loop can still be a loop (P004)
@@ -39,6 +29,28 @@ Lesson: an anomaly report's root-cause hypothesis is a starting point, not a dia
 The same run also produced P009 ("verb sequence runs redundant inspection verbs after first non-informative response"), proposing to abort the inspection sequence early once `_compute_utility` classifies a step as `redundant`. This is not a bug — it's requirement 18's design working as intended. `docs/requirements/18.md`/`27.md` established attempt-and-learn deliberately: every verb in `candidate_verbs` is tried once per object so the *game* classifies it (`succeeded`/`blocked`/`invalid`), and only `invalid` is ever excluded, permanently, cross-run. `redundant` is a diff-based utility label for anomaly *detection*, not a verb-exclusion signal — it was never wired to gate future attempts, and a textually-similar response from one verb doesn't prove a different verb (e.g. `push`) wouldn't change game state in a way the diff check can't see from text alone (see the 2026-06-30 entry below).
 
 Deferred rather than fixed, with the reasoning written into `plans/P009.json` so the next architect run recognises it as already-considered instead of re-flagging it. It's effectively a duplicate of P001 (deferred earlier for the same underlying reason, under a different anomaly_type label) — the two should be re-evaluated together, not separately, if a future run shows this costing real progress rather than just step count.
+
+---
+
+### An llm_review anomaly can misdiagnose its own evidence, but still stumble onto a real bug (P007)
+
+P007 claimed the agent lost track of its location for 13 consecutive steps (2–14) after a combat-forced move, never issuing a `look` to recover. Replaying the log against the actual state-transition rules showed this was wrong: steps 4–14 are `take`/`examine`/`read`/`wear`/`push` responses on two objects, which legitimately have no `room` field — that's normal for non-movement verbs (requirement 18's fixed inspection sequence), not evidence of a stale `current_room`. `position_lost` actually fired once at step 2 and was correctly resolved by the forced `look` at step 3 — one step of blindness, not thirteen.
+
+But the hypothesis the reviewer wrote to explain its (mistaken) evidence turned out to describe a real, separate defect: `determine_next_action` unconditionally cleared `position_lost` after issuing exactly one `look`, and the re-arm branch in `process_agent_step` only triggers on directional moves — so if that recovery `look` itself failed to yield a room (which didn't happen in this log, but easily could in a different one), the flag would clear anyway and the agent would carry on blind indefinitely with no further recovery attempt. Fixed by only clearing `position_lost` once a room is actually resolved, with a capped retry count (`_POSITION_LOST_MAX_ATTEMPTS = 3`) so a game state that genuinely never confirms a room can't loop forever.
+
+Lesson, paired with the P005/P006 entry above: treat an anomaly's cited evidence and its root-cause hypothesis as separable claims. The evidence here was wrong; the hypothesis, on independent inspection of the code, wasn't — worth fixing anyway, just not as "13 steps blind in this run."
+
+---
+
+### Exits reported without a room got wired onto the wrong room (P008), and it explains where P005/P006's phantom edges came from
+
+P008 proposed adding a "re-look after a combat-forced relocation" trigger, on the theory that `determine_next_action` never re-examines a room's exits after an unexpected relocation. That trigger already exists — it's `position_lost`, and the log shows it worked: the "east" move from "dingy stable" lost the room (combat text ate it), and the very next step was a forced `look` that correctly reported "huge pile of garbage" and its exits.
+
+The real bug was in the step *before* that recovery, and much narrower. When the "east" move's response included `exits: ["down", "outside"]` but no `room` (the extraction the LLM gave for the combat-interlude text), `process_agent_step` still called `update_graph(state, state["current_room"], exits, ...)` — but `state["current_room"]` hadn't changed yet (nothing updates it when `extracted["room"]` is falsy), so it was still `"dingy stable"`. Those exits actually belonged to "huge pile of garbage", the room just entered, not "dingy stable" — which, per its own `look` responses (both before and after this incident), has exactly one real exit, `east`. The mis-attribution wired phantom `Unknown (down from dingy stable)` / `Unknown (out from dingy stable)` edges onto a room that doesn't have them.
+
+This is the same phantom-edge mechanism that fed P005/P006 — "dingy stable" never really had a `down` or `out` exit to begin with; it was corrupted graph state from this exact bug, one step earlier in the same incident. It's also very likely the true explanation for P010 ("stable exits never listed"), which blamed the LLM for under-reporting cardinal directions for the stable — worth re-checking after this fix lands, since there may be no missing-exit-extraction problem at all once phantom edges stop being created.
+
+Fixed by skipping `update_graph` for the one step where a directional move sets `position_lost` — those exits describe the not-yet-confirmed destination room, not the stale `current_room`, and the forced follow-up `look` already re-reports the same exits correctly attributed once the room resolves, so nothing is lost.
 
 ---
 

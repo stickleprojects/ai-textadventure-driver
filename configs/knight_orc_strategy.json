@@ -453,6 +453,16 @@
       "treasure_discovered": 0,
       "puzzles_discovered": 0,
       "puzzles_solved": 0
+    },
+    {
+      "run_id": "watch_20260707_141136",
+      "outcome": "ambiguous",
+      "final_score": null,
+      "locations_discovered": 3,
+      "npcs_discovered": 3,
+      "treasure_discovered": 0,
+      "puzzles_discovered": 0,
+      "puzzles_solved": 0
     }
   ]
 }
