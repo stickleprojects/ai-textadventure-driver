@@ -33,7 +33,7 @@ def rebuild_graph(game_log):
         exits = extracted.get("exits") or []
 
         if room:
-            state["current_room"] = _resolve_room_name(state["world_graph"], room)
+            state["current_room"] = _resolve_room_name(state["world_graph"], room, exits)
 
         update_graph(state, state["current_room"], exits, previous_room, action)
         previous_room = state["current_room"]
