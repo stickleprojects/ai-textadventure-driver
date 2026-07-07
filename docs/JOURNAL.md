@@ -146,3 +146,27 @@ The first `--spec-target` run against `npc_theft_removes_from_inventory` (Requir
 The fix: stop trying to identify the "victim" from narration text at all. Match the item being stolen (any theft phrasing, any or no named victim) and remove it from inventory *only if currently held* — using the agent's own state as ground truth instead of parsing prose for identity. This is also more robust in general: it correctly ignores theft between two other NPCs (item never in our inventory, so no-op) without needing to know who's who. Moved the patterns into `configs/knight_orc.json` (`theft_patterns`, schema-validated) rather than leaving them hardcoded in `agent.py`, so new phrasings are a config edit, not a code change.
 
 Lesson for future fixer-agent runs (and human review of them): when a spec section's prose uses a placeholder pronoun/example that doesn't appear in its own concrete quoted examples, don't invent literal matching text for it — check it against the quoted examples specifically, and prefer verifying against actual state (inventory, in this case) over parsing narration for who a pronoun refers to.
+
+## 2026-07-06
+
+### "That's too heavy." was misclassified as a soft (retryable) failure, causing endless re-inspection of heavy scenery
+
+User reported the agent looking "stupid" — repeatedly trying to take/wear/push/examine the same heap-of-garbage-type objects. Root cause: `configs/knight_orc.json` had `"too heavy"` in `soft_failure_patterns`, meaning a failed `take` on a heavy object was recorded as `"blocked"` (state-dependent, may succeed later) rather than `"invalid"` (permanent). Since `determine_next_action`'s re-queueing guard only checks for `verb_outcomes["take"] == "invalid"`, a `"blocked"` outcome never stops the object from being re-added to `uninspected_objects` — and it gets re-added every time the room is revisited and the LLM re-reports the object as visible, replaying the *entire* inspection sequence (take, examine, read, look inside, wear, push...) from scratch each time.
+
+Checked every response containing "too heavy" across all of `logs/*.json`: zero instances of a `take`/`push`/`wear` ever succeeding on the same object after a "too heavy" response, for any object, in any run. The message is a fixed trait of the object ("this is scenery-heavy"), not a transient player-encumbrance state — Level 9's actual carry-limit message is different text entirely. Moved `"too heavy"` from `soft_failure_patterns` to `hard_failure_patterns` so it's recorded as `"invalid"` and permanently blocks re-queueing, same as other scenery objects.
+
+Lesson: when adding a failure pattern, check empirically (grep the log corpus) whether it ever actually resolves into success on a retry, rather than guessing from the wording alone — "too heavy" *sounds* like a temporary carrying-capacity complaint, but in this game's text it never is.
+
+## 2026-07-07
+
+### Bug 45 fix: disjoint exit sets, not literal fingerprints, distinguish same-named maze rooms
+
+The bug's original write-up proposed a literal `room_name + sorted(exits)` node ID. Building it, that turned out to be the wrong granularity: exits aren't always fully known on every visit (a terse response, or the LLM under-reporting one exit) — a literal fingerprint would treat any partial exit list as a different room from a fuller one seen earlier, fragmenting a single real room into several nodes.
+
+What actually distinguishes "same room revisited with slightly different exit info" from "different room reusing the same display name" is whether the two exit sets share *anything in common*. Reused: overlapping or subset exits (or no exits recorded yet for the existing node) merge into the existing node. Disjoint (non-empty exit sets, zero overlap): treated as a genuinely different physical room and given a disambiguating suffix (`"Alder Clump #2"`). This is a much better fit for how mazes are actually authored — each room in a maze typically has its own distinct exit configuration even when it shares a generic name with others — and tolerates the LLM's normal exit-reporting noise without fragmenting legitimate revisits.
+
+Also deviated from the write-up's suggestion to strip the disambiguation suffix from the map display label. Left it visible instead: two different physical rooms showing identical text on the map, distinguished only by graph position, seemed like a worse outcome for a human trying to read the map than just showing `"Alder Clump #2"`.
+
+### Verifying a graph-identity fix needs real extraction, not a mocked dict
+
+The existing single-step test patterns (`tests/spec_scenarios`, most of `tests/test_agent.py`) mock `extract_knowledge` to return a hand-written dict — fine for testing decision logic, but it can't catch whether the fix actually holds up against how a real LLM phrases and sequences room/exit data across several consecutive turns. Added `tests/test_simulations.py`: a scripted 5-response maze walk fed through `process_agent_step` in a loop with a real DeepSeek call each step (`@pytest.mark.llm`, mirroring the existing gating for `tests/evals`), only mocking the game engine's response queue. Kept the fixture format plain Python rather than JSON+schema (unlike `tests/evals`/`tests/spec_scenarios`) since this is a fixed per-bug regression scenario, not a growing library that needs schema governance.

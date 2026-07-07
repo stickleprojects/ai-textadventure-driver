@@ -28,7 +28,7 @@ Architect-generated anomaly plans are tracked separately in [plans.md](plans.md)
 | 39 | [39.md](bugs/39.md) | LLM places NPC name in room field | ✅ Fixed |
 | 41 | [41.md](bugs/41.md) | Missing "Don't be silly" failure pattern | ✅ Fixed |
 | 42 | [42.md](bugs/42.md) | Crash on null list fields from LLM | ✅ Fixed |
-| 45 | [45.md](bugs/45.md) | Maze rooms with non-unique names loop agent | 🔲 Open |
+| 45 | [45.md](bugs/45.md) | Maze rooms with non-unique names loop agent | ✅ Fixed |
 | 46 | [46.md](bugs/46.md) | Article variants create duplicate room nodes | ✅ Fixed |
 | 47 | [47.md](bugs/47.md) | Unknown placeholder re-added on same update call | ✅ Fixed |
 | 48 | [48.md](bugs/48.md) | Direction aliases overwrite edge label | ✅ Fixed |

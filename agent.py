@@ -17,6 +17,9 @@ _ARTICLE_RE = re.compile(r"\b(a|an|the)\b\s*", re.IGNORECASE)
 # "inside"/"outside" are NOT stripped: they denote distinct rooms.
 _LEADING_PREP_RE = re.compile(r"^(in|on|at)\s+", re.IGNORECASE)
 _LEADING_ARTICLE_RE = re.compile(r"^(a|an|the)\s+", re.IGNORECASE)
+# Bug 45 disambiguation suffix appended to a node id when the same display name is
+# reused for a physically distinct room (e.g. "Alder Clump #2").
+_DISAMBIGUATION_RE = re.compile(r" #(\d+)$")
 
 
 def _short_room_name(name):
@@ -49,19 +52,74 @@ def _canonicalize_room(name):
     return name.strip()
 
 
-def _resolve_room_name(graph, room_name):
-    """Return an existing graph node matching room_name after article normalisation.
+def _base_room_name(node):
+    """Strip a bug-45 disambiguation suffix (' #2') to recover the shared display name."""
+    return _DISAMBIGUATION_RE.sub("", node)
+
+
+def _known_exits(graph, node):
+    """Return the set of exit directions already recorded as edges from node.
+
+    Compound alias labels ("south/down", bug 48/59) are split into their parts so
+    both aliases count as known exits, not just the first.
+    """
+    exits = set()
+    for _, _, data in graph.edges(node, data=True):
+        label = data.get("label", "")
+        if label:
+            exits.update(label.split("/"))
+    return frozenset(exits)
+
+
+def _resolve_room_name(graph, room_name, exits=None):
+    """Return the graph node room_name should resolve to.
 
     Prevents the same physical room being stored twice when the LLM returns
     slight article variations ('cave in juniper scrubland' vs 'cave in a juniper
-    scrubland').  If no match exists, returns the canonicalised form of room_name
-    so new nodes are stored without noisy leading prepositions/articles.
+    scrubland') by matching on a normalised display name. If no match exists,
+    returns the canonicalised form of room_name so new nodes are stored without
+    noisy leading prepositions/articles.
+
+    Bug 45: matching by name alone also collapses maze rooms that legitimately
+    share a display name but are physically distinct places, so the agent
+    believes an unexplored area is already fully mapped. When `exits` is given
+    and disjoint from every existing same-named node's recorded exits, this
+    returns a fresh node (display name + numeric suffix, e.g. "Alder Clump #2")
+    instead of reusing the first match. A node with no recorded exits yet, or
+    whose exits overlap the observed set, is treated as the same room — this
+    keeps normal revisits (where the LLM may under-report an exit) merged into
+    one node instead of fragmenting.
+
+    `exits` is optional: when omitted (or empty, e.g. a terse response with no
+    exit list this step), there's nothing to disambiguate with, so resolution
+    falls back to name-only matching — the same behaviour as before bug 45's fix.
     """
     target = _normalize_room(room_name)
-    for node in graph.nodes:
-        if not node.startswith("Unknown") and _normalize_room(node) == target:
-            return node
-    return _canonicalize_room(room_name)
+    candidates = [
+        node for node in graph.nodes
+        if not node.startswith("Unknown") and _normalize_room(_base_room_name(node)) == target
+    ]
+    if not candidates:
+        return _canonicalize_room(room_name)
+
+    if not exits:
+        return candidates[0]
+
+    exits_set = frozenset(_DIRECTION_NORMALIZE.get(d.lower(), d.lower()) for d in exits)
+    compatible = [
+        node for node in candidates
+        if not _known_exits(graph, node) or not exits_set.isdisjoint(_known_exits(graph, node))
+    ]
+    if compatible:
+        return compatible[0]
+
+    # Same display name, but no exit in common with any known node using it —
+    # a physically distinct room reusing the name. Disambiguate with a suffix.
+    base = _base_room_name(candidates[0])
+    existing_suffixes = [
+        int(m.group(1)) for c in candidates if (m := _DISAMBIGUATION_RE.search(c))
+    ]
+    return f"{base} #{max(existing_suffixes, default=1) + 1}"
 
 
 def _is_hard_failure(text):
@@ -523,8 +581,19 @@ def process_agent_step(state, child, llm_instance):
         if item:
             state["inventory"] = [i for i in state["inventory"] if i.lower() != item.lower()]
 
+    # Exits are filtered (and, via _resolve_room_name below, used to disambiguate
+    # rooms that share a display name but not exits — bug 45) before room resolution,
+    # so both use the same filtered set rather than resolving on stale/raw exits.
+    exits = None
+    if "exits" in extracted:
+        resp_lower = response.lower()
+        # The LLM infers "up"/"down" from "Exits lead in all directions" even when those
+        # exits don't exist. Only trust them when literally present in the response text.
+        exits = [e for e in extracted["exits"] if e not in ("up", "down") or e in resp_lower]
+        extracted["exits"] = exits
+
     if extracted.get("room"):
-        state["current_room"] = _resolve_room_name(state["world_graph"], extracted["room"])
+        state["current_room"] = _resolve_room_name(state["world_graph"], extracted["room"], exits)
         extracted["room"] = state["current_room"]
         state.setdefault("visited_rooms", set()).add(state["current_room"])
     elif action_taken in _DIRECTIONS and not _is_hard_failure(response) and not _is_soft_failure(response):
@@ -532,12 +601,7 @@ def process_agent_step(state, child, llm_instance):
         # Force a look on the next step to re-establish where we are.
         state["position_lost"] = True
 
-    if "exits" in extracted:
-        resp_lower = response.lower()
-        # The LLM infers "up"/"down" from "Exits lead in all directions" even when those
-        # exits don't exist. Only trust them when literally present in the response text.
-        exits = [e for e in extracted["exits"] if e not in ("up", "down") or e in resp_lower]
-        extracted["exits"] = exits
+    if exits is not None:
         update_graph(state, state["current_room"], exits, previous_room, action_taken)
 
     # If a goal action hard-failed, clear the active_goal / drop the anomaly

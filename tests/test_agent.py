@@ -759,6 +759,98 @@ class TestNullRoomHandling:
         result2 = _resolve_room_name(g, "on a jousting field; an acre of firm meadow")
         assert result2 == "jousting field"
 
+    # ── Bug 45: maze rooms sharing a name but not exits must not collapse ─────
+
+    def test_disjoint_exits_on_repeated_name_creates_new_node(self):
+        # Two physically distinct rooms both reported as "Alder Clump" by the LLM
+        # (a maze). Their exit sets share nothing, so the second must resolve to
+        # a fresh, disambiguated node rather than merging into the first.
+        from agent import _resolve_room_name
+        g = nx.MultiDiGraph()
+        first = _resolve_room_name(g, "Alder Clump", ["north", "east"])
+        assert first == "Alder Clump"
+        # Record the first room's exits as real edges, the way update_graph would
+        # after a live step — a bare node with no edges has no recorded exits yet.
+        update_graph({"world_graph": g}, first, ["north", "east"], None, "")
+
+        second = _resolve_room_name(g, "Alder Clump", ["south", "west"])
+        assert second == "Alder Clump #2"
+        assert second != first
+
+    def test_third_disjoint_visit_gets_next_suffix(self):
+        # Suffix numbering must scale past #2, not just handle the binary case.
+        from agent import _resolve_room_name
+        g = nx.MultiDiGraph()
+        g.add_node("Alder Clump")
+        g.add_edge("Alder Clump", "Unknown (north from Alder Clump)", label="north")
+        g.add_node("Alder Clump #2")
+        g.add_edge("Alder Clump #2", "Unknown (south from Alder Clump #2)", label="south")
+
+        third = _resolve_room_name(g, "Alder Clump", ["up", "down"])
+        assert third == "Alder Clump #3"
+
+    def test_overlapping_exits_on_repeated_name_merges_into_existing_node(self):
+        # A revisit where the LLM under-reports one exit must still merge into
+        # the same node, not fragment into a new one — only a fully disjoint
+        # exit set indicates a genuinely different room.
+        from agent import _resolve_room_name
+        g = nx.MultiDiGraph()
+        g.add_node("Alder Clump")
+        g.add_edge("Alder Clump", "Unknown (north from Alder Clump)", label="north")
+        g.add_edge("Alder Clump", "Unknown (east from Alder Clump)", label="east")
+
+        resolved = _resolve_room_name(g, "Alder Clump", ["north"])
+        assert resolved == "Alder Clump"
+
+    def test_node_with_no_recorded_exits_yet_is_treated_as_same_room(self):
+        # A node created from a terse first visit (no exits known yet) must not
+        # be treated as incompatible just because it has nothing recorded.
+        from agent import _resolve_room_name
+        g = nx.MultiDiGraph()
+        g.add_node("Alder Clump")  # no edges yet — exits unknown
+
+        resolved = _resolve_room_name(g, "Alder Clump", ["north", "east"])
+        assert resolved == "Alder Clump"
+
+    def test_no_exits_this_step_falls_back_to_name_only_match(self):
+        # Bug 45's own edge case: a terse response with no exit list this step
+        # gives nothing to disambiguate with — fall back to pre-fix behavior
+        # (first name match) rather than guessing.
+        from agent import _resolve_room_name
+        g = nx.MultiDiGraph()
+        g.add_node("Alder Clump")
+        g.add_node("Alder Clump #2")
+
+        resolved = _resolve_room_name(g, "Alder Clump", exits=[])
+        assert resolved == "Alder Clump"
+        resolved_default = _resolve_room_name(g, "Alder Clump")
+        assert resolved_default == "Alder Clump"
+
+    def test_known_exits_splits_compound_alias_label(self):
+        # Bug 48/59: a merged alias label ("south/down") must count as both
+        # exits known, not just the first.
+        from agent import _known_exits
+        g = nx.MultiDiGraph()
+        g.add_edge("Start", "Cellar", label="south/down")
+        assert _known_exits(g, "Start") == {"south", "down"}
+
+    def test_process_agent_step_disjoint_maze_produces_two_distinct_rooms(self, stub_child):
+        # End-to-end: two consecutive steps reporting the same room name with
+        # disjoint exits must leave current_room pointing at two different nodes.
+        state = make_state(current_room="Alder Clump")
+        state["world_graph"].add_node("Alder Clump")
+        state["world_graph"].add_edge(
+            "Alder Clump", "Unknown (north from Alder Clump)", label="north"
+        )
+
+        with patch("agent.execute_game_command",
+                    return_value="You are in the Alder Clump. Exits: south, west."), \
+             patch("agent.extract_knowledge",
+                    return_value={"room": "Alder Clump", "exits": ["south", "west"]}):
+            process_agent_step(state, stub_child, None)
+
+        assert state["current_room"] == "Alder Clump #2"
+
     def test_in_direction_cleans_up_placeholder_and_wires_out_return(self):
         # Bug 49: "in" was missing from _REVERSE so traversal via "in" skipped
         # placeholder cleanup entirely.
