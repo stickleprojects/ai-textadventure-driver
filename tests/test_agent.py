@@ -665,6 +665,34 @@ class TestNullRoomHandling:
             process_agent_step(state, stub_child, None)
         assert state["current_room"] == "Dingy Stable"
 
+    def test_exits_not_attributed_to_stale_room_when_room_lost(self, stub_child):
+        """P008 regression: a combat-interlude-style response can report exits
+        for the room just moved into while omitting the room name. Before the
+        fix, update_graph attributed those exits to the stale current_room
+        (the room just left), wiring phantom Unknown exits that don't actually
+        exist there."""
+        state = make_state(current_room="Dingy Stable")
+        # An Unknown "east" exit so determine_next_action picks a direction
+        # (matching the real scenario: a productive-looking move that then
+        # loses the room).
+        state["world_graph"].add_edge("Dingy Stable", "Unknown (east from Dingy Stable)", label="east")
+        with patch("agent.execute_game_command",
+                   return_value="A male voice shouts. You are shoved onward."), \
+             patch("agent.extract_knowledge", return_value={"exits": ["north", "out"]}):
+            process_agent_step(state, stub_child, None)
+        assert state["position_lost"] is True
+        assert not state["world_graph"].has_node("Unknown (north from Dingy Stable)")
+        assert not state["world_graph"].has_node("Unknown (out from Dingy Stable)")
+
+    def test_exits_still_recorded_when_room_extracted_alongside(self, stub_child):
+        state = make_state(current_room="Dingy Stable")
+        with patch("agent.execute_game_command", return_value="You are in a huge pile of garbage."), \
+             patch("agent.extract_knowledge",
+                   return_value={"room": "huge pile of garbage", "exits": ["north", "out"]}):
+            process_agent_step(state, stub_child, None)
+        assert state["world_graph"].has_node("Unknown (north from huge pile of garbage)")
+        assert state["world_graph"].has_node("Unknown (out from huge pile of garbage)")
+
     def test_update_graph_none_room_is_a_no_op(self):
         state = make_state(current_room="Hall")
         initial_nodes = set(state["world_graph"].nodes)

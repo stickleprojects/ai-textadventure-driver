@@ -17,12 +17,13 @@
   "anomaly_id": "a5",
   "anomaly_type": "nav_contradiction",
   "severity": "medium",
-  "status": "open",
+  "status": "fixed",
   "plan_id": "P008",
   "source_runs": [
     "watch_20260707_133153"
   ],
   "anomaly_ids": [
     "watch_20260707_133153/a5"
-  ]
+  ],
+  "fixed_in": "PR #82 — the proposed re-look trigger was unnecessary: position_lost already forces a look on the very next step whenever a direction move succeeds with no extracted room (which is exactly what happened here), and the log confirms that look correctly re-examined the room and reported its real exits. The actual bug was one step earlier and more precise: when that same step (the 'east' move) reported exits without a room (extract_knowledge dropped the room field but kept 'Exits: down, outside' from the combat-interlude text), process_agent_step still called update_graph(state, state['current_room'], exits, ...) — but state['current_room'] was still the *old* room (nothing updates it when extracted.room is falsy), so 'huge pile of garbage's real exits got wired as phantom Unknown edges hanging off 'dingy stable', which does not actually have them (its only real exit is 'east'). This is also the origin of the bogus 'down'/'out' edges that fed P005/P006. Fixed by skipping update_graph entirely for the one step where a directional move sets position_lost (exits reported that step belong to the room just entered, not the stale current_room) — the follow-up forced look already re-reports the same exits correctly attributed once the room resolves, so nothing is lost, only the earlier mis-attribution is prevented."
 }

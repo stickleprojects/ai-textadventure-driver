@@ -631,6 +631,7 @@ def process_agent_step(state, child, llm_instance):
         exits = [e for e in extracted["exits"] if e not in ("up", "down") or e in resp_lower]
         extracted["exits"] = exits
 
+    room_unresolved = False
     if extracted.get("room"):
         state["current_room"] = _resolve_room_name(state["world_graph"], extracted["room"], exits)
         extracted["room"] = state["current_room"]
@@ -639,10 +640,16 @@ def process_agent_step(state, child, llm_instance):
         state["position_lost_attempts"] = 0
     elif action_taken in _DIRECTIONS and not _is_hard_failure(response) and not _is_soft_failure(response):
         # Movement appeared to succeed but LLM returned no room — position is unknown.
-        # Force a look on the next step to re-establish where we are.
+        # Force a look on the next step to re-establish where we are. Any exits
+        # reported this same step (P008: e.g. a combat-interlude response that
+        # mentions exits but drops the room name) describe the room we just
+        # moved into, not the stale state["current_room"] — attributing them to
+        # the old room below would wire phantom Unknown exits onto it that don't
+        # exist there at all. Skip update_graph until the room is re-confirmed.
         state["position_lost"] = True
+        room_unresolved = True
 
-    if exits is not None:
+    if exits is not None and not room_unresolved:
         update_graph(state, state["current_room"], exits, previous_room, action_taken)
 
     # If a goal action hard-failed, clear the active_goal / drop the anomaly
