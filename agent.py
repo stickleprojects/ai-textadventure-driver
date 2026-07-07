@@ -10,6 +10,10 @@ from llm import extract_knowledge
 
 _SCORE_RE = re.compile(r"you score\s+(\d+)\s+out of\s+(\d+)", re.IGNORECASE)
 _SCORE_INTERVAL = 20
+# P007: cap on consecutive forced re-establishing "look"s before giving up and
+# resuming normal priorities, so a game state that genuinely never confirms a
+# room (or a run of unparseable "look" responses) can't loop forever.
+_POSITION_LOST_MAX_ATTEMPTS = 3
 
 _ARTICLE_RE = re.compile(r"\b(a|an|the)\b\s*", re.IGNORECASE)
 # Strip leading positional prepositions — LLM says "in an alder ghostwood",
@@ -307,8 +311,19 @@ def _nav_command(state, target, fast=True):
 def determine_next_action(state):
     """Returns (action, reason) based on agent priority logic."""
     if state.get("position_lost"):
+        # P007: previously cleared the flag unconditionally on the first forced
+        # look, so a "look" that itself failed to yield a room left the agent
+        # blind with a stale current_room and no further re-establishing look
+        # (the re-arm branch in process_agent_step only fires on directional
+        # moves). Now the flag only clears once a room is actually resolved
+        # (in process_agent_step), and repeated attempts are capped rather
+        # than looping forever.
+        attempts = state.get("position_lost_attempts", 0) + 1
+        if attempts <= _POSITION_LOST_MAX_ATTEMPTS:
+            state["position_lost_attempts"] = attempts
+            return "look", "re-establishing position after lost room extraction"
         state["position_lost"] = False
-        return "look", "re-establishing position after lost room extraction"
+        state["position_lost_attempts"] = 0
 
     if state.get("recheck_inventory"):
         return "inventory", "post-death inventory check"
@@ -620,6 +635,8 @@ def process_agent_step(state, child, llm_instance):
         state["current_room"] = _resolve_room_name(state["world_graph"], extracted["room"], exits)
         extracted["room"] = state["current_room"]
         state.setdefault("visited_rooms", set()).add(state["current_room"])
+        state["position_lost"] = False
+        state["position_lost_attempts"] = 0
     elif action_taken in _DIRECTIONS and not _is_hard_failure(response) and not _is_soft_failure(response):
         # Movement appeared to succeed but LLM returned no room — position is unknown.
         # Force a look on the next step to re-establish where we are.

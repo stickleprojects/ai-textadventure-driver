@@ -4,6 +4,16 @@ Running notes on findings, decisions, and things that surprised us during develo
 
 ---
 
+### An llm_review anomaly can misdiagnose its own evidence, but still stumble onto a real bug (P007)
+
+P007 claimed the agent lost track of its location for 13 consecutive steps (2–14) after a combat-forced move, never issuing a `look` to recover. Replaying the log against the actual state-transition rules showed this was wrong: steps 4–14 are `take`/`examine`/`read`/`wear`/`push` responses on two objects, which legitimately have no `room` field — that's normal for non-movement verbs (requirement 18's fixed inspection sequence), not evidence of a stale `current_room`. `position_lost` actually fired once at step 2 and was correctly resolved by the forced `look` at step 3 — one step of blindness, not thirteen.
+
+But the hypothesis the reviewer wrote to explain its (mistaken) evidence turned out to describe a real, separate defect: `determine_next_action` unconditionally cleared `position_lost` after issuing exactly one `look`, and the re-arm branch in `process_agent_step` only triggers on directional moves — so if that recovery `look` itself failed to yield a room (which didn't happen in this log, but easily could in a different one), the flag would clear anyway and the agent would carry on blind indefinitely with no further recovery attempt. Fixed by only clearing `position_lost` once a room is actually resolved, with a capped retry count (`_POSITION_LOST_MAX_ATTEMPTS = 3`) so a game state that genuinely never confirms a room can't loop forever.
+
+Lesson, paired with the P005/P006 entry below: treat an anomaly's cited evidence and its root-cause hypothesis as separable claims. The evidence here was wrong; the hypothesis, on independent inspection of the code, wasn't — worth fixing anyway, just not as "13 steps blind in this run."
+
+---
+
 ## 2026-07-07
 
 ### A "productive" navigation loop can still be a loop (P004)
