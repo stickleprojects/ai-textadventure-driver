@@ -25,5 +25,5 @@
   "anomaly_ids": [
     "watch_20260707_133153/a1"
   ],
-  "fixed_in": "PR TBD — actual root cause differed from the hypothesis above: \"in\"/\"out\" were simply missing from agent.py's _DIRECTIONS set, so the futile-edge-marking guard in process_agent_step (`action_taken in _DIRECTIONS`) silently never fired for them. The log confirms util=futile was computed correctly on nearly every \"out\" attempt; it just never got persisted to futile_edges, so the Unknown exit kept being re-offered. Fix: add \"in\"/\"out\" to _DIRECTIONS (same fix as P006 — one root cause, two anomaly reports). No new selection-policy logic needed; the existing futile-skip in the Unknown-exit scan now works for in/out too."
+  "fixed_in": "PR #80 — actual root cause differed from the hypothesis above: \"in\"/\"out\" were simply missing from agent.py's _DIRECTIONS set, so the futile-edge-marking guard in process_agent_step (`action_taken in _DIRECTIONS`) silently never fired for them. The log confirms util=futile was computed correctly on nearly every \"out\" attempt; it just never got persisted to futile_edges, so the Unknown exit kept being re-offered. Fix: add \"in\"/\"out\" to _DIRECTIONS (same fix as P006 — one root cause, two anomaly reports). No new selection-policy logic needed; the existing futile-skip in the Unknown-exit scan now works for in/out too."
 }
