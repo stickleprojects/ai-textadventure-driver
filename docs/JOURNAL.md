@@ -4,6 +4,18 @@ Running notes on findings, decisions, and things that surprised us during develo
 
 ---
 
+## 2026-07-07
+
+### A "productive" navigation loop can still be a loop (P004)
+
+The architect pipeline flagged a run where the agent shuttled between "dingy stable" and "jousting field" for dozens of steps. It never tripped `_detect_loop` or got an edge marked futile, because both of those safeguards are built around *futility*: `_detect_loop` explicitly excludes direction actions that changed the room (bug 14's fix), and `_compute_utility` only tags an action `futile` on a hard-failure response. Every step of the shuttle changed the room and succeeded, so by every existing metric it was "productive" — just productive at going nowhere new.
+
+The actual cause lived in two places in `determine_next_action`: the immediate current-room Unknown-exit scan just took the first unresolved edge it found, and the diversity-scored `best_target` search (which picks the nearest room with an Unknown exit when the current room has none left) only penalised overused *directions*, not overused *rooms*. Two adjacent rooms that both still had an unexplored exit of their own were nearest-neighbours of each other, so the two selection points kept volleying the agent back and forth.
+
+Fixed both spots with the same idea — penalise recency, don't forbid it. The current-room scan now defers (not skips) the Unknown exit whose direction reverses the move that just got us here, falling back to it only if it's the sole remaining option. The `best_target` score gained a `recent_room_visits` term (a `Counter` over the last 10 log entries' extracted rooms), so a farther but genuinely fresh frontier outscores a nearby room the agent has already been bouncing off of. Neither change touches `futile_edges` or the loop detector — this was a decision-logic problem, not a detection-logic one.
+
+---
+
 ## 2026-07-01
 
 ### Prompt rule blocking "outside" caused room name paraphrasing and duplicates

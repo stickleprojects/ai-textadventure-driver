@@ -16,12 +16,13 @@
   "title": "Two-room oscillation loop",
   "anomaly_type": "repetitive_oscillation",
   "severity": "high",
-  "status": "open",
+  "status": "fixed",
   "plan_id": "P004",
   "source_runs": [
     "watch_20260703_141009"
   ],
   "anomaly_ids": [
     "watch_20260703_141009/a1"
-  ]
+  ],
+  "fixed_in": "PR TBD — determine_next_action defers the Unknown exit that reverses the last move (only used when it's the sole remaining exit), and best_target scoring in the diversity-scored navigation step adds a recent-room-visit penalty so a farther unexplored frontier outscores a two-room shuttle"
 }

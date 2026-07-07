@@ -254,6 +254,50 @@ def test_fallback_to_look():
     assert determine_next_action(state)[0] == "look"
 
 
+# ── determine_next_action — P004: two-room oscillation loop ──────────────────
+
+def test_unknown_exit_prefers_fresh_direction_over_reverse_of_last_move():
+    g = nx.MultiDiGraph()
+    # We just arrived in B by moving "north", so "south" would double back.
+    g.add_edge("B", "Unknown (south from B)", label="south")
+    g.add_edge("B", "Unknown (east from B)", label="east")
+    state = make_state(
+        current_room="B", world_graph=g,
+        game_log=[{"action": "north", "extracted": {"room": "B"}}],
+    )
+    assert determine_next_action(state)[0] == "east"
+
+
+def test_unknown_exit_falls_back_to_reverse_when_it_is_the_only_option():
+    g = nx.MultiDiGraph()
+    g.add_edge("B", "Unknown (south from B)", label="south")
+    state = make_state(
+        current_room="B", world_graph=g,
+        game_log=[{"action": "north", "extracted": {"room": "B"}}],
+    )
+    assert determine_next_action(state)[0] == "south"
+
+
+def test_best_target_scoring_penalizes_recently_shuttled_room():
+    g = nx.MultiDiGraph()
+    g.add_edge("X", "Y", label="north")
+    g.add_edge("Y", "X", label="south")
+    g.add_edge("Y", "Unknown (east from Y)", label="east")
+    g.add_edge("X", "Z", label="west")
+    g.add_edge("Z", "X", label="east")
+    g.add_edge("Z", "Unknown (north from Z)", label="north")
+    game_log = [
+        {"action": "look", "extracted": {"room": "Y"}},
+        {"action": "look", "extracted": {"room": "X"}},
+        {"action": "look", "extracted": {"room": "Y"}},
+        {"action": "look", "extracted": {"room": "X"}},
+    ]
+    state = make_state(current_room="X", world_graph=g, game_log=game_log)
+    action, reason = determine_next_action(state)
+    assert action == "west"
+    assert "Z" in reason
+
+
 # ── determine_next_action — dynamic verb sequence (issue 18) ─────────────────
 
 class TestDetermineNextActionDynamicSequence:

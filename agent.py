@@ -356,17 +356,36 @@ def determine_next_action(state):
         inspection["step_index"] = 0
         return f"take {new_target}", f"new object: take {new_target}"
 
-    for _, v, data in state["world_graph"].edges(state["current_room"], data=True):
-        if v.startswith("Unknown") and not data.get("futile"):
-            direction = data["label"].split("/")[0]
-            return direction, f"exploring exit '{direction}' from {state['current_room']}"
+    unknown_exits = [
+        data for _, v, data in state["world_graph"].edges(state["current_room"], data=True)
+        if v.startswith("Unknown") and not data.get("futile")
+    ]
+    if unknown_exits:
+        # P004: prefer a genuinely fresh direction over the one that reverses the
+        # move that just brought us here — that direction is what produces the
+        # two-room oscillation (a real exit list can legitimately re-list it as
+        # "Unknown" if the return trip wasn't wired in update_graph). Only fall
+        # back to it when it's the sole remaining exit, so it's still explored.
+        last_entry = state["game_log"][-1] if state["game_log"] else None
+        last_direction = last_entry["action"] if last_entry and last_entry.get("action") in _DIRECTIONS else None
+        reverse_of_last = _REVERSE.get(last_direction)
+        fresh_exits = [data for data in unknown_exits if data["label"].split("/")[0] != reverse_of_last]
+        direction = (fresh_exits or unknown_exits)[0]["label"].split("/")[0]
+        return direction, f"exploring exit '{direction}' from {state['current_room']}"
 
     # Current room fully explored — navigate to a room with an Unknown exit.
     # Score by path_len + recent-direction penalty to avoid chasing the same diagonal
-    # indefinitely (e.g. alternating sw/east across a grid of similar rooms).
+    # indefinitely (e.g. alternating sw/east across a grid of similar rooms), plus a
+    # recent-room-visit penalty (P004) so a two-room shuttle loses out to a farther
+    # but genuinely unexplored frontier once both sides of the shuttle have been
+    # revisited a few times.
     recent_dir_freq = Counter(
         e["action"] for e in state["game_log"][-20:]
         if e.get("action") in _DIRECTIONS
+    )
+    recent_room_visits = Counter(
+        e.get("extracted", {}).get("room") for e in state["game_log"][-10:]
+        if e.get("extracted", {}).get("room")
     )
     best_target = None
     best_score = float("inf")
@@ -388,7 +407,7 @@ def determine_next_action(state):
             continue
         # Penalise rooms whose Unknown exits are in overused directions; prefer fresh ones
         min_dir_freq = min(recent_dir_freq.get(d, 0) for d in unknown_dirs)
-        score = path_len + min_dir_freq
+        score = path_len + min_dir_freq + recent_room_visits.get(node, 0)
         if score < best_score:
             best_score = score
             best_target = node
