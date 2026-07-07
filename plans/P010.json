@@ -1,0 +1,28 @@
+{
+  "title": "Stable exits never listed \u2192 agent re-tries only known edges (missing-exit extraction)",
+  "data_origin_layer": "llm_extraction",
+  "productivity_check": "non_productive",
+  "root_cause_hypothesis": "The LLM extraction under-reports the stable's exits (only 'down'/'out' ever get wired as edges), so update_graph never creates Unknown placeholders for north/south/west/in \u2014 the unknown-exit scanner in determine_next_action can only pick directions that were extracted, and no guard forces cardinal-direction coverage; the anomaly originates in llm.extract_knowledge's exit list, not decision_logic.",
+  "target_files": [
+    "llm.py",
+    "configs/knight_orc.json"
+  ],
+  "change_summary": "The agent only ever explores exits that were extracted into the graph as Unknown placeholders; since the LLM keeps dropping the stable's cardinal exits (north/south/west) and 'in', those directions never become candidate edges and determine_next_action re-cycles the only two it knows ('down'/'out'). Fix the origin layer by strengthening extract_knowledge's exit parsing/few-shot examples so exit lists like the stable's are captured completely (add a few-shot example for a room whose 'Exits' line lists multiple cardinal directions plus in/out, and tighten the extraction prompt to enumerate every direction word literally present). This is deliberately kept off the hot path \u2014 no new LLM calls are added, only the existing extraction is made more accurate. Do NOT mark 'down'/'out' futile: the steps are non-productive but the correct remedy is capturing the missing exits, not giving up on directions.",
+  "acceptance_criteria": [
+    "In a future run log, after re-entering 'dingy stable' the world_graph shows Unknown-exit edges (or resolved edges) for north/south/west and 'in', not only down/out.",
+    "The step 16-24 sequence no longer repeats 'down'/'out' 7 times; the log shows at least one attempt of a cardinal direction or 'in' from the stable within the window following re-entry.",
+    "extract_knowledge returns the full exit list for a stable-style response containing multiple cardinal directions plus in/out (verifiable against the raw response text in the run log's 'extracted.exits')."
+  ],
+  "schema": "fix_plan/v1",
+  "anomaly_id": "a8",
+  "anomaly_type": "exit_not_tried",
+  "severity": "medium",
+  "status": "open",
+  "plan_id": "P010",
+  "source_runs": [
+    "watch_20260707_133153"
+  ],
+  "anomaly_ids": [
+    "watch_20260707_133153/a8"
+  ]
+}

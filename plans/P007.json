@@ -1,0 +1,28 @@
+{
+  "title": "position_lost look never fires on repeated no-room extractions",
+  "data_origin_layer": "llm_extraction",
+  "productivity_check": "non_productive",
+  "root_cause_hypothesis": "The origin is the LLM extraction layer returning no `room` for steps 2\u201314 after a successful move; the `position_lost` guard already exists in both `process_agent_step` (sets flag when a directional move succeeds with no room) and `determine_next_action` (returns 'look' when flag is set), but it self-clears on the very next step and only re-arms after another directional move \u2014 so once a 'look' also comes back roomless, the flag stays cleared and the agent proceeds to act blind for 13 steps.",
+  "target_files": [
+    "agent.py"
+  ],
+  "change_summary": "The position_lost guard fires exactly once: determine_next_action unconditionally clears the flag and returns 'look', but if that 'look' response also yields no room the flag is never re-set (the re-arm branch only triggers on directional moves), so the agent keeps acting with current_room stale/None. Change process_agent_step so that whenever `state['current_room']` is unresolved (no room extracted and no known current room) the position_lost flag is re-armed rather than left cleared, and only clear it when a room is actually re-established. This keeps the agent issuing 'look' until it genuinely knows its location instead of acting blind for 13 consecutive steps. Because the extraction origin is the LLM, also lower the risk of the roomless 'look' by ensuring position_lost persists across non-directional actions.",
+  "acceptance_criteria": [
+    "In a future run log where a move produces no extracted room, the following step's action is 'look' AND if that look also returns no room, the subsequent step is again 'look' (not a blind directional/inspection action) until a room field is populated.",
+    "No game_log entry between the lost-position event and re-establishment shows a non-'look' action while state['current_room'] is stale/None (i.e. the '\u2014' room streak is at most interleaved with 'look' actions).",
+    "Once a 'look' response yields a room, position_lost is cleared and normal priority actions resume on the following step."
+  ],
+  "risk_notes": "Must avoid an infinite 'look' loop if the game genuinely never returns a room name \u2014 bound the re-look behaviour (e.g. cap consecutive forced looks) or ensure a room the agent already knew (current_room non-None from prior step) does not falsely trigger the re-arm. The existing _detect_loop excludes productive moves but a repeated 'look' could trip the threshold=8 loop detector; verify that forced re-establishment looks are not mis-flagged as a futile loop. Do not add any LLM call to the hot path.",
+  "schema": "fix_plan/v1",
+  "anomaly_id": "a4",
+  "anomaly_type": "lost_position",
+  "severity": "high",
+  "status": "open",
+  "plan_id": "P007",
+  "source_runs": [
+    "watch_20260707_133153"
+  ],
+  "anomaly_ids": [
+    "watch_20260707_133153/a4"
+  ]
+}

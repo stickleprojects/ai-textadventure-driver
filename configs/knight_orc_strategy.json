@@ -41,6 +41,10 @@
       "up"
     ],
     [
+      "dingy stable",
+      "down"
+    ],
+    [
       "dismal fairground in a rowan coppice",
       "down"
     ],
@@ -438,6 +442,16 @@
       "npcs_discovered": 7,
       "treasure_discovered": 0,
       "puzzles_discovered": 2,
+      "puzzles_solved": 0
+    },
+    {
+      "run_id": "watch_20260707_133153",
+      "outcome": "agent_failure",
+      "final_score": null,
+      "locations_discovered": 2,
+      "npcs_discovered": 3,
+      "treasure_discovered": 0,
+      "puzzles_discovered": 0,
       "puzzles_solved": 0
     }
   ]
