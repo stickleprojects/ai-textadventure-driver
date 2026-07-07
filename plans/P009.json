@@ -1,0 +1,28 @@
+{
+  "title": "Verb sequence runs redundant inspection verbs after first non-informative response",
+  "data_origin_layer": "decision_logic",
+  "productivity_check": "non_productive",
+  "root_cause_hypothesis": "The origin is decision_logic in determine_next_action's inspection block: it blindly walks the full `sequence` (candidate_verbs) for a target regardless of prior verb outcomes, and no guard exists to short-circuit the sequence when successive verbs yield the same unhelpful/redundant response \u2014 _compute_utility does classify these as \"redundant\" but that classification is never fed back to prune the remaining sequence.",
+  "target_files": [
+    "agent.py"
+  ],
+  "change_summary": "The inspection dispatcher advances through every verb in the sequence for a target even after earlier verbs (examine/read/look inside) all produce the same non-informative response, then still tries \"push\". Change the selection policy so the queued inspection sequence is abandoned early: when the previous step for the same target was classified util=redundant (or the object already has recorded verb_outcomes for the near-synonym inspection verbs with identical outcomes), stop issuing further inspection verbs on that target. This changes only the priority/selection ordering, not any edge or entity state, and adds no LLM call to the hot path since it reuses the existing _compute_utility classification already stored on the previous log entry.",
+  "acceptance_criteria": [
+    "In a future run log, no single object accumulates more than one consecutive util=redundant inspection step before current_inspection.target is cleared",
+    "After the first non-informative inspection response on the putty knife, the subsequent step's action is no longer another verb from the same inspection sequence on that object (e.g. no 'push putty knife' following three identical examine/read/look-inside responses)"
+  ],
+  "risk_notes": "Must not prematurely abandon sequences where an early verb legitimately reveals new content (e.g. a container whose 'look inside' exposes a sub-object) \u2014 only abort when the prior step was classified redundant/informative-with-no-state-change, not when it was productive. Ensure the abort still records verb_outcomes so genuinely invalid verbs aren't retried next run, and that clearing the sequence doesn't skip the productive \"take\" first-step.",
+  "schema": "fix_plan/v1",
+  "anomaly_id": "a6",
+  "anomaly_type": "redundant_object_interaction",
+  "severity": "low",
+  "status": "deferred",
+  "plan_id": "P009",
+  "source_runs": [
+    "watch_20260707_133153"
+  ],
+  "anomaly_ids": [
+    "watch_20260707_133153/a6"
+  ],
+  "deferred_reason": "This is deliberate behaviour, not a bug: requirement 18 (docs/requirements/18.md) and requirement 27 (docs/requirements/27.md) establish attempt-and-learn as the design — every object in `candidate_verbs` is tried once per run so the game (not an LLM/heuristic guess) can classify each verb as succeeded/blocked/invalid, and only 'invalid' verb outcomes are ever excluded (permanently, cross-run, per requirement 27). 'redundant' is a game_log utility label for anomaly-detection/analysis purposes only — it was never meant to gate which verbs get tried, and two verbs producing textually-similar responses does not mean a third (e.g. 'push') wouldn't reveal something a diff-based utility check can't see (docs/JOURNAL.md 2026-06-30). Pruning on util=redundant would be a new, additional exclusion mechanism bolted onto the existing succeeded/blocked/invalid model, contradicting requirement 18's intent. Duplicate of [[P001]] (deferred for the same underlying reason under a different anomaly_type label — 'redundant_object_inspection' vs this run's 'redundant_object_interaction'); re-evaluate both together if a future run shows this costing meaningful progress, not step-count alone."
+}

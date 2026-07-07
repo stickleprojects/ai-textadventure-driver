@@ -1,0 +1,30 @@
+{
+  "title": "Non-productive \"You can't go that way\" streak from unmarked futile exits",
+  "data_origin_layer": "decision_logic",
+  "productivity_check": "non_productive",
+  "root_cause_hypothesis": "Decision logic originates the bad data: determine_next_action keeps selecting \"down\"/\"out\" exits because _mark_edge_futile only fires when _compute_utility returns \"futile\", but \"You can't go that way.\" is not in the hard_failure_patterns list, so these hard-failing moves are never classified futile and the same Unknown edges are re-offered.",
+  "target_files": [
+    "configs/knight_orc.json",
+    "game_config.py"
+  ],
+  "change_summary": "Add \"you can'?t go that way\" (and the equivalent \"can'?t go in that direction\") to the hard_failure_patterns so a rejected movement is classified as util=futile. Once _compute_utility returns \"futile\" for a direction action, the existing _mark_edge_futile path fires and the Unknown edge is permanently skipped in future unknown-exit scans, breaking the streak at its origin. This targets the pattern config that feeds decision_logic rather than adding a downstream guard.",
+  "acceptance_criteria": [
+    "In a future run log, after a 'You can't go that way.' response to a direction, the same (room, direction) edge shows data.futile=true and is not re-selected on subsequent steps",
+    "The log entry for a 'You can't go that way.' movement records utility='futile' rather than 'informative'",
+    "No repeated 4-action same-direction streak against 'You can't go that way.' appears in step ranges of subsequent runs"
+  ],
+  "risk_notes": "The existing default hard_failure_pattern r\"you can'?t\" already matches \"You can't go that way.\" at the game_config default level \u2014 but the Knight Orc run uses configs/knight_orc.json overrides, which may supply a narrower hard_failure_patterns list that omits it. Confirm the loaded config actually matches this phrase before assuming a code change is needed; if the default is in force the real gap is elsewhere (e.g. these edges are being re-added by update_graph after being pruned). Ensure the new pattern is genuinely permanent (a true \"no exit that way\") and not a state-dependent blockage, so we don't persist a futile edge that later opens \u2014 Knight Orc's \"You can't go that way.\" is a permanent no-exit message, so this is safe.",
+  "schema": "fix_plan/v1",
+  "anomaly_id": "a2",
+  "anomaly_type": "futile_streak",
+  "severity": "high",
+  "status": "fixed",
+  "plan_id": "P006",
+  "source_runs": [
+    "watch_20260707_133153"
+  ],
+  "anomaly_ids": [
+    "watch_20260707_133153/a2"
+  ],
+  "fixed_in": "PR TBD — the risk_notes above were right to be suspicious: verified against the actual loaded config that \"you can'?t\" IS present and DOES match \"You can't go that way.\" (confirmed via game_config.hard_failure_pattern.search), and the run log shows util=futile was in fact computed on nearly every \"out\"/\"down\" attempt. The real gap was in agent.py, not config: \"in\"/\"out\" were missing from the _DIRECTIONS set, so process_agent_step's `if utility == \"futile\" and action_taken in _DIRECTIONS: _mark_edge_futile(...)` guard silently skipped them — \"down\" (a real cardinal direction) got marked futile correctly and was never retried, while \"out\" kept being re-offered indefinitely. Added \"in\"/\"out\" to _DIRECTIONS (same fix as P005 — one root cause, two anomaly reports from the same run). No config/pattern change needed."
+}

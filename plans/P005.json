@@ -1,0 +1,29 @@
+{
+  "title": "\"out\" oscillation loop \u2014 reverse-exit not wired for in/out",
+  "data_origin_layer": "decision_logic",
+  "productivity_check": "non_productive",
+  "root_cause_hypothesis": "Decision logic in determine_next_action repeatedly re-selects \"out\" because the P004 fresh-exit guard already exists but only excludes the reverse of the *last* direction, so an \"out\"/\"in\" shuttle where each \"out\" keeps re-listing the same Unknown exit (and the room-visit penalty tie doesn't dominate) still oscillates; the guard exists but is insufficient for the in/out pair.",
+  "target_files": [
+    "agent.py"
+  ],
+  "change_summary": "Strengthen the navigation/exit selection policy so a repeatedly-chosen non-productive direction stops being re-picked. In the unknown_exits branch of determine_next_action, when the same direction (\"out\") has already been issued repeatedly in the recent game_log without producing a room change, deprioritise it in favour of any other Unknown exit from the current room, and when navigating to a frontier room, keep the existing recent_dir_freq penalty but ensure the in/out reverse pair is treated symmetrically. This changes only the selection ordering, not edge state, because each step here is non-productive repetition (no new room/entity/inventory) yet the underlying exit is not proven futile.",
+  "acceptance_criteria": [
+    "In a future run log, action 'out' does not appear 8+ times within any 10-step window (no entry gets a 'loop_detected':'out' flag for the same room pair)",
+    "The Unknown 'out' exit from the affected room is still eventually explored (an edge from it resolves to a real room in the world_graph) rather than being marked futile",
+    "No new (from_room,'out') tuple is added to futile_edges in the strategy JSON as a result of this change"
+  ],
+  "risk_notes": "Deprioritising a recently-repeated direction could starve a legitimate one-way corridor where \"out\" really is the only exit and must be taken multiple times consecutively; the fallback must still select it when it is the sole remaining Unknown exit. Watch that the symmetric in/out handling doesn't suppress genuine back-and-forth needed to reach a distinct frontier, and that _detect_loop's productive-move exclusion still lets true exploration through.",
+  "schema": "fix_plan/v1",
+  "anomaly_id": "a1",
+  "anomaly_type": "loop_detected",
+  "severity": "high",
+  "status": "fixed",
+  "plan_id": "P005",
+  "source_runs": [
+    "watch_20260707_133153"
+  ],
+  "anomaly_ids": [
+    "watch_20260707_133153/a1"
+  ],
+  "fixed_in": "PR TBD — actual root cause differed from the hypothesis above: \"in\"/\"out\" were simply missing from agent.py's _DIRECTIONS set, so the futile-edge-marking guard in process_agent_step (`action_taken in _DIRECTIONS`) silently never fired for them. The log confirms util=futile was computed correctly on nearly every \"out\" attempt; it just never got persisted to futile_edges, so the Unknown exit kept being re-offered. Fix: add \"in\"/\"out\" to _DIRECTIONS (same fix as P006 — one root cause, two anomaly reports). No new selection-policy logic needed; the existing futile-skip in the Unknown-exit scan now works for in/out too."
+}

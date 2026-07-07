@@ -160,7 +160,12 @@ def _parse_inventory_response(text):
     return items if items else []
 
 
-_DIRECTIONS = {"north", "south", "east", "west", "up", "down", "ne", "nw", "se", "sw"}
+# P005/P006: "in"/"out" are real navigable directions (see _REVERSE and
+# _DIRECTION_NORMALIZE below) but were missing here, so every guard keyed on
+# this set silently ignored them — most importantly the futile-edge marker in
+# process_agent_step (`action_taken in _DIRECTIONS`), which meant a failed
+# "out" was never persisted as futile and kept getting re-offered forever.
+_DIRECTIONS = {"north", "south", "east", "west", "up", "down", "ne", "nw", "se", "sw", "in", "out"}
 
 
 def _is_creature(name):

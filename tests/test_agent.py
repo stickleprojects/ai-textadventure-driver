@@ -1113,6 +1113,20 @@ class TestFutileEdgesMarkedOnStep:
             process_agent_step(state, stub_child, None)
         assert ("Hall", "north") not in state["futile_edges"]
 
+    def test_futile_out_direction_marked_after_hard_failure(self, stub_child):
+        """P005/P006 regression: "out" is a real direction (see _REVERSE), but was
+        missing from _DIRECTIONS, so this guard never fired for it and a failed
+        "out" was never marked futile — it kept getting re-offered indefinitely."""
+        state = make_state(current_room="Hall")
+        state["world_graph"].add_node("Hall")
+        state["world_graph"].add_edge("Hall", "Unknown (out from Hall)", label="out")
+        with patch("agent.execute_game_command", return_value="You can't go that way."), \
+             patch("agent.extract_knowledge", return_value={}):
+            process_agent_step(state, stub_child, None)
+        assert ("Hall", "out") in state["futile_edges"]
+        # And the Unknown-exit scan must actually skip it afterward.
+        assert determine_next_action(state)[0] != "out"
+
     def test_non_direction_hard_failure_not_marked(self, stub_child):
         state = make_state(
             current_room="Hall",
