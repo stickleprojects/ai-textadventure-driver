@@ -4,6 +4,7 @@ import pytest
 import networkx as nx
 
 from agent import (
+    _POSITION_LOST_MAX_ATTEMPTS,
     _compute_utility,
     _detect_loop,
     _is_death,
@@ -1337,12 +1338,46 @@ class TestPositionLost:
             process_agent_step(state, child, None)
         assert state.get("position_lost") is True
 
-    def test_position_lost_cleared_and_look_returned(self):
+    def test_position_lost_returns_look_and_stays_set(self):
         state = make_state()
         state["position_lost"] = True
         action, reason = determine_next_action(state)
         assert action == "look"
+        # P007: previously cleared unconditionally after one look, so a look that
+        # itself failed to yield a room left the agent blind with no further
+        # re-establishing look. Now it stays set until a room is actually resolved.
+        assert state.get("position_lost") is True
+
+    def test_position_lost_persists_across_repeated_unresolved_looks(self):
+        state = make_state()
+        state["position_lost"] = True
+        for _ in range(_POSITION_LOST_MAX_ATTEMPTS):
+            action, _ = determine_next_action(state)
+            assert action == "look"
+        assert state.get("position_lost") is True
+
+    def test_position_lost_gives_up_after_max_attempts(self):
+        # uninspected_objects gives a distinctive fallthrough action so this
+        # doesn't coincidentally land on "look" via the unrelated final fallback.
+        state = make_state(uninspected_objects=["sword"])
+        state["position_lost"] = True
+        for _ in range(_POSITION_LOST_MAX_ATTEMPTS):
+            determine_next_action(state)
+        # One more attempt beyond the cap gives up rather than looking forever.
+        action, _ = determine_next_action(state)
+        assert action == "take sword"
         assert state.get("position_lost") is False
+        assert state.get("position_lost_attempts") == 0
+
+    def test_position_lost_cleared_once_room_resolved_after_repeated_looks(self, stub_child):
+        state = make_state(current_room="Forest")
+        state["position_lost"] = True
+        state["position_lost_attempts"] = 2
+        with patch("agent.execute_game_command", return_value="You are in a cedar glade."), \
+             patch("agent.extract_knowledge", return_value={"room": "cedar glade", "exits": []}):
+            process_agent_step(state, stub_child, None)
+        assert state.get("position_lost") is False
+        assert state.get("position_lost_attempts") == 0
 
     def test_position_not_lost_when_room_extracted(self):
         state = self._state_with_unknown_exit()
