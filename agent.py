@@ -4,9 +4,10 @@ from datetime import datetime
 
 import networkx as nx
 
+import parse_strategies
 from game_config import config
 from game_engine import execute_game_command
-from llm import extract_knowledge
+from llm import extract_knowledge  # noqa: F401 — kept as agent.extract_knowledge: parse_strategies.LLMJsonModeParseStrategy calls it via module-attribute lookup so tests patching "agent.extract_knowledge" still work
 
 _SCORE_RE = re.compile(r"you score\s+(\d+)\s+out of\s+(\d+)", re.IGNORECASE)
 _SCORE_INTERVAL = 20
@@ -530,8 +531,18 @@ def _compute_utility(action, response, snap_before, snap_after, insp_verb, effec
     return "informative"
 
 
-def process_agent_step(state, child, llm_instance):
-    """Executes one agent cycle: decide → act → extract → update state."""
+def process_agent_step(state, child, llm_instance, parse_strategy=None):
+    """Executes one agent cycle: decide → act → parse → apply → update state.
+
+    parse_strategy defaults to LLMJsonModeParseStrategy(llm_instance) — the
+    unchanged extract_knowledge-based behavior every existing caller relies
+    on. Pass a different parse_strategies.ParseStrategy (e.g. a
+    DeterministicParseStrategy) to swap out parsing without touching
+    determine_next_action or anything below.
+    """
+    if parse_strategy is None:
+        parse_strategy = parse_strategies.LLMJsonModeParseStrategy(llm_instance)
+
     previous_room = state["current_room"]
 
     # Capture inspection target before determine_next_action may change it
@@ -552,11 +563,19 @@ def process_agent_step(state, child, llm_instance):
 
     response = execute_game_command(child, action_taken)
 
-    # Record verb outcomes for non-take inspection verbs. "take" is handled
-    # after extraction below, since it needs added_to_inventory to tell a
-    # confirmed success apart from an unrecognized response (see bug: "That's
-    # too heavy." matched no failure pattern and was silently recorded as
-    # "succeeded" even though the item was never actually taken).
+    # Record verb outcomes for non-take inspection verbs directly from
+    # current_inspection's own target/sequence (works for any verb, not just
+    # config.candidate_verbs — current_inspection's sequence isn't guaranteed
+    # to be drawn from there, e.g. a caller-supplied custom sequence). "take"
+    # is handled after parsing below, since it needs added_to_inventory to
+    # tell a confirmed success apart from an unrecognized response (see bug:
+    # "That's too heavy." matched no failure pattern and was silently
+    # recorded as "succeeded" even though the item was never actually
+    # taken). apply_parse_result below does its own, independent verb-outcome
+    # recording keyed off config.candidate_verbs (needed by agent_tools.py's
+    # tool-calling path, which has no current_inspection concept at all) —
+    # redundant with this block whenever the two derivations agree, but never
+    # conflicting, since both read the same response text.
     if insp_verb and effective_target and insp_verb != "take":
         if _is_soft_failure(response):
             # Valid verb, blocked by current game state — retry later
@@ -567,9 +586,9 @@ def process_agent_step(state, child, llm_instance):
         else:
             _record_verb_outcome(state, effective_target, insp_verb, "succeeded")
 
-    extracted = extract_knowledge(response, action_taken, llm_instance)
-    token_usage = extracted.pop("_usage", {"input_tokens": 0, "output_tokens": 0})
-    llm_trace = extracted.pop("_trace", None)
+    result = parse_strategy.parse(response, action_taken)
+    token_usage = result.pop("_usage", {"input_tokens": 0, "output_tokens": 0})
+    llm_trace = result.pop("_trace", None)
 
     unrecognized_failure = None
     if insp_verb == "take" and effective_target:
@@ -585,11 +604,15 @@ def process_agent_step(state, child, llm_instance):
             _record_verb_outcome(state, effective_target, "take", "invalid")
             take_failed = True
         else:
-            taken = {i.lower() for i in extracted.get("added_to_inventory", [])}
+            taken = {i.lower() for i in result.get("added_to_inventory", [])}
+            taken |= {
+                c["item"].lower() for c in result.get("inventory_changes", [])
+                if c.get("change") == "gained" and c.get("item")
+            }
             if effective_target.lower() in taken:
                 _record_verb_outcome(state, effective_target, "take", "succeeded")
             else:
-                # Neither a known failure pattern nor confirmed by extraction as
+                # Neither a known failure pattern nor confirmed by parsing as
                 # actually taken — don't guess. Verify via INVENTORY (see
                 # "Handling uncertainty" in docs/agent_behavior_spec.md) instead
                 # of assuming success, and surface the raw response so a new
@@ -610,181 +633,26 @@ def process_agent_step(state, child, llm_instance):
             state["current_inspection"]["target"] = None
             state["current_inspection"]["step_index"] = 0
 
-    # Deliberately doesn't try to determine who the "victim" is (the game can
-    # narrate the player in third person, not just "you") — instead, any item
-    # a theft pattern matches is removed from inventory only if we actually
-    # hold it, using our own state as ground truth rather than parsing prose.
-    for pattern in config.theft_patterns:
-        for m in pattern.finditer(response):
-            stolen = (m.groupdict().get("item") or "").strip().rstrip(".")
-            if stolen:
-                state["inventory"] = [item for item in state["inventory"]
-                                       if item.lower() != stolen.lower()]
-
-    # req 23: LLM-extracted NPC inventory transfers. Complements theft_patterns
-    # above rather than replacing it — theft_patterns catches known fixed
-    # phrasings reliably, this catches the author-written variety theft_patterns
-    # will never enumerate (and is the only mechanism for the gift direction,
-    # which has no regex equivalent). Removing an already-removed item is a
-    # harmless no-op, so overlap between the two is not a concern.
-    for gift in extracted.get("received_from_npc", []):
-        item = (gift.get("item") or "").strip() if isinstance(gift, dict) else None
-        if item and item not in state["inventory"]:
-            state["inventory"].append(item)
-            entity = state["known_entities"].get(item)
-            if entity is None:
-                state["known_entities"][item] = {"status": "held", "location": None, "verb_outcomes": {}}
-            else:
-                entity["status"] = "held"
-
-    for theft in extracted.get("taken_by_npc", []):
-        item = (theft.get("item") or "").strip() if isinstance(theft, dict) else None
-        if item:
-            state["inventory"] = [i for i in state["inventory"] if i.lower() != item.lower()]
-
-    # Exits are filtered (and, via _resolve_room_name below, used to disambiguate
-    # rooms that share a display name but not exits — bug 45) before room resolution,
-    # so both use the same filtered set rather than resolving on stale/raw exits.
-    exits = None
-    if "exits" in extracted:
-        resp_lower = response.lower()
-        # The LLM infers "up"/"down" from "Exits lead in all directions" even when those
-        # exits don't exist. Only trust them when literally present in the response text.
-        exits = [e for e in extracted["exits"] if e not in ("up", "down") or e in resp_lower]
-        extracted["exits"] = exits
-
-    room_unresolved = False
-    if extracted.get("room"):
-        state["current_room"] = _resolve_room_name(state["world_graph"], extracted["room"], exits)
-        extracted["room"] = state["current_room"]
-        state.setdefault("visited_rooms", set()).add(state["current_room"])
-        state["position_lost"] = False
-        state["position_lost_attempts"] = 0
-    elif action_taken in _DIRECTIONS and not _is_hard_failure(response) and not _is_soft_failure(response):
-        # Movement appeared to succeed but LLM returned no room — position is unknown.
-        # Force a look on the next step to re-establish where we are. Any exits
-        # reported this same step (P008: e.g. a combat-interlude response that
-        # mentions exits but drops the room name) describe the room we just
-        # moved into, not the stale state["current_room"] — attributing them to
-        # the old room below would wire phantom Unknown exits onto it that don't
-        # exist there at all. Skip update_graph until the room is re-confirmed.
-        state["position_lost"] = True
-        room_unresolved = True
-
-    if exits is not None and not room_unresolved:
-        update_graph(state, state["current_room"], exits, previous_room, action_taken)
-
-    # If a goal action hard-failed, clear the active_goal / drop the anomaly
-    if _is_hard_failure(response):
-        parts = action_taken.split(" on ", 1)
-        if len(parts) == 2 and action_taken.startswith(("use ", "cast ")):
-            state["unresolved_anomalies"].pop(parts[1], None)
-        # go to / run to failure — game rejected the room name.  Drop both the
-        # active_goal and the anomaly that triggered it so it is not immediately
-        # re-queued.  With visited_rooms gating in _nav_command this should be
-        # rare; the anomaly will be re-detected if the LLM sees it again later.
-        if action_taken.startswith(("go to ", "run to ")):
-            if state["active_goal"]:
-                state["unresolved_anomalies"].pop(state["active_goal"].get("target", ""), None)
-            state["active_goal"] = None
-            # The game rejected this room name for its native nav command — remember
-            # that so future navigation to the same target falls back to graph-based
-            # step movement instead of repeating the same rejected command forever.
-            prefix = "go to " if action_taken.startswith("go to ") else "run to "
-            nav_target = action_taken[len(prefix):]
-            state.setdefault("nav_blacklist", set()).add(nav_target)
-
-    for npc in extracted.get("npcs", []):
-        if npc not in state["known_npcs"]:
-            state["known_npcs"][npc] = {"location": state["current_room"], "greeted": False}
-
-    if "objects" in extracted:
-        for obj in extracted["objects"]:
-            if obj in state["known_npcs"] or _is_creature(obj):
-                if obj not in state["known_npcs"]:
-                    state["known_npcs"][obj] = {"location": state["current_room"], "greeted": False}
-                continue
-            entity = state["known_entities"].get(obj)
-            # "take" invalid is a permanent, cross-run fact (e.g. scenery) — anything
-            # else about the object (inspected in a prior run, or even this run) must
-            # not block re-queueing "take", since inventory/uninspected_objects reset
-            # every run and possession is what we actually care about here.
-            permanently_untakeable = entity is not None and entity.get("verb_outcomes", {}).get("take") == "invalid"
-            already_pending_or_held = obj in state["uninspected_objects"] or obj in state["inventory"]
-            if not permanently_untakeable and not already_pending_or_held:
-                state["uninspected_objects"].append(obj)
-                if entity is None:
-                    state["known_entities"][obj] = {"status": "discovered", "location": state["current_room"]}
-                else:
-                    entity["location"] = state["current_room"]
-
-    if _is_hard_failure(response):
-        # Suppress LLM inventory hallucinations on failure responses so the log
-        # reflects what was actually applied to state.
-        extracted.pop("added_to_inventory", None)
-    else:
-        for item in extracted.get("added_to_inventory", []):
-            if item not in state["inventory"]:
-                state["inventory"].append(item)
-            if item in state["known_entities"]:
-                state["known_entities"][item]["status"] = "held"
-
-    for spell in extracted.get("learned_spells", []):
-        if spell not in state["spellbook"]:
-            state["spellbook"].append(spell)
-
-    for anomaly in extracted.get("anomalies", []):
-        target = anomaly.get("target")
-        if target and target not in state["unresolved_anomalies"]:
-            state["unresolved_anomalies"][target] = {
-                "room": state["current_room"],
-                "reason": anomaly.get("reason"),
-                "potential_solution": anomaly.get("potential_solution") or "",
-            }
-
-    # req 25: route blockages ("You are blocked by the drawbridge") reuse the
-    # anomaly mechanism rather than futile_edges — an obstacle may have a
-    # solution (an item/spell that resolves it via the same inventory/spellbook
-    # matching determine_next_action already does for anomalies), whereas
-    # futile_edges permanently gives up on a direction with no way back.
-    for block in extracted.get("blocked_by", []):
-        obstacle = (block.get("obstacle") or "").strip() if isinstance(block, dict) else None
-        if obstacle and obstacle not in state["unresolved_anomalies"]:
-            state["unresolved_anomalies"][obstacle] = {
-                "room": state["current_room"],
-                "reason": block.get("blocking") or "route blocked",
-                "potential_solution": "",
-            }
-
-    for resolved in extracted.get("resolved_anomalies", []):
-        state["unresolved_anomalies"].pop(resolved, None)
-
-    if action_taken == "score":
-        m = _SCORE_RE.search(response)
-        if m:
-            state["current_score"] = int(m.group(1))
-            state["max_score"] = int(m.group(2))
+    # Everything else extract_knowledge used to drive directly (theft/gifts,
+    # exit and room resolution with grounding, npcs/objects, inventory
+    # apply, spells, anomalies, blocked_by, score) now lives in
+    # parse_strategies.apply_parse_result, shared with agent_tools.py's
+    # tool-calling path — see that module's docstring for the full schema.
+    # Its own take/unrecognized_failure computation is redundant with the
+    # block above (same inputs, same answer) — the locally-computed
+    # unrecognized_failure above is authoritative for this path's log entry.
+    extracted, is_death, _ = parse_strategies.apply_parse_result(
+        state, result, action_taken, response, previous_room
+    )
 
     utility = _compute_utility(
         action_taken, response, snap_before, _snapshot_state(state),
         insp_verb, effective_target, pre_verb_outcomes,
     )
 
-    if _is_death(response):
+    if is_death:
         utility = "death"
         state["recheck_inventory"] = True
-
-    if action_taken == "inventory" and state.get("recheck_inventory"):
-        parsed = _parse_inventory_response(response)
-        if parsed is not None:
-            for item in state["inventory"]:
-                if item in state["known_entities"]:
-                    state["known_entities"][item]["status"] = "discovered"
-            state["inventory"] = parsed
-            for item in parsed:
-                if item in state["known_entities"]:
-                    state["known_entities"][item]["status"] = "held"
-        state["recheck_inventory"] = False
 
     if utility == "futile" and action_taken in _DIRECTIONS:
         _mark_edge_futile(state, previous_room, action_taken)

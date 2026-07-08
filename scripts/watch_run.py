@@ -32,9 +32,10 @@ load_env_file()  # populate os.environ from .env before any os.environ.get calls
 
 from game_config import config
 from agent import process_agent_step
-from agent_tools import run_tool_calling_step, finalize_pending_step
+from agent_tools import run_tool_calling_step
 from game_engine import start_level9
 from llm import load_llm, load_anthropic_tool_llm, load_openai_tool_llm
+from parse_strategies import DeterministicParseStrategy, LLMJsonModeParseStrategy, LLMToolCallParseStrategy
 from run_evaluator import classify_run, compute_playthrough_metrics, load_strategy, merge_run_record
 from ui import save_graph_image
 
@@ -74,6 +75,14 @@ LLM_MODEL = os.environ.get("LLM_MODEL", "deepseek-chat")
 LLM_API_KEY = os.environ.get("LLM_API_KEY", "")
 LLM_BASE_URL = os.environ.get("LLM_BASE_URL", "")   # leave blank to use provider default
 LLM_JSON_MODE = os.environ.get("LLM_JSON_MODE", "1") != "0"  # default on for cloud
+
+# Orthogonal to LLM_PROVIDER: which strategy turns raw game text into
+# structured data (feature 62). "llm" (default) keeps today's behavior —
+# extract_knowledge JSON-mode for local, a parse_game_response tool call for
+# everything else. "deterministic" swaps in DeterministicParseStrategy
+# (configs/*.json-driven, no LLM call) — paired with LLM_PROVIDER=local this
+# is a fully LLM-free agent (zero API calls).
+PARSE_STRATEGY = os.environ.get("PARSE_STRATEGY", "llm")
 
 
 def make_initial_state(strategy_path=STRATEGY_PATH):
@@ -171,35 +180,49 @@ def run(steps=50, verbose=False):
 
     run_id = f"watch_{datetime.now().strftime('%Y%m%d_%H%M%S')}"
 
-    # LLM_PROVIDER=="local" keeps the legacy determine_next_action +
-    # extract_knowledge path unchanged (llama.cpp tool-calling support is
-    # inconsistent — see "Scope" in docs/main_loop_prompt.md). Every other
-    # provider gets the new tool-calling main loop (docs/agent_tools_spec.md):
-    # "anthropic" uses the native Messages API, anything else is treated as an
-    # OpenAI-compatible endpoint with function calling (DeepSeek, OpenAI, ...).
+    # LLM_PROVIDER=="local" keeps the legacy determine_next_action path
+    # (llama.cpp tool-calling support is inconsistent — see "Scope" in
+    # docs/main_loop_prompt.md). Every other provider gets the tool-calling
+    # main loop (docs/agent_tools_spec.md): "anthropic" uses the native
+    # Messages API, anything else is treated as an OpenAI-compatible endpoint
+    # with function calling (DeepSeek, OpenAI, ...). PARSE_STRATEGY (feature
+    # 62) is orthogonal to this — it only picks how a response gets turned
+    # into structured data, not who decides the next command.
     if LLM_PROVIDER == "local":
-        llm = load_llm(MODEL_PATH)
+        if PARSE_STRATEGY == "deterministic":
+            # No LLM needed at all: determine_next_action doesn't use one,
+            # and DeterministicParseStrategy doesn't either — a free,
+            # zero-API-call baseline.
+            llm = None
+            parse_strategy = DeterministicParseStrategy()
+        else:
+            llm = load_llm(MODEL_PATH)
+            parse_strategy = LLMJsonModeParseStrategy(llm)
 
         def step_fn(step_num):
-            process_agent_step(state, child, llm)
+            process_agent_step(state, child, llm, parse_strategy=parse_strategy)
     else:
         if LLM_PROVIDER == "anthropic":
             llm = load_anthropic_tool_llm(LLM_MODEL, LLM_API_KEY)
         else:
             llm = load_openai_tool_llm(LLM_PROVIDER, LLM_MODEL, LLM_API_KEY, LLM_BASE_URL or None)
 
+        parse_strategy = DeterministicParseStrategy() if PARSE_STRATEGY == "deterministic" else LLMToolCallParseStrategy(llm)
+
         def step_fn(step_num):
-            run_tool_calling_step(state, child, llm, run_id, step_num, initial_text=initial_text)
+            run_tool_calling_step(state, child, llm, parse_strategy, run_id, step_num, initial_text=initial_text)
 
     if llm is None:
         if LLM_PROVIDER == "local":
-            # Local extraction is optional (determine_next_action doesn't need
-            # it) — extract_knowledge already degrades to {} gracefully.
-            if verbose:
+            # Local decide doesn't need an LLM at all (determine_next_action
+            # is pure Python) — only LLMJsonModeParseStrategy would have used
+            # it, and it already degrades to {} gracefully when absent.
+            if verbose and PARSE_STRATEGY != "deterministic":
                 print("WARNING: LLM not loaded — extraction will return {}.", file=sys.stderr)
         else:
             # The tool-calling path has no equivalent graceful degradation —
-            # the LLM *is* the decision logic, not just extraction.
+            # the LLM *is* the decision logic, not just extraction, regardless
+            # of PARSE_STRATEGY.
             message = "ERROR: LLM not loaded (missing dependency or provider unavailable) — cannot run."
             print(message, file=sys.stderr)
             if child.isalive():
@@ -207,6 +230,8 @@ def run(steps=50, verbose=False):
             return [{"step": 0, "type": "startup_error", "message": message}], None
     if verbose and LLM_PROVIDER != "local":
         print(f"Using cloud LLM: {LLM_PROVIDER} / {LLM_MODEL}", file=sys.stderr)
+    if verbose and PARSE_STRATEGY == "deterministic":
+        print("Using deterministic parse strategy (no LLM parse calls).", file=sys.stderr)
 
     if verbose:
         print(f"Run ID: {run_id}", file=sys.stderr)
@@ -217,19 +242,9 @@ def run(steps=50, verbose=False):
 
     try:
         for i in range(steps):
-            log_len_before = len(state["game_log"])
             step_start = time.monotonic()
             step_fn(i + 1)
             step_times.append(time.monotonic() - step_start)
-
-            if len(state["game_log"]) == log_len_before:
-                # Tool-calling path only (agent_tools.py): parse_game_response
-                # ran on the boot text but there's no prior action to log yet
-                # — finalization always lags one call behind execution (see
-                # agent_tools.py's module docstring). The action just decided
-                # gets logged on the NEXT iteration, or by finalize_pending_step
-                # at run end for the very last one. Nothing to report yet.
-                continue
 
             last = state["game_log"][-1]
             step_num = len(state["game_log"])
@@ -303,11 +318,6 @@ def run(steps=50, verbose=False):
         })
         print(f"CRASH at step {len(state['game_log'])}: {exc}\n{tb}", file=sys.stderr)
     finally:
-        # Tool-calling path only: flush the last executed action's log entry
-        # (its parse_game_response would otherwise never run — see
-        # agent_tools.py's module docstring). No-op for the legacy path,
-        # which never sets state["_pending_step"].
-        finalize_pending_step(state)
         if child.isalive():
             child.close()
         steps_run = len(state["game_log"])

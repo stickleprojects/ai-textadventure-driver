@@ -45,13 +45,11 @@ stays exactly what it was:
         path, harmless if present regardless of which decide strategy is
         active.
 """
-from datetime import datetime
 from pathlib import Path
 import json
 
 import agent
 from game_config import config
-from llm import extract_knowledge
 
 _ORCHESTRATOR_DIR = Path("runs") / "orchestrator"
 
@@ -123,13 +121,18 @@ class ParseStrategy:
 
 class LLMJsonModeParseStrategy(ParseStrategy):
     """Wraps llm.extract_knowledge unchanged — the legacy path's default,
-    exact same prompt/behavior as before this module existed."""
+    exact same prompt/behavior as before this module existed.
+
+    Calls through agent.extract_knowledge (module-attribute lookup, not a
+    direct import) rather than importing extract_knowledge itself, so that
+    the many existing tests patching "agent.extract_knowledge" keep working
+    unchanged — agent.py imports the same name into its own namespace."""
 
     def __init__(self, llm_instance):
         self._llm_instance = llm_instance
 
     def parse(self, response_text, action_taken):
-        return extract_knowledge(response_text, action_taken, self._llm_instance)
+        return agent.extract_knowledge(response_text, action_taken, self._llm_instance)
 
 
 _PARSE_SYSTEM_PROMPT = (
@@ -499,7 +502,6 @@ def apply_parse_result(state, result, action_taken, response_text, previous_room
         "exits": exits or [],
         "objects": objects,
         "npcs": npcs,
-        "added_to_inventory": gained_items,
         "learned_spells": result.get("learned_spells", []),
         "anomalies": result.get("anomalies", []),
         "resolved_anomalies": result.get("resolved_anomalies", []),
@@ -508,4 +510,11 @@ def apply_parse_result(state, result, action_taken, response_text, previous_room
         "blocked_by": result.get("blocked_by", []),
         "notable_events": result.get("notable_events", []),
     }
+    # Bug 35/75: on a hard failure, omit the key entirely rather than set it
+    # to an empty list — matches the pre-refactor legacy log shape exactly
+    # (extract_knowledge's dict had the key popped, not zeroed), which
+    # existing consumers/tests treat as "nothing to report" either way but
+    # assert on via strict `not in` checks in a few places.
+    if gained_items or not agent._is_hard_failure(response_text):
+        extracted["added_to_inventory"] = gained_items
     return extracted, is_death, unrecognized_failure

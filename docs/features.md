@@ -23,4 +23,4 @@ Enhancements, new functionality, tooling, and infrastructure improvements.
 | 59 | [59.md](features/59.md) | Split agent/state code into reusable library vs. Knight-Orc-bespoke layers, add spec-driven tests | 🔲 Open |
 | 60 | [60.md](features/60.md) | Code-quality review step in `--spec-target` | 🔲 Open |
 | 61 | [61.md](features/61.md) | Wire the Streamlit UI into the tool-calling main loop, and surface its decision detail | 🔲 Open |
-| 62 | [62.md](features/62.md) | Pluggable game-response parsing (`ParseStrategy`), decoupled from deciding | 🔲 Open |
+| 62 | [62.md](features/62.md) | Pluggable game-response parsing (`ParseStrategy`), decoupled from deciding | ✅ Fixed |
