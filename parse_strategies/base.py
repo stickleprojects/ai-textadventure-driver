@@ -1,12 +1,10 @@
-"""Pluggable game-response parsing, decoupled from deciding.
+"""ParseStrategy interface and the shared state-mutation function every
+strategy's output is applied through.
 
-A ParseStrategy's only job is turning raw game text into structured data —
-it never chooses the next command (that's agent.py::determine_next_action
-or agent_tools.py's tool-calling decide loop, both unchanged by this
-module). apply_parse_result() is the single, shared function both the
-legacy and tool-calling paths use to turn a ParseStrategy's output into
-state mutations — previously duplicated (agent.py's process_agent_step
-steps 6-24, and agent_tools.py::_apply_parse_game_response, maintained
+apply_parse_result() is the single, shared function both the legacy and
+tool-calling decide paths use to turn a ParseStrategy's output into state
+mutations — previously duplicated (agent.py's process_agent_step steps
+6-24, and agent_tools.py::_apply_parse_game_response, maintained
 separately, with the same bug fixed twice at different times: bug 35 then
 bug 75).
 
@@ -113,149 +111,10 @@ def _classify_action_result(action_result, response_text):
 
 class ParseStrategy:
     """Interface: turn raw game text into a ParseResult dict. No side effects,
-    no decision-making — see module docstring for the ParseResult schema."""
+    no decision-making — see this module's docstring for the ParseResult schema."""
 
     def parse(self, response_text, action_taken):
         raise NotImplementedError
-
-
-class LLMJsonModeParseStrategy(ParseStrategy):
-    """Wraps llm.extract_knowledge unchanged — the legacy path's default,
-    exact same prompt/behavior as before this module existed.
-
-    Calls through agent.extract_knowledge (module-attribute lookup, not a
-    direct import) rather than importing extract_knowledge itself, so that
-    the many existing tests patching "agent.extract_knowledge" keep working
-    unchanged — agent.py imports the same name into its own namespace."""
-
-    def __init__(self, llm_instance):
-        self._llm_instance = llm_instance
-
-    def parse(self, response_text, action_taken):
-        return agent.extract_knowledge(response_text, action_taken, self._llm_instance)
-
-
-_PARSE_SYSTEM_PROMPT = (
-    "Extract structured information from a text adventure game's response. "
-    "Call parse_game_response with what actually happened — see the tool's "
-    "schema for what each field means and how strictly it's checked."
-)
-
-PARSE_TOOL_SCHEMA = {
-    "name": "parse_game_response",
-    "description": "Parse what happened in the game response you were just shown.",
-    "input_schema": {
-        "type": "object",
-        "properties": {
-            "action_result": {
-                "type": "object",
-                "properties": {
-                    "succeeded": {"type": "boolean"},
-                    "reason_if_failed": {"type": ["string", "null"]},
-                },
-                "required": ["succeeded"],
-            },
-            "room_quote": {
-                "type": ["string", "null"],
-                "description": (
-                    "A VERBATIM substring of the response naming the location — copy it exactly, "
-                    "don't summarize or paraphrase it. Use null if the response is terse, "
-                    "describes an object/action without naming a place, or you'd have to infer "
-                    "or guess the location rather than read it directly. Bug 74: a model once "
-                    "reported a specific, plausible-sounding room for a response that only said "
-                    "\"You own nothing at all!\" — nothing it wrote was actually in the text. A "
-                    "value here that isn't a literal substring of the response is discarded."
-                ),
-            },
-            "exits": {
-                "type": "array",
-                "items": {"type": "string"},
-                "description": "Only directions literally mentioned in the response — not inferred from \"exits lead in all directions\" or similar.",
-            },
-            "objects": {
-                "type": "array",
-                "items": {"type": "string"},
-                "description": "Inanimate items visible — only ones actually named in the response, not ones you'd plausibly expect to be there.",
-            },
-            "npcs": {
-                "type": "array",
-                "items": {"type": "string"},
-                "description": "Living creatures/characters visible — only ones actually named in the response.",
-            },
-            "inventory_changes": {
-                "type": "array",
-                "items": {
-                    "type": "object",
-                    "properties": {
-                        "item": {"type": "string"},
-                        "change": {"type": "string", "enum": ["gained", "lost"]},
-                        "cause": {"type": "string"},
-                    },
-                    "required": ["item", "change"],
-                },
-            },
-            "notable_events": {
-                "type": "array",
-                "items": {"type": "string"},
-                "description": "Anything else worth remembering, in plain language",
-            },
-        },
-        "required": ["action_result"],
-    },
-}
-
-
-class LLMToolCallParseStrategy(ParseStrategy):
-    """For tool-calling-capable backends (Anthropic/OpenAI adapters, see
-    llm.py). A single tool-call episode — parse_game_response is the only
-    schema registered, so the forced tool_choice both adapters already set
-    (llm.py) guarantees exactly one call, no dispatch loop needed."""
-
-    def __init__(self, tool_adapter):
-        self._tool_adapter = tool_adapter
-
-    def parse(self, response_text, action_taken):
-        user_message = f'Action taken: "{action_taken}"\nGame response: "{response_text}"'
-        step_response = self._tool_adapter.start_turn(_PARSE_SYSTEM_PROMPT, [PARSE_TOOL_SCHEMA], user_message)
-        tool_calls = step_response.get("tool_calls", [])
-        result = dict(tool_calls[0]["input"]) if tool_calls else {}
-        usage = step_response.get("usage", {})
-        result["_usage"] = {
-            "input_tokens": usage.get("prompt_tokens", 0),
-            "output_tokens": usage.get("completion_tokens", 0),
-        }
-        return result
-
-
-class DeterministicParseStrategy(ParseStrategy):
-    """Skeleton, not an implementation — fill in parse() with regex/pattern
-    logic, game-config-driven rather than hardcoded (matching how every
-    other Knight-Orc-specific pattern in this codebase already lives in
-    configs/*.json, loaded via game_config.config, not in Python).
-
-    Starting points already available to reuse rather than reinvent:
-    - config.hard_failure_pattern / config.soft_failure_pattern — for
-      action_result. These already have the exact phrasings this game
-      uses for "that failed" (see configs/knight_orc.json).
-    - A new config-driven room-name pattern would go the same place,
-      e.g. something matching "You are in/at X." — add it to
-      game_config.py/configs/knight_orc.json/schemas/game_config.schema.json
-      the same way hard_failure_patterns already works, not as a Python
-      constant here.
-    - "Exits: X, Y" / "Exits lead X" phrasings for exits.
-    - "You can see X" / "you notice X" phrasings for objects.
-
-    Return any subset of the ParseResult fields documented in this
-    module's docstring — apply_parse_result() treats every field as
-    optional, exactly like every other strategy here.
-    """
-
-    def parse(self, response_text, action_taken):
-        raise NotImplementedError(
-            "Write your parsing logic here — see the class docstring for where "
-            "to start. Return a dict using any subset of the ParseResult fields "
-            "documented at the top of parse_strategies.py."
-        )
 
 
 def apply_parse_result(state, result, action_taken, response_text, previous_room):
