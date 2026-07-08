@@ -5,7 +5,7 @@ Full fix plan detail (root cause, acceptance criteria, source runs) lives in the
 
 | Plan | Title | Type | Severity | Status |
 |------|-------|------|----------|--------|
-| [P010](plans/P010.json) | Stable exits never listed → agent re-tries only known edges (missing-exit extraction) | exit_not_tried | medium | open |
+| [P010](plans/P010.json) | Stable exits never listed → agent re-tries only known edges (missing-exit extraction) | exit_not_tried | medium | fixed |
 | [P001](plans/P001.json) | Redundant post-take inspection verbs | redundant_object_inspection | low | deferred |
 | [P009](plans/P009.json) | Verb sequence runs redundant inspection verbs after first non-informative response | redundant_object_interaction | low | deferred |
 | [P004](plans/P004.json) | Two-room oscillation loop | repetitive_oscillation | high | fixed |

@@ -4,6 +4,18 @@ Running notes on findings, decisions, and things that surprised us during develo
 
 ---
 
+## 2026-07-08
+
+### P010 was P008 wearing a different anomaly-type label
+
+P010 hypothesised that `extract_knowledge` under-reports the dingy stable's exits — only `down`/`out` ever get wired as edges, so cardinal directions and `in` never become candidates and the agent re-cycles the two it knows. Re-reading the source run against the raw extraction disproved this: both times the stable was actually `look`ed at (steps 0 and 14 of `watch_20260707_133153`), `extract_knowledge` returned exactly `['east']` — its one real exit, correctly and completely. The `down`/`out` the agent kept retrying at steps 15–23 were never extracted from the stable at all; they were the phantom edges from the P008 bug (exits reported without a room getting wired onto the stale `current_room` instead of the room just entered), already identified and fixed under a different anomaly label in the 2026-07-07 P008 entry above.
+
+Confirmed rather than just inferred: ran a fresh 40-step watch (`watch_20260708_135628`) against the post-P008 code. Step 0 still extracts `['east']` for the stable (extraction was never the problem), but step 1's `east` move this time resolved a room directly, and the final `world_graph` shows the stable with only `east` edges — no `down`/`out`, no retry streak. Closed P010 as `fixed`, `fixed_in` pointing at PR #82, with no changes to `llm.py` or `configs/knight_orc.json` (the layer P010 targeted was never broken).
+
+Lesson, same shape as the P005/P006 entry: an anomaly's root-cause hypothesis is a starting point, not a diagnosis. Here the hint was in the fix note we'd already written for P008 — "very likely the true explanation for P010 ... worth re-checking after this fix lands" — worth treating a fix's own side-effect notes as a checklist for the rest of the open backlog before writing new code against it.
+
+---
+
 ## 2026-07-07
 
 ### A "productive" navigation loop can still be a loop (P004)
