@@ -221,20 +221,33 @@ def _unrecognized_failure_responses(game_log):
     ]
 
 
-def detect_anomalies(game_log, run_record, strategy):
-    """Return the anomaly list (with ids assigned) for the anomaly_report/v1 contract."""
+def detect_anomalies(game_log, run_record, strategy, extra_findings=None):
+    """Return the anomaly list (with ids assigned) for the anomaly_report/v1 contract.
+
+    extra_findings — pre-built findings from outside the deterministic
+    detectors above (e.g. agent_tools.py's request_capability/
+    tool_loop_exhausted, read from runs/orchestrator/<run_id>/
+    capability_requests.json by detect_anomalies.py's detect()). Already
+    shaped as {"type","severity","step_range","summary"}; appended before id
+    assignment so they get real a<N> ids like any other anomaly, and an
+    "evidence" stub if missing (same default llm_review.py's own findings
+    get) so any future consumer that assumes the key exists doesn't break.
+    """
     anomalies = _from_log_analyzer(game_log)
     anomalies += _utility_streaks(game_log, "futile")
     anomalies += _utility_streaks(game_log, "redundant")
     anomalies += _productive_thrash(game_log)
     anomalies += _regression(run_record, strategy)
     anomalies += _unrecognized_failure_responses(game_log)
+    for finding in (extra_findings or []):
+        finding.setdefault("evidence", {"source": "agent_tools"})
+        anomalies.append(finding)
     for idx, anomaly in enumerate(anomalies, start=1):
         anomaly["id"] = f"a{idx}"
     return anomalies
 
 
-def build_report(run_id, log_path, run_record_path, game_log, run_record, strategy):
+def build_report(run_id, log_path, run_record_path, game_log, run_record, strategy, extra_findings=None):
     """Build the full anomaly_report/v1 dict, ready to json.dump()."""
     return {
         "schema": "anomaly_report/v1",
@@ -242,5 +255,5 @@ def build_report(run_id, log_path, run_record_path, game_log, run_record, strate
         "log_path": str(log_path),
         "run_record_path": str(run_record_path),
         "outcome": run_record.get("outcome"),
-        "anomalies": detect_anomalies(game_log, run_record, strategy),
+        "anomalies": detect_anomalies(game_log, run_record, strategy, extra_findings=extra_findings),
     }

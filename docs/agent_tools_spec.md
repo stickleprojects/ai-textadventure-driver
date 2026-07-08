@@ -44,7 +44,7 @@ A step's tool calls follow a fixed shape:
    do next from a response you haven't read.
 2. **Any number of other non-terminal tools, in any order**, up to a cap
    (default 6 calls) — `query_map`, `query_entity_history`,
-   `request_capability`, as needed.
+   `request_capability`, `write_journal`, `search_journal`, as needed.
 3. **`execute_game_command`, exactly once.** Ends the step.
 
 If the cap in step 2 is reached without the agent calling
@@ -82,6 +82,8 @@ host-injected and needs no further model call.
 | `query_map` | No | Anytime after parsing |
 | `query_entity_history` | No | Anytime after parsing |
 | `request_capability` | No | Anytime after parsing |
+| `write_journal` | No | Anytime after parsing |
+| `search_journal` | No | Anytime after parsing |
 | `execute_game_command` | Yes — ends the step | Last, every step |
 
 ## Tools
@@ -98,7 +100,7 @@ input: {
     "succeeded": "boolean",
     "reason_if_failed": "string | null — short reason, e.g. \"too heavy\", \"you can't go that way\""
   },
-  "room": "string | null — only if explicitly named",
+  "room": "string | null — only if the response explicitly names a location; null (never a placeholder word or your own summary of what happened) if terse, object/action-only, or inferred rather than read",
   "exits": ["string"],
   "objects": ["string — inanimate items visible"],
   "npcs": ["string — living creatures/characters visible"],
@@ -119,20 +121,27 @@ whether that's permanent or state-dependent — that boundary has been
 deterministic and config-driven since requirement 18, and stays that way.
 
 `notable_events` deliberately has no further structure and isn't persisted
-beyond ambient recent-turn context — what used to be separate
+by the host beyond ambient recent-turn context — what used to be separate
 `anomalies`/`resolved_anomalies`/`blocked_by`/`learned_spells` fields fold
 in here as plain sentences. The agent reasons about them itself on a later
-turn, the same way it reasons about anything else it remembers; if a given
-run shows something written here needs to survive longer than ambient
-context allows, that's exactly what `request_capability` is for — see
-"Recognizing the limits of what you can track" in the behavior spec.
+turn, the same way it reasons about anything else it remembers; if
+something here is worth keeping past this turn, `write_journal` is the
+tool for that (see below) — `notable_events` is what happened,
+`write_journal` is what's worth not forgetting.
 
 ### `execute_game_command`
 Send a command to the game. Always terminal, always last.
 ```
-input:  { "command": "string — the raw command to send" }
+input: {
+  "command": "string — the raw command to send",
+  "reason": "string | null — why this command was chosen, for logs/debugging"
+}
 output: { "response": "string — raw game output" }
 ```
+`reason` doesn't affect game behavior or state — it exists purely so run
+logs stay as readable as they are today (the host's step log already has
+a human-readable `reason` field on every entry; this keeps that intact on
+the tool-calling path instead of losing it).
 
 ### `query_map`
 Look up what's known about a room without holding the whole map in
@@ -182,6 +191,41 @@ the gap. How a given host application routes these findings (a backlog, an
 existing anomaly pipeline, a human inbox) is host-specific and belongs in
 that application's own docs, not here — see `docs/main_loop_prompt.md` for
 how this project wires it up.
+
+### `write_journal`
+Non-terminal. A notepad for clues and information worth remembering longer
+than ambient context lasts — the built-in answer to "Recognizing the
+limits of what you can track", rather than always waiting on
+`request_capability` to ask for one. Write a note whenever you notice
+something that might matter later but isn't immediately actionable: an
+obstacle and what it seems to need, an object seen somewhere you're not
+ready to deal with yet, anything a `notable_events` entry from
+`parse_game_response` flagged that feels worth keeping past this turn.
+```
+input:  { "note": "string — what you observed, worth remembering" }
+output: { "acknowledged": true }
+```
+The host stamps each note with the room and step it was written in — you
+don't need to restate where you are; `search_journal` surfaces that
+automatically.
+
+### `search_journal`
+Non-terminal. Look up notes written earlier — e.g. after picking up a key,
+search for what might need one, rather than relying on remembering a
+locked door from many turns ago.
+```
+input:  { "query": "string — what you're looking for" }
+output: {
+  "matches": [{"note": "string", "room": "string", "step": "integer"}]
+}
+```
+Matching is a plain keyword search over note text, not semantic — write
+notes with the words you'd plausibly search for later (e.g. "the door in
+the dungeon corridor is locked, looks like it needs a key" rather than
+just "locked door"), and search with the words that matter ("key"), not
+full sentences. The journal is per-run (like `uninspected_objects` and
+`current_inspection`, not persisted cross-run like `known_entities` or the
+world graph) — it's a notepad for this journey, not a permanent record.
 
 ## Adding a tool later
 

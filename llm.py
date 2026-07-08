@@ -17,6 +17,12 @@ try:
 except ImportError:
     OPENAI_AVAILABLE = False
 
+try:
+    import anthropic
+    ANTHROPIC_AVAILABLE = True
+except ImportError:
+    ANTHROPIC_AVAILABLE = False
+
 
 # ---------------------------------------------------------------------------
 # Prompt — split into a static system part (cacheable by cloud providers) and
@@ -160,6 +166,152 @@ class CloudLLMAdapter:
 
 
 # ---------------------------------------------------------------------------
+# Tool-calling adapters — used by agent_tools.py's tool-calling main loop
+# (cloud/tool-use-capable providers only; see docs/main_loop_prompt.md).
+# Unlike LocalLLMAdapter/CloudLLMAdapter's one-shot __call__, these run a
+# multi-turn tool-use episode and normalize both backends' wire formats into
+# the same shape:
+#   start_turn(system_prompt, tools, user_message) -> StepResponse
+#   continue_with_results(tool_results) -> StepResponse
+#   StepResponse = {"tool_calls": [{"id","name","input"}], "text": str|None,
+#                    "usage": {"prompt_tokens": N, "completion_tokens": N}}
+# `tools` is the canonical, backend-neutral schema list defined in
+# agent_tools.py::TOOL_SCHEMAS (name/description/input_schema — Anthropic's
+# native shape; each adapter translates for its own wire format).
+# One instance = one step's conversation — a fresh instance per step, no
+# history carried across steps (see "small ambient context each turn" in
+# docs/main_loop_prompt.md).
+# ---------------------------------------------------------------------------
+
+class AnthropicToolAdapter:
+    """Wraps anthropic.Anthropic's Messages API for one step's tool-use episode."""
+
+    _MAX_TOKENS = 1024
+
+    def __init__(self, client, model):
+        self._client = client
+        self._model = model
+        self._system_prompt = None
+        self._tools = None
+        self._messages = []
+
+    def start_turn(self, system_prompt, tools, user_message):
+        self._system_prompt = system_prompt
+        self._tools = tools
+        self._messages = [{"role": "user", "content": user_message}]
+        return self._call()
+
+    def continue_with_results(self, tool_results):
+        self._messages.append({
+            "role": "user",
+            "content": [
+                {"type": "tool_result", "tool_use_id": r["id"], "content": r["content"]}
+                for r in tool_results
+            ],
+        })
+        return self._call()
+
+    def _call(self):
+        response = self._client.messages.create(
+            model=self._model,
+            max_tokens=self._MAX_TOKENS,
+            system=self._system_prompt,
+            tools=self._tools,
+            tool_choice={"type": "any"},
+            messages=self._messages,
+        )
+        self._messages.append({
+            "role": "assistant",
+            "content": [self._block_to_dict(b) for b in response.content],
+        })
+        tool_calls = [
+            {"id": b.id, "name": b.name, "input": b.input}
+            for b in response.content if b.type == "tool_use"
+        ]
+        text = next((b.text for b in response.content if b.type == "text"), None)
+        return {
+            "tool_calls": tool_calls,
+            "text": text,
+            "usage": {
+                "prompt_tokens": response.usage.input_tokens,
+                "completion_tokens": response.usage.output_tokens,
+            },
+        }
+
+    @staticmethod
+    def _block_to_dict(block):
+        if block.type == "tool_use":
+            return {"type": "tool_use", "id": block.id, "name": block.name, "input": block.input}
+        return {"type": "text", "text": block.text}
+
+
+class OpenAIToolAdapter:
+    """Wraps an OpenAI-compatible chat.completions client for one step's tool-use episode."""
+
+    _MAX_TOKENS = 1024
+
+    def __init__(self, client, model):
+        self._client = client
+        self._model = model
+        self._tools = None
+        self._messages = []
+
+    def start_turn(self, system_prompt, tools, user_message):
+        self._tools = [self._to_openai_tool(t) for t in tools]
+        self._messages = [
+            {"role": "system", "content": system_prompt},
+            {"role": "user", "content": user_message},
+        ]
+        return self._call()
+
+    def continue_with_results(self, tool_results):
+        for r in tool_results:
+            self._messages.append({
+                "role": "tool",
+                "tool_call_id": r["id"],
+                "content": r["content"],
+            })
+        return self._call()
+
+    def _call(self):
+        response = self._client.chat.completions.create(
+            model=self._model,
+            max_tokens=self._MAX_TOKENS,
+            messages=self._messages,
+            tools=self._tools,
+            tool_choice="required",
+        )
+        message = response.choices[0].message
+        self._messages.append(message.model_dump(exclude_none=True))
+        tool_calls = []
+        for tc in (message.tool_calls or []):
+            try:
+                args = json.loads(tc.function.arguments)
+            except json.JSONDecodeError:
+                args = {}
+            tool_calls.append({"id": tc.id, "name": tc.function.name, "input": args})
+        return {
+            "tool_calls": tool_calls,
+            "text": message.content,
+            "usage": {
+                "prompt_tokens": response.usage.prompt_tokens,
+                "completion_tokens": response.usage.completion_tokens,
+            },
+        }
+
+    @staticmethod
+    def _to_openai_tool(tool):
+        return {
+            "type": "function",
+            "function": {
+                "name": tool["name"],
+                "description": tool["description"],
+                "parameters": tool["input_schema"],
+            },
+        }
+
+
+# ---------------------------------------------------------------------------
 # Factory functions
 # ---------------------------------------------------------------------------
 
@@ -194,6 +346,35 @@ def load_cloud_llm(provider, model, api_key, base_url=None, json_mode=True):
         kwargs["base_url"] = resolved_url
     client = OpenAI(**kwargs)
     return CloudLLMAdapter(client, model, json_mode=json_mode)
+
+
+@st.cache_resource
+def load_anthropic_tool_llm(model, api_key):
+    """Load an AnthropicToolAdapter for the tool-calling main loop. Returns None if unavailable."""
+    if not ANTHROPIC_AVAILABLE:
+        return None
+    return AnthropicToolAdapter(anthropic.Anthropic(api_key=api_key), model)
+
+
+@st.cache_resource
+def load_openai_tool_llm(provider, model, api_key, base_url=None):
+    """Load an OpenAIToolAdapter for the tool-calling main loop (DeepSeek, OpenAI, etc.).
+
+    provider  — label only; selects sensible defaults (same map as load_cloud_llm)
+    model     — model ID (e.g. "deepseek-chat", "gpt-4o-mini")
+    api_key   — provider API key
+    base_url  — override endpoint; defaults: deepseek→api.deepseek.com, openai→default
+    """
+    if not OPENAI_AVAILABLE:
+        return None
+    _DEFAULT_URLS = {
+        "deepseek": "https://api.deepseek.com",
+    }
+    resolved_url = base_url or _DEFAULT_URLS.get(provider)
+    kwargs = {"api_key": api_key}
+    if resolved_url:
+        kwargs["base_url"] = resolved_url
+    return OpenAIToolAdapter(OpenAI(**kwargs), model)
 
 
 # ---------------------------------------------------------------------------

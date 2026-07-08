@@ -41,10 +41,11 @@ consistent, but isn't blocking now.
 ## Tools
 
 The tool surface (`execute_game_command`, `query_map`,
-`query_entity_history`, `request_capability`) is specified in
-`docs/agent_tools_spec.md`, not here — those contracts are generic to any
-text-adventure agent built on this codebase, not specific to Knight Orc, so
-they live separately and this document just uses them.
+`query_entity_history`, `request_capability`, `write_journal`,
+`search_journal`) is specified in `docs/agent_tools_spec.md`, not here —
+those contracts are generic to any text-adventure agent built on this
+codebase, not specific to Knight Orc, so they live separately and this
+document just uses them.
 
 Two things worth calling out about how *this project* uses that generic
 surface:
@@ -97,21 +98,33 @@ Every turn follows the same shape:
 1. Call parse_game_response first, always — capture what actually happened
    in that response before doing anything else. You can't reason about
    what to do next from a response you haven't read yet.
-2. Then, if you need to — call query_map, query_entity_history, and/or
-   request_capability, in any order, as many times as genuinely useful.
-   Use them instead of guessing from memory:
+2. Then, if you need to — call query_map, query_entity_history,
+   write_journal, search_journal, and/or request_capability, in any
+   order, as many times as genuinely useful. Use them instead of guessing
+   from memory:
    - query_map — check a room's exits before assuming you already know
      them
    - query_entity_history — before trying a specific verb on an object
      you're not sure about, check whether you already tried it and what
      happened. If nothing relevant has changed since (see "Avoiding
      wasted repetition" below), don't repeat it — move on.
+   - write_journal — noticed something worth remembering later (an
+     obstacle and what it needs, something you're not ready to deal with
+     yet)? Write it down rather than hoping you'll still remember it in
+     50 turns.
+   - search_journal — whenever you gain something new (an item, a spell,
+     a piece of information), check whether it resolves an obstacle
+     you've already noted, before you just add it to your inventory and
+     move on — see "Obstacles that need something you don't have yet"
+     below. Also useful anytime you want a lead on something (e.g. you're
+     holding a key and wondering what it's for).
    - request_capability — if you find yourself wanting to track something
      you can't reliably track right now, say so instead of guessing or
      redoing work to "check" (see "Recognizing the limits of what you can
      track" below)
-3. Finally, call execute_game_command with exactly one command. This ends
-   your turn — you get to see its response on the next turn.
+3. Finally, call execute_game_command with exactly one command, and a
+   short reason for choosing it. This ends your turn — you get to see its
+   response on the next turn.
 
 Investigate as much as you genuinely need to, but there's a limit on
 step 2 ({tool_call_cap} calls) — if you're close to it, wrap up and act.
@@ -125,14 +138,15 @@ for you, and you'll be told that happened on your next turn.
 `{behavior_spec_block}` is the full prose of `docs/agent_behavior_spec.md`
 — it stays the single source of truth for *how to play*; this prompt only
 adds the mechanics of *how to act on that judgment through tools* on top.
-The two sections called out explicitly above ("Avoiding wasted
-repetition", "Recognizing the limits of what you can track") are the ones
-this redesign was written to operationalize — named directly rather than
-left for the model to notice on its own in the middle of a longer prose
-block.
+The three sections called out explicitly above ("Avoiding wasted
+repetition", "Recognizing the limits of what you can track", "Obstacles
+that need something you don't have yet") are the ones this redesign was
+written to operationalize — named directly rather than left for the model
+to notice on its own in the middle of a longer prose block.
 
 Tool schemas (`parse_game_response`, `query_map`, `query_entity_history`,
-`request_capability`, `execute_game_command`) are registered with the API
+`request_capability`, `write_journal`, `search_journal`,
+`execute_game_command`) are registered with the API
 call per `docs/agent_tools_spec.md`, not inlined into this prompt text —
 the model sees them as actual tool definitions, this prompt just tells it
 the order to use them in.
@@ -161,9 +175,22 @@ the order to use them in.
   `added_to_inventory`/`taken_by_npc`/`received_from_npc` three-way split;
   `notable_events` is unstructured plain text and isn't persisted beyond
   ambient recent-turn context, deliberately accepting that a distant clue
-  could fade from context on a long run — `request_capability` is the
-  accepted mitigation if a real run shows that actually costing progress,
-  rather than pre-building durable anomaly-tracking on a guess.
+  could fade from context on a long run — mitigated by `write_journal`/
+  `search_journal` (below) for anything worth keeping, rather than
+  pre-building durable *structured* anomaly-tracking on a guess.
+- **Durable per-run memory:** built proactively as `write_journal`/
+  `search_journal` (keyword search over host-timestamped notes, per-run
+  not cross-run) rather than only ever waiting on a `request_capability`
+  round-trip for something this predictable — locked-obstacle-needs-item
+  is exactly the pattern the behavior spec's "Locked exits and keys"/
+  "Locked containers" sections already describe. `request_capability`
+  still exists for anything *this* doesn't cover.
+- **Log parity:** `execute_game_command` carries an optional `reason`
+  input (why this command was chosen) — found missing during the
+  implementation pass. Doesn't affect game behavior; exists purely so
+  `game_log` entries on this path stay as readable as today's
+  `determine_next_action`-produced entries, which already have a `reason`
+  field.
 
 ## Explicitly not decided yet (implementation-review pass)
 

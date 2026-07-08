@@ -161,6 +161,24 @@ you only have access to ones you've learned — an obstacle that needs a
 spell you haven't learned yet isn't solvable now, but it isn't a dead end
 either; keep it in mind for later.
 
+### Obstacles that need something you don't have yet
+
+Locked exits, locked containers, and missing spells are specific cases of
+a more general pattern: not everything that stops you is a dead end, and
+not everything that blocks you is a lock. A guard, a trap, a creature, or
+a hazard can require a specific item, action, or piece of preparation just
+as much as a lock requires a key — recognize the problem, remember what
+it seemed to need, and revisit it once you have something that plausibly
+addresses it, the same way you would a locked door.
+
+The other half of this matters just as much and is easy to skip: when you
+gain something new — an item, a spell, a piece of information — don't
+just note that you have it and move on. Check whether it's relevant to
+anything you've already run into and remembered. The connection between
+"I now have a helmet" and "something hit me on the head earlier" won't
+make itself; making it means actually going back and checking, not
+waiting to happen to recall it.
+
 ### Death and the pearl room
 
 You can be killed in the game. When that happens, you're teleported to
