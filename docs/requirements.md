@@ -19,4 +19,5 @@ Agent gameplay capabilities — things the agent must be able to do to play Knig
 | 40  | [40.md](requirements/40.md)   | No handling of NPC-initiated dialogue               | 🔲 Open  |
 | 43  | [43.md](requirements/43.md)   | Hint system limited to inventory-solution anomalies | 🔲 Open  |
 | 44  | [44.md](requirements/44.md)   | map features in the ui                              | 🔲 Open  |
+| 45  | [45.md](requirements/45.md)   | Agent doesn't interrupt current activity for urgent events | 🔲 Open  |
 
