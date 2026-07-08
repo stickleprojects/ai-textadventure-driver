@@ -64,7 +64,9 @@
     "close": "invalid",
     "unlock": "invalid",
     "lock": "invalid",
-    "turn on": "invalid"
+    "turn on": "invalid",
+    "pull": "invalid",
+    "turn off": "invalid"
   },
   "golden rod": {
     "wear": "invalid",
@@ -208,5 +210,35 @@
   },
   "flexible metal sheet": {
     "take": "invalid"
+  },
+  "white post": {
+    "take": "invalid"
+  },
+  "ugly white post": {
+    "take": "invalid",
+    "examine": "invalid"
+  },
+  "cord": {
+    "take": "invalid",
+    "examine": "invalid",
+    "read": "invalid",
+    "look inside": "invalid",
+    "wear": "invalid",
+    "eat": "invalid",
+    "drink": "invalid",
+    "open": "invalid",
+    "close": "invalid",
+    "unlock": "invalid",
+    "lock": "invalid",
+    "push": "invalid",
+    "pull": "invalid",
+    "turn on": "invalid",
+    "turn off": "invalid"
+  },
+  "rusty sword": {
+    "examine": "invalid"
+  },
+  "SWORD": {
+    "examine": "invalid"
   }
 }

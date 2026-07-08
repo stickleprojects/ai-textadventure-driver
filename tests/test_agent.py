@@ -1467,6 +1467,23 @@ class TestDeathDetection:
     def test_parse_inventory_response_no_match_returns_none(self):
         assert _parse_inventory_response("You are in a dark room.") is None
 
+    def test_parse_inventory_response_knight_orc_own_phrasing(self):
+        # Bug 72: Knight Orc's real INVENTORY response — confirmed across
+        # every historical run log, never once matched by _CARRYING_RE.
+        text = "You own a putty knife and a hooded cloak."
+        assert _parse_inventory_response(text) == ["a putty knife", "a hooded cloak"]
+
+    def test_parse_inventory_response_knight_orc_own_and_wearing(self):
+        text = "You own a putty knife. You are wearing a hooded cloak."
+        assert _parse_inventory_response(text) == ["a putty knife", "a hooded cloak"]
+
+    def test_parse_inventory_response_own_ignores_trailing_narration(self):
+        # A false "nothing" match in unrelated trailing narration (an NPC's
+        # shouted line, say) must not suppress a real positive "own" match —
+        # positive extraction is tried before the broad not-carrying scan.
+        text = 'You own a putty knife and a hooded cloak. \nA voice shouts, "I found nothing of value!"'
+        assert _parse_inventory_response(text) == ["a putty knife", "a hooded cloak"]
+
     def test_determine_next_action_returns_inventory_when_recheck_set(self):
         state = make_state()
         state["recheck_inventory"] = True

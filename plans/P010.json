@@ -17,12 +17,13 @@
   "anomaly_id": "a8",
   "anomaly_type": "exit_not_tried",
   "severity": "medium",
-  "status": "open",
+  "status": "fixed",
   "plan_id": "P010",
   "source_runs": [
     "watch_20260707_133153"
   ],
   "anomaly_ids": [
     "watch_20260707_133153/a8"
-  ]
+  ],
+  "fixed_in": "PR #82 (P008) — root_cause_hypothesis here was wrong; extract_knowledge was never under-reporting the stable's exits. Both step 0 and step 14 of the source run correctly extracted exits: ['east'] for 'dingy stable' (its one real exit). The 'down'/'out' the agent kept re-trying at steps 15-23 were phantom edges created by the same P008 bug: step 1's 'east' move returned exits ['down', 'outside'] with no room (a combat-interlude response describing 'huge pile of garbage', the room just entered), and process_agent_step wired them onto the stale state['current_room'] ('dingy stable') instead. P008's fix — skip update_graph for the step where a directional move sets position_lost — prevents this at the source. Verified with a fresh run (watch_20260708_135628, post-fix): step 0 extracts exits: ['east'] for dingy stable as before, but step 1's 'east' move this time resolved a room directly (no position_lost), and the final world_graph shows dingy stable with only 'east' edges (to 'huge pile of garbage' and 'jousting field') — no 'down'/'out' phantom edges, no retry loop. No changes needed to llm.py or configs/knight_orc.json."
 }

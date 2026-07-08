@@ -4,6 +4,49 @@ Running notes on findings, decisions, and things that surprised us during develo
 
 ---
 
+## 2026-07-08 (implementation of the tool-calling main loop)
+
+### A verification mechanism that never verified anything (bug 72)
+
+Live-testing the new tool-calling loop turned up something the redesign
+didn't cause but exposed: the model ran `inventory` to double-check its
+holdings — exactly the "Handling uncertainty" behavior the spec asks for —
+and `state["inventory"]` stayed empty anyway. Chased it to
+`agent._parse_inventory_response`, which only recognizes `"carrying[:\s]"`
+phrasing. Checked every historical run log with an `inventory` action
+(`logs/watch_20260701_*.json` through `watch_20260704_*.json`): Knight
+Orc's real response is consistently `"You own X[. You are wearing Y]."` —
+`"carrying"` never appears once.
+
+That means the *legacy* path's `recheck_inventory` mechanism
+(agent.py:755-765) — the thing this exact regex exists to serve — has
+silently never resynced against ground truth either, for the whole
+project's history. It never surfaced as a visible failure because the
+symptom is silence, not an error: state just quietly stays stale instead
+of throwing anything. Nothing was ever watching for "did the resync
+actually happen," only for "did something crash."
+
+Fixed by adding patterns for the confirmed real phrasing, tried before the
+existing broad `"nothing"` fallback scan (a positive match should win over
+a keyword scan that could false-trigger on unrelated trailing narration,
+e.g. an NPC's shouted line). Full writeup in bug 72.
+
+Lesson: a "verify against the game" instruction is only as good as the
+parser reading the verification response — and a parser that fails
+*silently* (returns `None`, caller just skips the resync) can hide a total
+loss of function for a long time, since the failure mode looks identical
+to "nothing needed resyncing" from the outside.
+
+### P010 was P008 wearing a different anomaly-type label
+
+P010 hypothesised that `extract_knowledge` under-reports the dingy stable's exits — only `down`/`out` ever get wired as edges, so cardinal directions and `in` never become candidates and the agent re-cycles the two it knows. Re-reading the source run against the raw extraction disproved this: both times the stable was actually `look`ed at (steps 0 and 14 of `watch_20260707_133153`), `extract_knowledge` returned exactly `['east']` — its one real exit, correctly and completely. The `down`/`out` the agent kept retrying at steps 15–23 were never extracted from the stable at all; they were the phantom edges from the P008 bug (exits reported without a room getting wired onto the stale `current_room` instead of the room just entered), already identified and fixed under a different anomaly label in the 2026-07-07 P008 entry above.
+
+Confirmed rather than just inferred: ran a fresh 40-step watch (`watch_20260708_135628`) against the post-P008 code. Step 0 still extracts `['east']` for the stable (extraction was never the problem), but step 1's `east` move this time resolved a room directly, and the final `world_graph` shows the stable with only `east` edges — no `down`/`out`, no retry streak. Closed P010 as `fixed`, `fixed_in` pointing at PR #82, with no changes to `llm.py` or `configs/knight_orc.json` (the layer P010 targeted was never broken).
+
+Lesson, same shape as the P005/P006 entry: an anomaly's root-cause hypothesis is a starting point, not a diagnosis. Here the hint was in the fix note we'd already written for P008 — "very likely the true explanation for P010 ... worth re-checking after this fix lands" — worth treating a fix's own side-effect notes as a checklist for the rest of the open backlog before writing new code against it.
+
+---
+
 ## 2026-07-07
 
 ### A "productive" navigation loop can still be a loop (P004)

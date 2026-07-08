@@ -22,3 +22,4 @@ Enhancements, new functionality, tooling, and infrastructure improvements.
 | 58 | [58.md](features/58.md) | Merge bidirectional edges in Spatial Matrix | ✅ Fixed |
 | 59 | [59.md](features/59.md) | Split agent/state code into reusable library vs. Knight-Orc-bespoke layers, add spec-driven tests | 🔲 Open |
 | 60 | [60.md](features/60.md) | Code-quality review step in `--spec-target` | 🔲 Open |
+| 61 | [61.md](features/61.md) | Wire the Streamlit UI into the tool-calling main loop, and surface its decision detail | 🔲 Open |

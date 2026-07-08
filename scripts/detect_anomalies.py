@@ -49,7 +49,19 @@ def detect(run_id, strategy_path=STRATEGY_PATH):
     run_record = json.loads(run_path.read_text())
     strategy = load_strategy(strategy_path)
 
-    report = build_report(run_id, log_path, run_path, game_log, run_record, strategy)
+    # Tool-calling main-loop findings (request_capability/tool_loop_exhausted,
+    # see agent_tools.py) are written incrementally during the run to a
+    # per-run side file, not the anomaly report itself (survives an
+    # interrupted run — bug 71). Merge them in here, the single place
+    # anomaly_report.json gets built, so architect.py needs no changes to
+    # pick them up (it consumes anomalies generically by type string).
+    capability_requests_path = RUNS_DIR / "orchestrator" / run_id / "capability_requests.json"
+    extra_findings = (
+        json.loads(capability_requests_path.read_text())
+        if capability_requests_path.exists() else None
+    )
+
+    report = build_report(run_id, log_path, run_path, game_log, run_record, strategy, extra_findings=extra_findings)
 
     out_dir = RUNS_DIR / "orchestrator" / run_id
     out_dir.mkdir(parents=True, exist_ok=True)

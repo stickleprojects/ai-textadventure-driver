@@ -463,6 +463,56 @@
       "treasure_discovered": 0,
       "puzzles_discovered": 0,
       "puzzles_solved": 0
+    },
+    {
+      "run_id": "watch_20260707_142204",
+      "outcome": "interrupted",
+      "final_score": null,
+      "locations_discovered": 5,
+      "npcs_discovered": 12,
+      "treasure_discovered": 0,
+      "puzzles_discovered": 0,
+      "puzzles_solved": 0
+    },
+    {
+      "run_id": "watch_20260708_135628",
+      "outcome": "ambiguous",
+      "final_score": null,
+      "locations_discovered": 3,
+      "npcs_discovered": 4,
+      "treasure_discovered": 0,
+      "puzzles_discovered": 0,
+      "puzzles_solved": 0
+    },
+    {
+      "run_id": "watch_20260708_140045",
+      "outcome": "ambiguous",
+      "final_score": null,
+      "locations_discovered": 5,
+      "npcs_discovered": 7,
+      "treasure_discovered": 0,
+      "puzzles_discovered": 0,
+      "puzzles_solved": 0
+    },
+    {
+      "run_id": "watch_20260708_160517",
+      "outcome": "ambiguous",
+      "final_score": null,
+      "locations_discovered": 3,
+      "npcs_discovered": 8,
+      "treasure_discovered": 0,
+      "puzzles_discovered": 0,
+      "puzzles_solved": 0
+    },
+    {
+      "run_id": "watch_20260708_160703",
+      "outcome": "interrupted",
+      "final_score": null,
+      "locations_discovered": 4,
+      "npcs_discovered": 8,
+      "treasure_discovered": 0,
+      "puzzles_discovered": 0,
+      "puzzles_solved": 0
     }
   ]
 }

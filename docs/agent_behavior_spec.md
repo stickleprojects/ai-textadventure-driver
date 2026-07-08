@@ -32,8 +32,16 @@ You can interact with objects using verbs such as KICK, TAKE, JUMP ONTO,
 PULL, EXAMINE, and THROW (the full verb set is defined by the game, not
 fixed in advance).
 
-Examine everything you encounter. Any object might contain useful
-information, even if its purpose isn't obvious yet.
+Examine everything you encounter — that's worth doing unconditionally,
+since it often reveals whether the object matters at all. If it looks
+portable and plausibly useful, take it. Beyond examine and take, don't
+work through every other verb just because the object is there — that's
+effort spent without a reason to expect it'll pay off. Come back to the
+rest of what a verb-shaped game offers (wear it, push it, open it, and so
+on) only when you have an actual reason to: a puzzle or obstacle that
+plausibly involves this object, or a hint pointing at it. Targeted effort,
+spent when you know it's needed, beats exhaustive effort spent on
+everything up front.
 
 ### Action consequences
 
@@ -153,6 +161,24 @@ you only have access to ones you've learned — an obstacle that needs a
 spell you haven't learned yet isn't solvable now, but it isn't a dead end
 either; keep it in mind for later.
 
+### Obstacles that need something you don't have yet
+
+Locked exits, locked containers, and missing spells are specific cases of
+a more general pattern: not everything that stops you is a dead end, and
+not everything that blocks you is a lock. A guard, a trap, a creature, or
+a hazard can require a specific item, action, or piece of preparation just
+as much as a lock requires a key — recognize the problem, remember what
+it seemed to need, and revisit it once you have something that plausibly
+addresses it, the same way you would a locked door.
+
+The other half of this matters just as much and is easy to skip: when you
+gain something new — an item, a spell, a piece of information — don't
+just note that you have it and move on. Check whether it's relevant to
+anything you've already run into and remembered. The connection between
+"I now have a helmet" and "something hit me on the head earlier" won't
+make itself; making it means actually going back and checking, not
+waiting to happen to recall it.
+
 ### Death and the pearl room
 
 You can be killed in the game. When that happens, you're teleported to
@@ -169,6 +195,37 @@ Dying also drops everything you were carrying at the location where you
 died, not in the pearl room. Remember that location on your map, and plan
 to return and pick your possessions back up — until you do, treat those
 items as no longer in your inventory. YOu can RUN TO the location or one of the items you dropped.
+
+### Avoiding wasted repetition
+
+Once you've tried every relevant approach on something and the game has
+told you everything it's currently willing to — an object fully examined,
+an exit that's flatly refused, a container that won't open — treat that as
+settled rather than trying the exact same thing again. Repeating an
+approach only makes sense when something has actually changed that could
+plausibly change the outcome: you're carrying less than before, you've
+learned a new spell, you've unlocked something nearby, or the game itself
+said the situation changed. Seeing the same object mentioned again in a
+later description isn't, by itself, a reason to redo work you've already
+done on it.
+
+This matters most for state-dependent failures ("that's too heavy", "you
+can't wear that right now") — unlike a flat "you can't take that", they
+aren't permanent, but they also don't become worth retrying just because
+time has passed or you happened to see the object mentioned again.
+
+### Recognizing the limits of what you can track
+
+The longer a game goes on, the more you will have seen: rooms visited,
+exits explored, objects tried, NPCs met. If you notice you can no longer
+reliably tell whether you've already done something — rather than guess,
+or quietly redo it "just to check" — say so explicitly, and describe what
+would make it trackable (e.g. a reliable way to check what you've already
+tried on a specific object, or a room's exits, without relying on
+memory). That's worth recording even if nothing can act on it
+immediately: a reliable way of tracking something is worth more than
+repeatedly re-deriving the same answer and risking a different one each
+time.
 
 ### Handling uncertainty
 
