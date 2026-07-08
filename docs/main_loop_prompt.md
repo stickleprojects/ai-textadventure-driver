@@ -191,6 +191,17 @@ the order to use them in.
   `game_log` entries on this path stay as readable as today's
   `determine_next_action`-produced entries, which already have a `reason`
   field.
+- **Grounding, not prompting, against hallucination:** live-testing turned
+  up a real case (bug 74) of the model fabricating a plausible-sounding
+  room and narrative for a response that supported neither — `room`
+  became `room_quote`, required to be a verbatim substring of the response
+  rather than a name the model constructs, so the host can verify it
+  deterministically instead of trusting compliance with an instruction.
+  The same principle was applied to `exits`/`objects`/`npcs` (bugs 76/77)
+  and `inventory_changes` (bug 75, reusing the hard-failure suppression
+  already proven for the legacy path's `added_to_inventory`). A rejected
+  claim is discarded, not retried — see `docs/agent_tools_spec.md`'s
+  `parse_game_response` section for the full reasoning.
 
 ## Explicitly not decided yet (implementation-review pass)
 

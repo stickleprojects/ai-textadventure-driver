@@ -100,10 +100,10 @@ input: {
     "succeeded": "boolean",
     "reason_if_failed": "string | null — short reason, e.g. \"too heavy\", \"you can't go that way\""
   },
-  "room": "string | null — only if the response explicitly names a location; null (never a placeholder word or your own summary of what happened) if terse, object/action-only, or inferred rather than read",
-  "exits": ["string"],
-  "objects": ["string — inanimate items visible"],
-  "npcs": ["string — living creatures/characters visible"],
+  "room_quote": "string | null — a VERBATIM substring of the response naming the location, copied exactly; null if terse, object/action-only, or you'd have to infer/guess rather than read it directly",
+  "exits": ["string — only directions literally mentioned in the response"],
+  "objects": ["string — inanimate items visible, only ones actually named in the response"],
+  "npcs": ["string — living creatures/characters visible, only ones actually named in the response"],
   "inventory_changes": [
     {"item": "string", "change": "gained | lost", "cause": "string — e.g. \"took it\", \"orc stole it\", \"denzyl gave it\""}
   ],
@@ -119,6 +119,28 @@ output: { "acknowledged": true }
 today. The model reports what happened; the host still owns deciding
 whether that's permanent or state-dependent — that boundary has been
 deterministic and config-driven since requirement 18, and stays that way.
+
+**Everything the model claims to have read is grounded against the raw
+response text before the host trusts it — a real, observed failure mode,
+not a theoretical one** (bugs 74/75/76/77): a model can construct a
+plausible-sounding room, exit, object, or NPC that simply isn't in the
+text, especially when the response is sparse and the model's own system
+prompt gives it ready material to fabricate a narrative from (one
+observed case: `"You own nothing at all!"` produced a claimed room of
+`"pearl room"` and a fabricated death narrative — nothing in the response
+supported either). `room_quote` must be a literal substring of the
+response or it's discarded (not retried — a bounded reparse loop against a
+model that's already fabricating is just a new way to get stuck; the
+model gets no room update for that step, same as a genuinely terse
+response). `exits`/`objects`/`npcs` entries that aren't literally present
+are silently dropped — weaker protection for `objects`/`npcs` specifically
+(short, generic words can coincidentally match unrelated text), but
+partial protection against an evidenced failure class beats none.
+`inventory_changes` reuses the pre-existing hard-failure suppression
+(`hard_failure_patterns`) that already protects the legacy path's
+`added_to_inventory` — a hard-failure response means the attempted action
+didn't succeed, so nothing should have been gained as a direct result of
+it, regardless of what's claimed.
 
 `notable_events` deliberately has no further structure and isn't persisted
 by the host beyond ambient recent-turn context — what used to be separate

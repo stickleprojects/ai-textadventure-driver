@@ -38,11 +38,6 @@ _ORDERING_CORRECTION = (
 
 _MANDATORY_FIRST_TOOL = "parse_game_response"
 _TERMINAL_TOOL = "execute_game_command"
-
-# Some models emit the literal string "null" (or similar) for a nullable field
-# instead of an actual null/None — observed live with DeepSeek on the room
-# field. Treat these the same as a real null rather than a room name.
-_NULL_LIKE_ROOM_VALUES = {"null", "none", "n/a", "unknown", "nil", ""}
 _NON_TERMINAL_TOOLS = {"query_map", "query_entity_history", "request_capability",
                         "write_journal", "search_journal"}
 
@@ -70,19 +65,33 @@ TOOL_SCHEMAS = [
                     },
                     "required": ["succeeded"],
                 },
-                "room": {
+                "room_quote": {
                     "type": ["string", "null"],
                     "description": (
-                        "Only set if the response explicitly names a location (e.g. \"You are in "
-                        "the Great Hall\"). Use null — never a placeholder word or your own summary "
-                        "of what you inferred happened — if the response is terse, describes an "
-                        "object/action without naming a place, or you're inferring/guessing rather "
-                        "than reading an explicit name."
+                        "A VERBATIM substring of the response naming the location — copy it exactly, "
+                        "don't summarize or paraphrase it. Use null if the response is terse, "
+                        "describes an object/action without naming a place, or you'd have to infer "
+                        "or guess the location rather than read it directly. Bug 74: a model once "
+                        "reported a specific, plausible-sounding room for a response that only said "
+                        "\"You own nothing at all!\" — nothing it wrote was actually in the text. A "
+                        "value here that isn't a literal substring of the response is discarded."
                     ),
                 },
-                "exits": {"type": "array", "items": {"type": "string"}},
-                "objects": {"type": "array", "items": {"type": "string"}, "description": "Inanimate items visible"},
-                "npcs": {"type": "array", "items": {"type": "string"}, "description": "Living creatures/characters visible"},
+                "exits": {
+                    "type": "array",
+                    "items": {"type": "string"},
+                    "description": "Only directions literally mentioned in the response — not inferred from \"exits lead in all directions\" or similar.",
+                },
+                "objects": {
+                    "type": "array",
+                    "items": {"type": "string"},
+                    "description": "Inanimate items visible — only ones actually named in the response, not ones you'd plausibly expect to be there.",
+                },
+                "npcs": {
+                    "type": "array",
+                    "items": {"type": "string"},
+                    "description": "Living creatures/characters visible — only ones actually named in the response.",
+                },
                 "inventory_changes": {
                     "type": "array",
                     "items": {
@@ -396,8 +405,17 @@ def _apply_parse_game_response(state, args, previous_room, action_taken, respons
     Does not populate active_goal/unresolved_anomalies: those are legacy
     decision-loop concepts the tool-calling path has no use for (the model
     decides freely each step; notable_events/journal replace the structured
-    goal queue — see docs/agent_tools_spec.md)."""
+    goal queue — see docs/agent_tools_spec.md).
+
+    Bugs 74/75/76/77: the model can hallucinate structured fields with no
+    support in the raw response (a specific, plausible-sounding room for a
+    response that just said "You own nothing at all!", in one observed
+    case). Everything the model claims to have *read* (room, exits,
+    objects, npcs) is grounded against response_text before being trusted;
+    inventory_changes reuses the same hard-failure suppression bug 35
+    already established for the legacy path's added_to_inventory."""
     action_result = args.get("action_result", {})
+    resp_lower = response_text.lower()
 
     verb, obj = _split_verb_object(action_taken) if action_taken else (None, None)
     if verb and obj:
@@ -409,15 +427,25 @@ def _apply_parse_game_response(state, args, previous_room, action_taken, respons
                 action_result.get("reason_if_failed") if outcome != "succeeded" else None
             )
 
+    # Bug 76: every direction must be literally present, not just up/down —
+    # the "exits lead in all directions" over-inference applies just as
+    # readily to any other direction word.
     exits = None
     if "exits" in args:
-        resp_lower = response_text.lower()
-        exits = [e for e in args["exits"] if e not in ("up", "down") or e in resp_lower]
+        exits = [e for e in args["exits"] if e.lower() in resp_lower]
+
+    # Bug 77: drop objects/npcs the model claims but that aren't actually
+    # named in the response — weaker protection than the room check (short,
+    # generic words can coincidentally match), but partial protection
+    # against a real, evidenced failure class beats none, at no extra cost.
+    args = dict(args)
+    args["objects"] = [o for o in args.get("objects", []) if o.lower() in resp_lower]
+    args["npcs"] = [n for n in args.get("npcs", []) if n.lower() in resp_lower]
 
     room_unresolved = False
-    room = args.get("room")
-    if room and room.strip().lower() not in _NULL_LIKE_ROOM_VALUES:
-        state["current_room"] = agent._resolve_room_name(state["world_graph"], room, exits)
+    room_quote = args.get("room_quote")
+    if room_quote and room_quote.lower() in resp_lower:
+        state["current_room"] = agent._resolve_room_name(state["world_graph"], room_quote, exits)
         state.setdefault("visited_rooms", set()).add(state["current_room"])
         state["position_lost"] = False
         state["position_lost_attempts"] = 0
@@ -426,15 +454,27 @@ def _apply_parse_game_response(state, args, previous_room, action_taken, respons
         # a future parse_game_response resolves it (mirrors agent.py:641-650).
         state["position_lost"] = True
         room_unresolved = True
+    elif room_quote:
+        # Bug 74: claimed but not grounded in the response — reject rather
+        # than trust it, and surface it for review instead of silently
+        # swallowing it. No retry-the-parse loop: a bounded retry against a
+        # model that's already fabricating is just a new way to get stuck.
+        run_id = state.get("_run_id")
+        if run_id:
+            _append_finding(
+                run_id, len(state["game_log"]) + 1, "room_not_grounded", "medium",
+                f"parse_game_response claimed room_quote={room_quote!r} but it does not "
+                f"appear in the response text — discarded rather than trusted.",
+            )
 
     if exits is not None and not room_unresolved:
         agent.update_graph(state, state["current_room"], exits, previous_room, action_taken)
 
-    for npc in args.get("npcs", []):
+    for npc in args["npcs"]:
         if npc not in state["known_npcs"]:
             state["known_npcs"][npc] = {"location": state["current_room"], "greeted": False}
 
-    for obj_name in args.get("objects", []):
+    for obj_name in args["objects"]:
         if obj_name in state["known_npcs"] or agent._is_creature(obj_name):
             if obj_name not in state["known_npcs"]:
                 state["known_npcs"][obj_name] = {"location": state["current_room"], "greeted": False}
@@ -447,7 +487,16 @@ def _apply_parse_game_response(state, args, previous_room, action_taken, respons
             else:
                 entity["location"] = state["current_room"]
 
-    for change in args.get("inventory_changes", []):
+    # Bug 75: bug 35's exact fix, ported — a hard-failure response means the
+    # attempted action didn't succeed, so nothing should have been gained as
+    # a direct result of it, regardless of what the model claims. "lost"
+    # entries are unaffected (an unrelated theft could still be narrated in
+    # the same response).
+    inventory_changes = args.get("inventory_changes", [])
+    if agent._is_hard_failure(response_text):
+        inventory_changes = [c for c in inventory_changes if c.get("change") != "gained"]
+    args["inventory_changes"] = inventory_changes  # keep the log consistent with what was actually applied
+    for change in inventory_changes:
         item = (change.get("item") or "").strip()
         if not item:
             continue
@@ -667,6 +716,7 @@ def run_tool_calling_step(state, child, tool_adapter, run_id, step_num, initial_
     """Executes one tool-calling episode: finalizes the previous step's response
     (if any), then decides and executes the next command. See module docstring
     for the parse-lags-behind-execute design."""
+    state["_run_id"] = run_id  # lets _apply_parse_game_response log findings (e.g. bug 74) without a signature change
     pending = state.pop("_pending_step", None)
     if pending is None:
         last_response = initial_text or ""
