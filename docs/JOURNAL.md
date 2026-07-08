@@ -4,7 +4,38 @@ Running notes on findings, decisions, and things that surprised us during develo
 
 ---
 
-## 2026-07-08
+## 2026-07-08 (implementation of the tool-calling main loop)
+
+### A verification mechanism that never verified anything (bug 72)
+
+Live-testing the new tool-calling loop turned up something the redesign
+didn't cause but exposed: the model ran `inventory` to double-check its
+holdings — exactly the "Handling uncertainty" behavior the spec asks for —
+and `state["inventory"]` stayed empty anyway. Chased it to
+`agent._parse_inventory_response`, which only recognizes `"carrying[:\s]"`
+phrasing. Checked every historical run log with an `inventory` action
+(`logs/watch_20260701_*.json` through `watch_20260704_*.json`): Knight
+Orc's real response is consistently `"You own X[. You are wearing Y]."` —
+`"carrying"` never appears once.
+
+That means the *legacy* path's `recheck_inventory` mechanism
+(agent.py:755-765) — the thing this exact regex exists to serve — has
+silently never resynced against ground truth either, for the whole
+project's history. It never surfaced as a visible failure because the
+symptom is silence, not an error: state just quietly stays stale instead
+of throwing anything. Nothing was ever watching for "did the resync
+actually happen," only for "did something crash."
+
+Fixed by adding patterns for the confirmed real phrasing, tried before the
+existing broad `"nothing"` fallback scan (a positive match should win over
+a keyword scan that could false-trigger on unrelated trailing narration,
+e.g. an NPC's shouted line). Full writeup in bug 72.
+
+Lesson: a "verify against the game" instruction is only as good as the
+parser reading the verification response — and a parser that fails
+*silently* (returns `None`, caller just skips the resync) can hide a total
+loss of function for a long time, since the failure mode looks identical
+to "nothing needed resyncing" from the outside.
 
 ### P010 was P008 wearing a different anomaly-type label
 

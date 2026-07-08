@@ -54,3 +54,4 @@ Architect-generated anomaly plans are tracked separately in [plans.md](plans.md)
 | 69 | [69.md](bugs/69.md) | Agent loops forever on a `run to X` the game's nav command rejects | ✅ Fixed |
 | 70 | [70.md](bugs/70.md) | Failed `take` abandons inspection even when the object is worth examining | ✅ Fixed |
 | 71 | [71.md](bugs/71.md) | `agent_dev_loop.py` doesn't handle Ctrl-C — no interrupted-run record, no diagnostic log | 🔲 Open |
+| 72 | [72.md](bugs/72.md) | `_parse_inventory_response` never matched Knight Orc's real INVENTORY response — `recheck_inventory` silently never resynced | ✅ Fixed |

@@ -148,20 +148,42 @@ def _is_death(text):
 
 _CARRYING_RE = re.compile(r"carrying[:\s]+(.+?)(?:\.\s*$|$)", re.IGNORECASE | re.DOTALL)
 _NOT_CARRYING_RE = re.compile(r"not carrying|carrying nothing|nothing", re.IGNORECASE)
+# Bug 72: Knight Orc's real INVENTORY response is "You own X[. You are
+# wearing Y]." — never "You are carrying...". Confirmed across every
+# historical run log with an "inventory" action; _CARRYING_RE never once
+# matched real game output, so recheck_inventory's resync silently never
+# fired. Checked first (a positive match takes precedence over the broad
+# "nothing" scan below, which risks a false trigger from unrelated trailing
+# narration, e.g. an NPC's shouted line); "carrying" stays as a fallback for
+# other games/configs that might phrase it that way.
+_OWN_RE = re.compile(r"you own\s+(.+?)\.", re.IGNORECASE)
+_WEARING_RE = re.compile(r"you(?:'re| are) wearing\s+(.+?)\.", re.IGNORECASE)
+
+
+def _split_item_list(raw):
+    # Split on comma or " and " (handles "item1, item2 and item3")
+    parts = re.split(r",|\s+and\s+", raw.strip().rstrip("."), flags=re.IGNORECASE)
+    return [p.strip() for p in parts if p.strip()]
 
 
 def _parse_inventory_response(text):
     """Return item list from a game inventory response, or None if unparseable."""
+    items = []
+    own_match = _OWN_RE.search(text)
+    if own_match:
+        items.extend(_split_item_list(own_match.group(1)))
+    wearing_match = _WEARING_RE.search(text)
+    if wearing_match:
+        items.extend(_split_item_list(wearing_match.group(1)))
+    if items:
+        return items
+
     if _NOT_CARRYING_RE.search(text):
         return []
     m = _CARRYING_RE.search(text)
     if not m:
         return None
-    raw = m.group(1).strip().rstrip(".")
-    # Split on comma or " and " (handles "item1, item2 and item3")
-    parts = re.split(r",|\s+and\s+", raw, flags=re.IGNORECASE)
-    items = [p.strip() for p in parts if p.strip()]
-    return items if items else []
+    return _split_item_list(m.group(1))
 
 
 # P005/P006: "in"/"out" are real navigable directions (see _REVERSE and
