@@ -234,5 +234,11 @@
     "pull": "invalid",
     "turn on": "invalid",
     "turn off": "invalid"
+  },
+  "rusty sword": {
+    "examine": "invalid"
+  },
+  "SWORD": {
+    "examine": "invalid"
   }
 }
