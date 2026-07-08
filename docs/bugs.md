@@ -61,3 +61,4 @@ Architect-generated anomaly plans are tracked separately in [plans.md](plans.md)
 | 76 | [76.md](bugs/76.md) | Exit hallucination guard only covers up/down, not the rest of the compass | ✅ Fixed |
 | 77 | [77.md](bugs/77.md) | `objects`/`npcs` have no grounding against the raw response text | ✅ Fixed |
 | 78 | [78.md](bugs/78.md) | A grounded but overly-verbose `room_quote` fragments the world graph | 🔲 Open |
+| 79 | [79.md](bugs/79.md) | Local-model eval suite failing 7/14 cases, most with a fully empty extraction | 🔲 Open |
