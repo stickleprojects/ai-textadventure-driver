@@ -513,6 +513,36 @@
       "treasure_discovered": 0,
       "puzzles_discovered": 0,
       "puzzles_solved": 0
+    },
+    {
+      "run_id": "watch_20260709_130559",
+      "outcome": "agent_failure",
+      "final_score": null,
+      "locations_discovered": 0,
+      "npcs_discovered": 0,
+      "treasure_discovered": 0,
+      "puzzles_discovered": 0,
+      "puzzles_solved": 0
+    },
+    {
+      "run_id": "watch_20260709_131031",
+      "outcome": "agent_failure",
+      "final_score": null,
+      "locations_discovered": 0,
+      "npcs_discovered": 0,
+      "treasure_discovered": 0,
+      "puzzles_discovered": 0,
+      "puzzles_solved": 0
+    },
+    {
+      "run_id": "watch_20260709_131958",
+      "outcome": "ambiguous",
+      "final_score": null,
+      "locations_discovered": 3,
+      "npcs_discovered": 8,
+      "treasure_discovered": 0,
+      "puzzles_discovered": 0,
+      "puzzles_solved": 0
     }
   ]
 }

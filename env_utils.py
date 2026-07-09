@@ -57,7 +57,7 @@ def load_env_file(path=".env"):
                 raw_value,
             )
 
-            if key not in os.environ:
+            if key not in os.environ or os.environ[key] != value:
                 os.environ[key] = value
                 set_keys.add(key)
 
