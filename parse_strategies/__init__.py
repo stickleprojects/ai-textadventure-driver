@@ -13,7 +13,13 @@ One file per strategy:
     llm_tool_call.py  — LLMToolCallParseStrategy (cloud tool-calling backends)
     deterministic.py  — DeterministicParseStrategy (plain-Python stub, no LLM)
 """
-from .base import ParseStrategy, apply_parse_result, append_finding, split_verb_object
+from .base import (
+    ParseStrategy,
+    apply_parse_result,
+    append_finding,
+    resolve_entity_key,
+    split_verb_object,
+)
 from .llm_json_mode import LLMJsonModeParseStrategy
 from .llm_tool_call import LLMToolCallParseStrategy
 from .deterministic import DeterministicParseStrategy
@@ -22,6 +28,7 @@ __all__ = [
     "ParseStrategy",
     "apply_parse_result",
     "append_finding",
+    "resolve_entity_key",
     "split_verb_object",
     "LLMJsonModeParseStrategy",
     "LLMToolCallParseStrategy",

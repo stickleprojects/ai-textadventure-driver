@@ -218,7 +218,8 @@ def _impl_query_map(state, room=None):
 
 
 def _impl_query_entity_history(state, object_name):
-    entity = state["known_entities"].get(object_name, {})
+    entity_key = parse_strategies.resolve_entity_key(state["known_entities"], object_name)
+    entity = state["known_entities"].get(entity_key, {})
     return {
         "verb_outcomes": entity.get("verb_outcomes", {}),
         "last_result_summary": entity.get("last_result_summary"),
@@ -384,7 +385,9 @@ def run_tool_calling_step(state, child, tool_adapter, parse_strategy, run_id, st
     snap_before = agent._snapshot_state(state)
     insp_verb, effective_target = parse_strategies.split_verb_object(action_taken)
     pre_verb_outcomes = (
-        state["known_entities"].get(effective_target, {}).get("verb_outcomes", {}).copy()
+        state["known_entities"].get(
+            parse_strategies.resolve_entity_key(state["known_entities"], effective_target), {}
+        ).get("verb_outcomes", {}).copy()
         if effective_target else {}
     )
 
@@ -407,7 +410,7 @@ def run_tool_calling_step(state, child, tool_adapter, parse_strategy, run_id, st
     if is_death:
         utility = "death"
 
-    if utility == "futile" and action_taken in world_graph.DIRECTIONS:
+    if utility == "futile" and world_graph.normalize_direction(action_taken) in world_graph.DIRECTIONS:
         world_graph.mark_edge_futile(state, previous_room, action_taken)
 
     entry = {
