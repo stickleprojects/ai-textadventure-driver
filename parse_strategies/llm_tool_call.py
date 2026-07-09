@@ -25,12 +25,15 @@ PARSE_TOOL_SCHEMA = {
                 "type": ["string", "null"],
                 "description": (
                     "A VERBATIM substring of the response naming the location — copy it exactly, "
-                    "don't summarize or paraphrase it. Use null if the response is terse, "
-                    "describes an object/action without naming a place, or you'd have to infer "
-                    "or guess the location rather than read it directly. Bug 74: a model once "
-                    "reported a specific, plausible-sounding room for a response that only said "
-                    "\"You own nothing at all!\" — nothing it wrote was actually in the text. A "
-                    "value here that isn't a literal substring of the response is discarded."
+                    "don't summarize or paraphrase it. Quote ONLY the room's own name/description, "
+                    "not the surrounding narration: if the response says \"You are in the dingy "
+                    "stable\", quote \"the dingy stable\" or \"dingy stable\" (either is fine — "
+                    "with or without its leading article), not the whole sentence. Use null if the "
+                    "response is terse, describes an object/action without naming a place, or "
+                    "you'd have to infer or guess the location rather than read it directly. Bug 74: "
+                    "a model once reported a specific, plausible-sounding room for a response that "
+                    "only said \"You own nothing at all!\" — nothing it wrote was actually in the "
+                    "text. A value here that isn't a literal substring of the response is discarded."
                 ),
             },
             "exits": {

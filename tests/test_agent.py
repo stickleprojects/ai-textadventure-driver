@@ -912,6 +912,76 @@ class TestNullRoomHandling:
         g.add_edge("Start", "Cellar", label="south/down")
         assert _known_exits(g, "Start") == {"south", "down"}
 
+    # ── Bug 78: verbose-but-grounded room quotes must not fragment the graph ──
+
+    def test_verbose_narrator_quote_resolves_to_existing_short_node(self):
+        # A model quotes the whole sentence instead of just the room name, but
+        # the room already exists under its short form.
+        from agent import _resolve_room_name
+        g = nx.MultiDiGraph()
+        g.add_node("dingy stable")
+        assert _resolve_room_name(g, "You are in the dingy stable") == "dingy stable"
+        assert _resolve_room_name(g, "You are in a dingy stable") == "dingy stable"
+        assert _resolve_room_name(g, "You go south and are in the dingy stable") == "dingy stable"
+
+    def test_verbose_narrator_quote_on_empty_graph_canonicalizes_correctly(self):
+        # First visit, empty graph, nothing to match against — the fix must
+        # also live in _canonicalize_room (new-node naming), not just
+        # candidate matching.
+        from agent import _resolve_room_name
+        g = nx.MultiDiGraph()
+        assert _resolve_room_name(g, "You are in the dingy stable") == "dingy stable"
+        assert _resolve_room_name(g, "You go south and are in an alder ghostwood") == "alder ghostwood"
+
+    def test_narrator_prefix_strip_preserves_outside_inside_distinction(self):
+        # Must not regress: "outside"/"inside" stay part of the room name.
+        from agent import _resolve_room_name
+        g = nx.MultiDiGraph()
+        g.add_node("outside a cave")
+        g.add_node("inside a cave")
+        assert _resolve_room_name(g, "You are outside a cave") == "outside a cave"
+        assert _resolve_room_name(g, "You are inside a cave") == "inside a cave"
+
+    def test_shared_word_different_rooms_do_not_fuzzy_merge(self):
+        # Two genuinely different rooms sharing one generic word must never
+        # merge via the fuzzy containment tier.
+        from agent import _resolve_room_name
+        g = nx.MultiDiGraph()
+        g.add_node("jousting field")
+        g.add_node("trampled field")
+        assert _resolve_room_name(g, "You are on a jousting field") == "jousting field"
+        assert _resolve_room_name(g, "You are on a trampled field") == "trampled field"
+        # A bare, under-specified quote sharing only the generic word must not
+        # silently resolve to either existing node.
+        ambiguous = _resolve_room_name(g, "a field")
+        assert ambiguous not in ("jousting field", "trampled field")
+
+    def test_fuzzy_containment_merges_verbose_quote_into_existing_short_node(self):
+        # Real latent case found in configs/knight_orc_rooms.json's own data:
+        # "Headhunters" vs "Headhunters saloon bar of the Orc's Head Inn" —
+        # not a narrator-prefix artifact, genuinely needs the word-containment
+        # tier (the game itself narrates the same room at two levels of detail).
+        from agent import _resolve_room_name
+        g = nx.MultiDiGraph()
+        g.add_node("Headhunters")
+        assert _resolve_room_name(g, "Headhunters saloon bar of the Orc's Head Inn") == "Headhunters"
+
+    def test_fuzzy_containment_still_respects_exit_disambiguation(self):
+        # Bug 45 must not regress: a fuzzy (contains-existing-name) match is
+        # fed through the exact same exit-compatibility gate as an exact match.
+        from agent import _resolve_room_name
+        g = nx.MultiDiGraph()
+        first = _resolve_room_name(g, "Alder Clump", ["north", "east"])
+        update_graph({"world_graph": g}, first, ["north", "east"], None, "")
+        second = _resolve_room_name(g, "You are in the Alder Clump maze", ["south", "west"])
+        assert second == "Alder Clump #2"
+
+    def test_fuzzy_containment_merges_when_exits_compatible(self):
+        from agent import _resolve_room_name
+        g = nx.MultiDiGraph()
+        g.add_node("Alder Clump")  # no exits recorded yet
+        assert _resolve_room_name(g, "You are in the Alder Clump maze", ["north"]) == "Alder Clump"
+
     def test_process_agent_step_disjoint_maze_produces_two_distinct_rooms(self, stub_child):
         # End-to-end: two consecutive steps reporting the same room name with
         # disjoint exits must leave current_room pointing at two different nodes.

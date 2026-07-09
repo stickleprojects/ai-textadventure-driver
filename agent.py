@@ -22,9 +22,30 @@ _ARTICLE_RE = re.compile(r"\b(a|an|the)\b\s*", re.IGNORECASE)
 # "inside"/"outside" are NOT stripped: they denote distinct rooms.
 _LEADING_PREP_RE = re.compile(r"^(in|on|at)\s+", re.IGNORECASE)
 _LEADING_ARTICLE_RE = re.compile(r"^(a|an|the)\s+", re.IGNORECASE)
+# Bug 78: a grounded (bug 74) but overly-verbose room quote — "You are in the
+# dingy stable" instead of just "the dingy stable" — defeats _LEADING_PREP_RE
+# above, since that regex is anchored at the very start of the string and
+# "You are in ..." starts with "You", not "in". Strip the narrator's own
+# framing before the existing preposition/article logic runs, mirroring
+# game_config.py's room_patterns (same "you (go X and) are ..." shape,
+# generalized here as a strip instead of a capture). Two patterns, like
+# room_patterns: "outside"/"inside" stop *before* the word rather than
+# consuming it, since (per the comment above) they're part of the room's
+# identity here, not a connector.
+_NARRATOR_PREFIX_RE = re.compile(
+    r"^you\s+(?:go\s+\w+\s+and\s+)?are\s+(?:in|on|at|beside)\s+", re.IGNORECASE
+)
+_NARRATOR_PREFIX_OUTSIDE_RE = re.compile(
+    r"^you\s+(?:go\s+\w+\s+and\s+)?are\s+(?=(?:outside|inside)\b)", re.IGNORECASE
+)
 # Bug 45 disambiguation suffix appended to a node id when the same display name is
 # reused for a physically distinct room (e.g. "Alder Clump #2").
 _DISAMBIGUATION_RE = re.compile(r" #(\d+)$")
+# Bug 78: floor on the existing-node side of _resolve_room_name's fuzzy
+# containment match (see there) — a degenerate-input guard, not tuned against
+# any observed false positive (comfortably below "cave" (4) and this game's
+# shortest real room name, "junipers" (8)).
+_MIN_FUZZY_MATCH_CHARS = 4
 
 
 def _short_room_name(name):
@@ -38,8 +59,17 @@ def _short_room_name(name):
     return re.split(r"[,;]", name, maxsplit=1)[0].rstrip(".")
 
 
+def _strip_narrator_prefix(name):
+    """Strip a leading "You (go north and) are ..." narrator preamble (bug 78).
+    Exactly one of the two regexes can match a given string, so applying both
+    in sequence is safe (whichever doesn't match is a no-op)."""
+    name = _NARRATOR_PREFIX_RE.sub("", name)
+    return _NARRATOR_PREFIX_OUTSIDE_RE.sub("", name)
+
+
 def _normalize_room(name):
     name = _short_room_name(name)
+    name = _strip_narrator_prefix(name)
     name = _LEADING_PREP_RE.sub("", name)
     return _ARTICLE_RE.sub("", name).strip().lower()
 
@@ -47,11 +77,13 @@ def _normalize_room(name):
 def _canonicalize_room(name):
     """Return a clean short node name for storage.
 
-    Truncates at the first comma/semicolon (bug 57), strips leading
+    Truncates at the first comma/semicolon (bug 57), strips a leading
+    narrator preamble (bug 78, e.g. "You are in ..."), then leading
     prepositions and articles.  Mid-string articles and spatial prefixes
     like 'inside'/'outside' are preserved.
     """
     name = _short_room_name(name)
+    name = _strip_narrator_prefix(name)
     name = _LEADING_PREP_RE.sub("", name)
     name = _LEADING_ARTICLE_RE.sub("", name)
     return name.strip()
@@ -98,12 +130,36 @@ def _resolve_room_name(graph, room_name, exits=None):
     `exits` is optional: when omitted (or empty, e.g. a terse response with no
     exit list this step), there's nothing to disambiguate with, so resolution
     falls back to name-only matching — the same behaviour as before bug 45's fix.
+
+    Bug 78: if nothing matches exactly, falls back to one more tier before
+    creating a new node — an existing node whose full (normalized) name is
+    entirely contained, word-for-word, within room_name's words (e.g. an
+    existing "Headhunters" node against an incoming "Headhunters saloon bar
+    of the Orc's Head Inn" — the same room described at two levels of detail
+    by the game itself, not just an LLM-verbosity artifact). Deliberately
+    one-directional (existing-node-words ⊆ incoming-words, never the
+    reverse): the reverse direction is exactly what
+    test_leading_in_prefix_resolves_to_existing_node's bare "a cave" case
+    (tests/test_agent.py) already asserts must NOT match either of an
+    existing "inside a cave"/"outside a cave" — a bidirectional check would
+    silently break that. _MIN_FUZZY_MATCH_CHARS guards against a
+    degenerate/near-empty existing node name matching everything. Fuzzy
+    candidates flow through the exact same exit-compatibility gate below as
+    an exact-name match, so bug 45's maze-room disambiguation is unaffected.
     """
     target = _normalize_room(room_name)
     candidates = [
         node for node in graph.nodes
         if not node.startswith("Unknown") and _normalize_room(_base_room_name(node)) == target
     ]
+    if not candidates:
+        target_words = set(target.split())
+        candidates = [
+            node for node in graph.nodes
+            if not node.startswith("Unknown")
+            and len((base_norm := _normalize_room(_base_room_name(node))).replace(" ", "")) >= _MIN_FUZZY_MATCH_CHARS
+            and set(base_norm.split()) <= target_words
+        ]
     if not candidates:
         return _canonicalize_room(room_name)
 

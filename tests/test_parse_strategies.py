@@ -171,6 +171,31 @@ def test_llm_tool_call_strategy(case):
     _assert_case_applied(state, case)
 
 
+def test_llm_tool_call_strategy_verbose_room_quote_resolves_to_existing_node():
+    # Bug 78 end-to-end: a (faked) LLM quotes a whole sentence instead of just
+    # the room name. It's still grounded (bug 74's check passes — it IS a
+    # literal substring), so apply_parse_result must not discard it, but
+    # _resolve_room_name must canonicalize/merge it into the existing node
+    # rather than fragmenting the graph. Not extending KNOWN_CASES across all
+    # three strategies for this shape — DeterministicParseStrategy can't
+    # produce a verbose narrator-prefixed room_quote by construction (see
+    # parse_strategies/deterministic.py), so that would test an unrealistic
+    # input for two of the three strategies.
+    canonical = {
+        "action_result": {"succeeded": True, "reason_if_failed": None},
+        "room_quote": "You are in the dingy stable",
+        "exits": ["north", "east"],
+    }
+    strategy = LLMToolCallParseStrategy(_FakeToolAdapter(canonical))
+    response = "You go north. You are in the dingy stable. Exits lead north and east."
+    state = make_state()
+    state["world_graph"].add_node("dingy stable")  # already-known short-form node
+    result = strategy.parse(response, "north")
+    apply_parse_result(state, result, "north", response, previous_room=None)
+    assert state["current_room"] == "dingy stable"
+    assert not state["world_graph"].has_node("You are in the dingy stable")
+
+
 @pytest.mark.parametrize("case", KNOWN_CASES, ids=[c.id for c in KNOWN_CASES])
 def test_deterministic_strategy(case):
     strategy = DeterministicParseStrategy()
@@ -231,15 +256,11 @@ def _backend_params(backends, no_creds_reason):
 # Known, real-model quality gaps — not a bug in the strategy/apply_parse_result
 # plumbing (that's what these tests exist to check), so these get xfail rather
 # than a loosened assertion that would silently stop catching a regression in
-# the plumbing itself.
-_KNOWN_REAL_MODEL_FAILURES = {
-    ("room_and_exits", "anthropic"): (
-        "bug 78: Claude quoted the full sentence "
-        "('You are in the dingy stable') as room_quote instead of just the "
-        "room name — grounded (satisfies bug 74) but too verbose for "
-        "_resolve_room_name to canonicalize to the short form."
-    ),
-}
+# the plumbing itself. Empty for now — bug 78's entry was removed once fixed
+# (agent.py's narrator-prefix stripping + fuzzy containment, plus prompt/schema
+# tightening in both LLM-backed strategies); kept as reusable scaffolding for
+# any future real-model quality gap.
+_KNOWN_REAL_MODEL_FAILURES = {}
 
 
 def _xfail_if_known_real_failure(case_id, backend_id):
