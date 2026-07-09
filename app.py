@@ -12,8 +12,18 @@ load_env_file()  # populate os.environ from .env before config or LLM setup
 
 from game_config import config
 from agent import process_agent_step
+from agent_tools import run_tool_calling_step
 from game_engine import start_level9
-from llm import LLAMA_AVAILABLE, OPENAI_AVAILABLE, extract_knowledge, load_llm, load_cloud_llm
+from llm import (
+    ANTHROPIC_AVAILABLE,
+    LLAMA_AVAILABLE,
+    OPENAI_AVAILABLE,
+    extract_knowledge,
+    load_anthropic_tool_llm,
+    load_llm,
+    load_openai_tool_llm,
+)
+from parse_strategies import LLMToolCallParseStrategy
 from run_evaluator import load_strategy
 from ui import generate_json_log, generate_markdown_log, render_graph
 from world_graph import update_graph
@@ -77,6 +87,10 @@ def init_state():
         st.session_state.system_state = _make_clean_state()
     if 'level9_process' not in st.session_state:
         st.session_state.level9_process = None
+    if 'run_id' not in st.session_state:
+        st.session_state.run_id = None
+    if 'initial_text' not in st.session_state:
+        st.session_state.initial_text = None
 
 
 init_state()
@@ -84,6 +98,19 @@ state = st.session_state.system_state
 
 st.title("🛡️ Knight Orc Autonomous OS")
 st.markdown("Local LLM-driven text adventure agent featuring autonomous spatial backtracking and dynamic anomaly resolution.")
+
+
+def _run_step(child, state, llm, parse_strategy):
+    """Dispatch one agent step to the appropriate loop based on LLM_PROVIDER."""
+    if LLM_PROVIDER == "local":
+        process_agent_step(state, child, llm)
+    else:
+        step_num = len(state["game_log"]) + 1
+        run_tool_calling_step(
+            state, child, llm, parse_strategy, st.session_state.run_id, step_num,
+            initial_text=st.session_state.get("initial_text"),
+        )
+
 
 # --- Sidebar ---
 with st.sidebar:
@@ -95,6 +122,7 @@ with st.sidebar:
     if LLM_PROVIDER == "local":
         model_path = st.text_input("Local llama.cpp Model Path", value="../models/Phi-3.5-mini-instruct-Q3_K_M.gguf")
         llm = load_llm(model_path) if LLAMA_AVAILABLE else None
+        parse_strategy = None
         if not LLAMA_AVAILABLE:
             st.warning("llama-cpp-python offline. Logic will fail without a model.")
     else:
@@ -102,12 +130,15 @@ with st.sidebar:
         cloud_model = st.text_input("Model", value=LLM_MODEL)
         cloud_key = st.text_input("API Key", value=LLM_API_KEY, type="password")
         cloud_url = st.text_input("Base URL (optional)", value=LLM_BASE_URL)
-        llm = load_cloud_llm(
-            LLM_PROVIDER, cloud_model, cloud_key,
-            base_url=cloud_url or None,
-        ) if OPENAI_AVAILABLE else None
-        if not OPENAI_AVAILABLE:
-            st.warning("openai package not installed. Cloud LLM unavailable.")
+        if LLM_PROVIDER == "anthropic":
+            llm = load_anthropic_tool_llm(cloud_model, cloud_key) if ANTHROPIC_AVAILABLE else None
+            available = ANTHROPIC_AVAILABLE
+        else:
+            llm = load_openai_tool_llm(LLM_PROVIDER, cloud_model, cloud_key, cloud_url or None) if OPENAI_AVAILABLE else None
+            available = OPENAI_AVAILABLE
+        if not available:
+            st.warning("Required cloud SDK not installed. Tool-calling LLM unavailable.")
+        parse_strategy = LLMToolCallParseStrategy(llm) if llm is not None else None
 
     _proc = st.session_state.level9_process
     engine_running = _proc is not None and _proc.isalive()
@@ -115,19 +146,24 @@ with st.sidebar:
     if st.button("Boot Engine (Start Game)", type="primary", use_container_width=True, disabled=engine_running):
         child, init_response = start_level9(interpreter_path, rom_path)
         st.session_state.level9_process = child
+        st.session_state.run_id = f"ui_{datetime.now().strftime('%Y%m%d_%H%M%S')}"
 
-        extracted_init = extract_knowledge(init_response, "look", llm)
-
-        if extracted_init.get("room"):
-            state["current_room"] = extracted_init["room"]
-        if extracted_init.get("exits"):
-            update_graph(state, state["current_room"], extracted_init["exits"], None, None)
+        if LLM_PROVIDER == "local":
+            extracted_init = extract_knowledge(init_response, "look", llm)
+            if extracted_init.get("room"):
+                state["current_room"] = extracted_init["room"]
+            if extracted_init.get("exits"):
+                update_graph(state, state["current_room"], extracted_init["exits"], None, None)
+            log_extracted = extracted_init
+        else:
+            log_extracted = {}
+        st.session_state.initial_text = init_response
 
         state["game_log"].append({
             "timestamp": datetime.now().strftime("%H:%M:%S"),
             "action": "[SYSTEM BOOT]",
             "response": init_response,
-            "extracted": extracted_init,
+            "extracted": log_extracted,
         })
 
         if child:
@@ -142,6 +178,8 @@ with st.sidebar:
         if _config_path and os.path.isfile(_config_path):
             config.load_from_file(_config_path)
         st.session_state.system_state = _make_clean_state()
+        st.session_state.run_id = None
+        st.session_state.initial_text = None
         state = st.session_state.system_state
         st.success("State reset. Config and strategy reloaded from disk.")
 
@@ -157,7 +195,7 @@ with st.sidebar:
         if st.button("Step Once", use_container_width=True):
             child = st.session_state.level9_process
             if child and child.isalive():
-                process_agent_step(state, child, llm)
+                _run_step(child, state, llm, parse_strategy)
             else:
                 st.error("Engine offline. Boot engine first.")
 
@@ -189,6 +227,10 @@ with col_viz:
         for entry in state["game_log"][-8:]:
             st.markdown(f"**> `{entry['action']}`**")
             st.text(entry['response'])
+            trace = entry.get("tool_trace") if "tool_trace" in entry else entry.get("llm_trace")
+            if trace:
+                with st.expander("Decision detail", expanded=False):
+                    st.json(trace)
             st.divider()
         st.markdown('<div class="io-terminal-bottom"></div>', unsafe_allow_html=True)
     components.html(
@@ -231,7 +273,7 @@ with col_state:
 if state["is_running"]:
     child = st.session_state.level9_process
     if child and child.isalive():
-        process_agent_step(state, child, llm)
+        _run_step(child, state, llm, parse_strategy)
         time.sleep(step_delay)
         st.rerun()
     else:
