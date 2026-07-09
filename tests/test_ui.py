@@ -39,7 +39,7 @@ def _patches_local():
 def _patches_cloud():
     return [
         patch("llm.OPENAI_AVAILABLE", True),
-        patch("llm.load_cloud_llm", return_value=_make_mock_llm()),
+        patch("llm.load_openai_tool_llm", return_value=_make_mock_llm()),
         patch("game_engine.start_level9", return_value=(_make_mock_child(), "You are in a dark room.")),
         patch("agent.process_agent_step", return_value=None),
     ]
@@ -111,7 +111,7 @@ class TestCloudMode:
             # this test's env (including the fake "sk-test" key) can't be
             # silently overwritten by a real .env on the machine running it.
             with patch("env_utils.load_env_file", return_value=set()), \
-                 patch("llm.OPENAI_AVAILABLE", True), patch("llm.load_cloud_llm", return_value=_make_mock_llm()):
+                 patch("llm.OPENAI_AVAILABLE", True), patch("llm.load_openai_tool_llm", return_value=_make_mock_llm()):
                 at = AppTest.from_file(APP_PATH, default_timeout=10)
                 at.run()
         return at
@@ -138,3 +138,88 @@ class TestCloudMode:
         at = self._run()
         assert at.session_state["system_state"] is not None
         assert at.session_state["level9_process"] is None  # not booted yet
+
+
+class TestToolCallingMode:
+    """Verify that a non-local LLM_PROVIDER loads tool adapters (not CloudLLMAdapter)."""
+
+    def _run(self, provider="anthropic"):
+        from streamlit.testing.v1 import AppTest
+        env = {
+            "LLM_PROVIDER": provider,
+            "LLM_MODEL": "claude-3-haiku-20240307",
+            "LLM_API_KEY": "sk-ant-test",
+            "LLM_BASE_URL": "",
+        }
+        mock_tool_adapter = MagicMock()
+        with patch.dict(os.environ, env, clear=False):
+            with patch("env_utils.load_env_file", return_value=set()), \
+                 patch("llm.ANTHROPIC_AVAILABLE", True), \
+                 patch("llm.load_anthropic_tool_llm", return_value=mock_tool_adapter) as mock_load:
+                at = AppTest.from_file(APP_PATH, default_timeout=10)
+                at.run()
+        return at, mock_load
+
+    def test_no_exception_on_boot(self):
+        at, _ = self._run()
+        assert not at.exception, f"App raised: {at.exception}"
+
+    def test_tool_adapter_loaded_not_cloud_llm(self):
+        """load_anthropic_tool_llm should be called; load_cloud_llm should not."""
+        env = {
+            "LLM_PROVIDER": "anthropic",
+            "LLM_MODEL": "claude-3-haiku-20240307",
+            "LLM_API_KEY": "sk-ant-test",
+            "LLM_BASE_URL": "",
+        }
+        mock_tool_adapter = MagicMock()
+        from streamlit.testing.v1 import AppTest
+        with patch.dict(os.environ, env, clear=False):
+            with patch("env_utils.load_env_file", return_value=set()), \
+                 patch("llm.ANTHROPIC_AVAILABLE", True), \
+                 patch("llm.load_anthropic_tool_llm", return_value=mock_tool_adapter) as mock_anthropic, \
+                 patch("llm.load_cloud_llm") as mock_cloud:
+                at = AppTest.from_file(APP_PATH, default_timeout=10)
+                at.run()
+        assert not at.exception, f"App raised: {at.exception}"
+        mock_anthropic.assert_called_once()
+        mock_cloud.assert_not_called()
+
+    def test_openai_provider_loads_openai_tool_adapter(self):
+        """For a non-anthropic provider, load_openai_tool_llm should be called."""
+        env = {
+            "LLM_PROVIDER": "deepseek",
+            "LLM_MODEL": "deepseek-chat",
+            "LLM_API_KEY": "sk-ds-test",
+            "LLM_BASE_URL": "",
+        }
+        mock_tool_adapter = MagicMock()
+        from streamlit.testing.v1 import AppTest
+        with patch.dict(os.environ, env, clear=False):
+            with patch("env_utils.load_env_file", return_value=set()), \
+                 patch("llm.OPENAI_AVAILABLE", True), \
+                 patch("llm.load_openai_tool_llm", return_value=mock_tool_adapter) as mock_openai, \
+                 patch("llm.load_cloud_llm") as mock_cloud:
+                at = AppTest.from_file(APP_PATH, default_timeout=10)
+                at.run()
+        assert not at.exception, f"App raised: {at.exception}"
+        mock_openai.assert_called_once()
+        mock_cloud.assert_not_called()
+
+    def test_run_id_initialised_in_session_state(self):
+        at, _ = self._run()
+        assert "run_id" in at.session_state
+
+    def test_api_key_input_visible(self):
+        at, _ = self._run()
+        labels = [w.label for w in at.text_input]
+        assert any("api key" in label.lower() for label in labels), (
+            f"Expected API Key input in tool-calling mode, got: {labels}"
+        )
+
+    def test_local_model_path_absent(self):
+        at, _ = self._run()
+        labels = [w.label for w in at.text_input]
+        assert not any("llama.cpp model path" in label.lower() for label in labels), (
+            f"Local model path should not appear in tool-calling mode, got: {labels}"
+        )

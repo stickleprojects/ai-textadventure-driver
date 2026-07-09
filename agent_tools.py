@@ -266,28 +266,36 @@ def _tool_result(call_id, payload):
     return {"id": call_id, "content": json.dumps(payload)}
 
 
-def _dispatch_tool(state, run_id, step_num, name, call_id, call_input):
+def _dispatch_tool(state, run_id, step_num, name, call_id, call_input, trace):
     """Execute one non-terminal tool call. Returns a tool_result dict. Counts
-    toward the cap via the caller for every name in _NON_TERMINAL_TOOLS."""
+    toward the cap via the caller for every name in _NON_TERMINAL_TOOLS.
+    Appends {"tool", "input", "output"} to trace for every dispatched call."""
     if name == "query_map":
-        return _tool_result(call_id, _impl_query_map(state, call_input.get("room")))
-    if name == "query_entity_history":
-        return _tool_result(call_id, _impl_query_entity_history(state, call_input.get("object")))
-    if name == "request_capability":
-        return _tool_result(call_id, _impl_request_capability(
+        payload = _impl_query_map(state, call_input.get("room"))
+    elif name == "query_entity_history":
+        payload = _impl_query_entity_history(state, call_input.get("object"))
+    elif name == "request_capability":
+        payload = _impl_request_capability(
             run_id, step_num, call_input.get("description", ""), call_input.get("rationale")
-        ))
-    if name == "write_journal":
-        return _tool_result(call_id, _impl_write_journal(state, step_num, call_input.get("note", "")))
-    if name == "search_journal":
-        return _tool_result(call_id, _impl_search_journal(state, call_input.get("query", "")))
-    return _tool_result(call_id, {"error": f"Unknown tool: {name}"})
+        )
+    elif name == "write_journal":
+        payload = _impl_write_journal(state, step_num, call_input.get("note", ""))
+    elif name == "search_journal":
+        payload = _impl_search_journal(state, call_input.get("query", ""))
+    else:
+        payload = {"error": f"Unknown tool: {name}"}
+    trace.append({"tool": name, "input": call_input, "output": payload})
+    return _tool_result(call_id, payload)
 
 
 def _run_decide_loop(state, run_id, step_num, tool_adapter, system_prompt, user_message):
     """Runs the decide-only tool-calling episode for one step, returning
-    (action_taken, action_reason, forced_fallback, total_usage)."""
+    (action_taken, action_reason, forced_fallback, total_usage, tool_trace).
+    tool_trace is a list of {"tool", "input", "output"} dicts for every
+    non-terminal tool call, plus a {"tool": "_nudge", "message": ...} entry
+    if a nudge was issued."""
     total_usage = {"input_tokens": 0, "output_tokens": 0}
+    tool_trace = []
 
     def _track(step_response):
         usage = step_response.get("usage", {})
@@ -308,7 +316,7 @@ def _run_decide_loop(state, run_id, step_num, tool_adapter, system_prompt, user_
             # happen in practice. Treat it the same as a nudge being ignored —
             # there's nothing to attach a corrective tool_result to.
             _log_tool_loop_exhausted(run_id, step_num, "model returned no tool call")
-            return _FALLBACK_COMMAND, "forced fallback: no tool call returned", True, total_usage
+            return _FALLBACK_COMMAND, "forced fallback: no tool call returned", True, total_usage, tool_trace
 
         results = []
         action_taken = action_reason = None
@@ -324,12 +332,12 @@ def _run_decide_loop(state, run_id, step_num, tool_adapter, system_prompt, user_
                 results.append(_tool_result(call_id, {"response": "(pending — ends this step)"}))
                 continue
 
-            results.append(_dispatch_tool(state, run_id, step_num, name, call_id, call_input))
+            results.append(_dispatch_tool(state, run_id, step_num, name, call_id, call_input, tool_trace))
             if name in _NON_TERMINAL_TOOLS:
                 non_terminal_calls += 1
 
         if terminal_seen:
-            return action_taken, action_reason, False, total_usage
+            return action_taken, action_reason, False, total_usage, tool_trace
 
         if non_terminal_calls >= _NON_TERMINAL_CALL_CAP:
             if nudged:
@@ -337,8 +345,9 @@ def _run_decide_loop(state, run_id, step_num, tool_adapter, system_prompt, user_
                 # no further model call needed (see "Runaway guard" in
                 # docs/agent_tools_spec.md).
                 _log_tool_loop_exhausted(run_id, step_num, "nudge ignored")
-                return _FALLBACK_COMMAND, "forced fallback: tool-call limit exceeded", True, total_usage
+                return _FALLBACK_COMMAND, "forced fallback: tool-call limit exceeded", True, total_usage, tool_trace
             nudged = True
+            tool_trace.append({"tool": "_nudge", "message": _NUDGE_MESSAGE})
             # Attach the nudge to the last real result's content rather than a
             # fabricated tool_result id — both backends validate that every
             # tool_result corresponds to an actual tool_use block from the
@@ -378,7 +387,7 @@ def run_tool_calling_step(state, child, tool_adapter, parse_strategy, run_id, st
     system_prompt = build_system_prompt()
     user_message = _build_user_message(last_response, state["inventory"], forced_fallback_notice)
 
-    action_taken, action_reason, forced_fallback, usage = _run_decide_loop(
+    action_taken, action_reason, forced_fallback, usage, tool_trace = _run_decide_loop(
         state, run_id, step_num, tool_adapter, system_prompt, user_message
     )
 
@@ -425,6 +434,8 @@ def run_tool_calling_step(state, child, tool_adapter, parse_strategy, run_id, st
     }
     if forced_fallback:
         entry["forced_fallback"] = True
+    if tool_trace:
+        entry["tool_trace"] = tool_trace
     state["game_log"].append(entry)
 
     loop_action = agent._detect_loop(state["game_log"])
