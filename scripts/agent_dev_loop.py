@@ -211,9 +211,11 @@ You are a software engineer fixing an autonomous text-adventure agent that plays
 Project structure:
 - configs/knight_orc.json — creature words, failure phrases, prompt pattern, inspection sequence
 - game_config.py — GameConfig singleton; edit the JSON file rather than this module
-- agent.py       — decision logic, _is_creature() pre-filter, state transitions, process_agent_step()
+- agent.py       — decision logic, state transitions, process_agent_step()
+- response_classification.py — is_creature() pre-filter, is_hard_failure()/is_soft_failure()/is_failure_response()
+- world_graph.py — room resolution/canonicalization, world graph updates, navigation
 - llm.py         — LLM prompt and extract_knowledge() with up-to-3 retry logic
-- game_engine.py — pexpect subprocess interface, _is_failure_response()
+- game_engine.py — pexpect subprocess interface
 - ui.py          — pyvis map rendering
 - tests/         — pytest unit tests (no LLM required)
 - tests/spec_scenarios/scenarios.json — spec-driven agent behavior scenarios (feature 59);

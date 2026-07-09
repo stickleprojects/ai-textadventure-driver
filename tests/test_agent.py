@@ -7,23 +7,25 @@ from agent import (
     _POSITION_LOST_MAX_ATTEMPTS,
     _compute_utility,
     _detect_loop,
-    _is_death,
-    _is_failure_response,
-    _is_hard_failure,
-    _is_scenery_response,
-    _is_soft_failure,
     _parse_inspection_action,
-    _parse_inventory_response,
     _record_verb_outcome,
     determine_next_action,
     process_agent_step,
 )
 from game_config import config
+from response_classification import (
+    is_death,
+    is_failure_response,
+    is_hard_failure,
+    is_scenery_response,
+    is_soft_failure,
+    parse_inventory_response,
+)
 from tests.conftest import make_state
 from world_graph import mark_edge_futile, nav_command, update_graph
 
 
-# ── _is_failure_response (backward compat — matches hard OR soft) ─────────────
+# ── is_failure_response (backward compat — matches hard OR soft) ─────────────
 
 @pytest.mark.parametrize("text", [
     "You can't do that.",
@@ -37,7 +39,7 @@ from world_graph import mark_edge_futile, nav_command, update_graph
     "You don't need to use the word EAT to finish this part of the game.",
 ])
 def test_failure_response_detected(text):
-    assert _is_failure_response(text)
+    assert is_failure_response(text)
 
 
 @pytest.mark.parametrize("text", [
@@ -46,67 +48,67 @@ def test_failure_response_detected(text):
     "You are in the Forest Path.",
 ])
 def test_failure_response_not_detected(text):
-    assert not _is_failure_response(text)
+    assert not is_failure_response(text)
 
 
-# ── _is_hard_failure ──────────────────────────────────────────────────────────
+# ── is_hard_failure ──────────────────────────────────────────────────────────
 
 class TestIsHardFailure:
     def test_cant_is_hard(self):
-        assert _is_hard_failure("You can't do that.")
+        assert is_hard_failure("You can't do that.")
 
     def test_nothing_happens_is_hard(self):
-        assert _is_hard_failure("Nothing happens.")
+        assert is_hard_failure("Nothing happens.")
 
     def test_dont_know_word_is_hard(self):
-        assert _is_hard_failure("I don't know that word.")
+        assert is_hard_failure("I don't know that word.")
 
     def test_success_not_hard(self):
-        assert not _is_hard_failure("Taken.")
+        assert not is_hard_failure("Taken.")
 
     def test_not_yet_not_hard(self):
-        assert not _is_hard_failure("Not yet.")
+        assert not is_hard_failure("Not yet.")
 
     def test_already_wearing_not_hard(self):
-        assert not _is_hard_failure("You're already wearing armour.")
+        assert not is_hard_failure("You're already wearing armour.")
 
 
-# ── _is_soft_failure ──────────────────────────────────────────────────────────
+# ── is_soft_failure ──────────────────────────────────────────────────────────
 
 class TestIsSoftFailure:
     def test_not_right_now_is_soft(self):
-        assert _is_soft_failure("You can't do that right now.")
+        assert is_soft_failure("You can't do that right now.")
 
     def test_already_wearing_is_soft(self):
-        assert _is_soft_failure("You're already wearing armour.")
+        assert is_soft_failure("You're already wearing armour.")
 
     def test_not_yet_is_soft(self):
-        assert _is_soft_failure("Not yet.")
+        assert is_soft_failure("Not yet.")
 
     def test_while_wearing_is_soft(self):
-        assert _is_soft_failure("You can't do that while you're wearing a cloak.")
+        assert is_soft_failure("You can't do that while you're wearing a cloak.")
 
     def test_success_not_soft(self):
-        assert not _is_soft_failure("Taken.")
+        assert not is_soft_failure("Taken.")
 
     def test_nothing_happens_not_soft(self):
-        assert not _is_soft_failure("Nothing happens.")
+        assert not is_soft_failure("Nothing happens.")
 
 
-# ── _is_scenery_response ────────────────────────────────────────────────────────
+# ── is_scenery_response ────────────────────────────────────────────────────────
 
 class TestIsSceneryResponse:
     def test_probably_just_scenery_is_scenery(self):
-        assert _is_scenery_response("That's probably just scenery.")
+        assert is_scenery_response("That's probably just scenery.")
 
     def test_too_heavy_not_scenery(self):
-        assert not _is_scenery_response("That's too heavy.")
+        assert not is_scenery_response("That's too heavy.")
 
     def test_cant_take_that_not_scenery(self):
-        assert not _is_scenery_response("You can't take that.")
+        assert not is_scenery_response("You can't take that.")
 
     def test_success_not_scenery(self):
-        assert not _is_scenery_response("Taken.")
+        assert not is_scenery_response("Taken.")
 
 
 # ── _parse_inspection_action ──────────────────────────────────────────────────
@@ -1521,7 +1523,7 @@ class TestDeathDetection:
         "killed in action",
     ])
     def test_is_death_detects_death_phrases(self, text):
-        assert _is_death(text)
+        assert is_death(text)
 
     @pytest.mark.parametrize("text", [
         "You take the sword.",
@@ -1529,37 +1531,37 @@ class TestDeathDetection:
         "Nothing happens.",
     ])
     def test_is_death_ignores_non_death(self, text):
-        assert not _is_death(text)
+        assert not is_death(text)
 
     def test_parse_inventory_response_items(self):
         text = "You are carrying: a sword, a lantern and a rope."
-        result = _parse_inventory_response(text)
+        result = parse_inventory_response(text)
         assert result == ["a sword", "a lantern", "a rope"]
 
     def test_parse_inventory_response_nothing(self):
         text = "You are not carrying anything."
-        result = _parse_inventory_response(text)
+        result = parse_inventory_response(text)
         assert result == []
 
     def test_parse_inventory_response_no_match_returns_none(self):
-        assert _parse_inventory_response("You are in a dark room.") is None
+        assert parse_inventory_response("You are in a dark room.") is None
 
     def test_parse_inventory_response_knight_orc_own_phrasing(self):
         # Bug 72: Knight Orc's real INVENTORY response — confirmed across
         # every historical run log, never once matched by _CARRYING_RE.
         text = "You own a putty knife and a hooded cloak."
-        assert _parse_inventory_response(text) == ["a putty knife", "a hooded cloak"]
+        assert parse_inventory_response(text) == ["a putty knife", "a hooded cloak"]
 
     def test_parse_inventory_response_knight_orc_own_and_wearing(self):
         text = "You own a putty knife. You are wearing a hooded cloak."
-        assert _parse_inventory_response(text) == ["a putty knife", "a hooded cloak"]
+        assert parse_inventory_response(text) == ["a putty knife", "a hooded cloak"]
 
     def test_parse_inventory_response_own_ignores_trailing_narration(self):
         # A false "nothing" match in unrelated trailing narration (an NPC's
         # shouted line, say) must not suppress a real positive "own" match —
         # positive extraction is tried before the broad not-carrying scan.
         text = 'You own a putty knife and a hooded cloak. \nA voice shouts, "I found nothing of value!"'
-        assert _parse_inventory_response(text) == ["a putty knife", "a hooded cloak"]
+        assert parse_inventory_response(text) == ["a putty knife", "a hooded cloak"]
 
     def test_determine_next_action_returns_inventory_when_recheck_set(self):
         state = make_state()

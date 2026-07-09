@@ -8,6 +8,7 @@ import parse_strategies
 from game_config import config
 from game_engine import execute_game_command
 from llm import extract_knowledge  # noqa: F401 — kept as agent.extract_knowledge: parse_strategies.LLMJsonModeParseStrategy calls it via module-attribute lookup so tests patching "agent.extract_knowledge" still work
+from response_classification import is_hard_failure, is_scenery_response, is_soft_failure
 from world_graph import DIRECTIONS, REVERSE, mark_edge_futile, nav_command
 
 _SCORE_RE = re.compile(r"you score\s+(\d+)\s+out of\s+(\d+)", re.IGNORECASE)
@@ -16,70 +17,6 @@ _SCORE_INTERVAL = 20
 # resuming normal priorities, so a game state that genuinely never confirms a
 # room (or a run of unparseable "look" responses) can't loop forever.
 _POSITION_LOST_MAX_ATTEMPTS = 3
-
-
-def _is_hard_failure(text):
-    return bool(config.hard_failure_pattern.search(text))
-
-
-def _is_soft_failure(text):
-    return bool(config.soft_failure_pattern.search(text))
-
-
-def _is_scenery_response(text):
-    return bool(config.scenery_pattern.search(text))
-
-
-def _is_failure_response(text):
-    return bool(config.failure_pattern.search(text))
-
-
-def _is_death(text):
-    return bool(config.death_pattern.search(text))
-
-
-_CARRYING_RE = re.compile(r"carrying[:\s]+(.+?)(?:\.\s*$|$)", re.IGNORECASE | re.DOTALL)
-_NOT_CARRYING_RE = re.compile(r"not carrying|carrying nothing|nothing", re.IGNORECASE)
-# Bug 72: Knight Orc's real INVENTORY response is "You own X[. You are
-# wearing Y]." — never "You are carrying...". Confirmed across every
-# historical run log with an "inventory" action; _CARRYING_RE never once
-# matched real game output, so recheck_inventory's resync silently never
-# fired. Checked first (a positive match takes precedence over the broad
-# "nothing" scan below, which risks a false trigger from unrelated trailing
-# narration, e.g. an NPC's shouted line); "carrying" stays as a fallback for
-# other games/configs that might phrase it that way.
-_OWN_RE = re.compile(r"you own\s+(.+?)\.", re.IGNORECASE)
-_WEARING_RE = re.compile(r"you(?:'re| are) wearing\s+(.+?)\.", re.IGNORECASE)
-
-
-def _split_item_list(raw):
-    # Split on comma or " and " (handles "item1, item2 and item3")
-    parts = re.split(r",|\s+and\s+", raw.strip().rstrip("."), flags=re.IGNORECASE)
-    return [p.strip() for p in parts if p.strip()]
-
-
-def _parse_inventory_response(text):
-    """Return item list from a game inventory response, or None if unparseable."""
-    items = []
-    own_match = _OWN_RE.search(text)
-    if own_match:
-        items.extend(_split_item_list(own_match.group(1)))
-    wearing_match = _WEARING_RE.search(text)
-    if wearing_match:
-        items.extend(_split_item_list(wearing_match.group(1)))
-    if items:
-        return items
-
-    if _NOT_CARRYING_RE.search(text):
-        return []
-    m = _CARRYING_RE.search(text)
-    if not m:
-        return None
-    return _split_item_list(m.group(1))
-
-
-def _is_creature(name):
-    return bool(set(name.lower().split()) & config.creature_words)
 
 
 def _parse_inspection_action(action, target):
@@ -308,7 +245,7 @@ def _compute_utility(action, response, snap_before, snap_after, insp_verb, effec
         or snap_after["inventory_count"] > snap_before["inventory_count"]
     ):
         return "productive"
-    if _is_hard_failure(response):
+    if is_hard_failure(response):
         return "futile"
     if insp_verb and effective_target and insp_verb in pre_verb_outcomes:
         return "redundant"
@@ -361,10 +298,10 @@ def process_agent_step(state, child, llm_instance, parse_strategy=None):
     # redundant with this block whenever the two derivations agree, but never
     # conflicting, since both read the same response text.
     if insp_verb and effective_target and insp_verb != "take":
-        if _is_soft_failure(response):
+        if is_soft_failure(response):
             # Valid verb, blocked by current game state — retry later
             _record_verb_outcome(state, effective_target, insp_verb, "blocked")
-        elif _is_hard_failure(response):
+        elif is_hard_failure(response):
             # Verb is permanently invalid for this object
             _record_verb_outcome(state, effective_target, insp_verb, "invalid")
         else:
@@ -377,12 +314,12 @@ def process_agent_step(state, child, llm_instance, parse_strategy=None):
     unrecognized_failure = None
     if insp_verb == "take" and effective_target:
         take_failed = False
-        if _is_soft_failure(response):
+        if is_soft_failure(response):
             # State-dependent (e.g. "you're already carrying that", hands full) —
             # may succeed on a later attempt/run, so never persist as permanent.
             _record_verb_outcome(state, effective_target, "take", "blocked")
             take_failed = True
-        elif _is_hard_failure(response):
+        elif is_hard_failure(response):
             # Permanently un-takeable (e.g. too heavy, fixed in place, scenery) —
             # safe to persist cross-run.
             _record_verb_outcome(state, effective_target, "take", "invalid")
@@ -413,7 +350,7 @@ def process_agent_step(state, child, llm_instance, parse_strategy=None):
         # heavy" or "fixed in place" objects can still reveal sub-objects (bug 31)
         # or other useful text. Only abandon the queued inspection sequence when
         # the game itself says there's nothing there to look at (bug 70).
-        if take_failed and _is_scenery_response(response):
+        if take_failed and is_scenery_response(response):
             state["current_inspection"]["target"] = None
             state["current_inspection"]["step_index"] = 0
 
