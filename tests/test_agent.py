@@ -12,17 +12,15 @@ from agent import (
     _is_hard_failure,
     _is_scenery_response,
     _is_soft_failure,
-    _mark_edge_futile,
-    _nav_command,
     _parse_inspection_action,
     _parse_inventory_response,
     _record_verb_outcome,
     determine_next_action,
     process_agent_step,
-    update_graph,
 )
 from game_config import config
 from tests.conftest import make_state
+from world_graph import mark_edge_futile, nav_command, update_graph
 
 
 # ── _is_failure_response (backward compat — matches hard OR soft) ─────────────
@@ -770,71 +768,71 @@ class TestNullRoomHandling:
     def test_article_variant_resolves_to_existing_node(self):
         # LLM sometimes adds/drops articles ("cave in juniper scrubland" vs
         # "cave in a juniper scrubland") — both should resolve to the same node.
-        from agent import _resolve_room_name
+        from world_graph import resolve_room_name
         import networkx as nx
         g = nx.MultiDiGraph()
         g.add_node("cave in juniper scrubland")
-        assert _resolve_room_name(g, "cave in a juniper scrubland") == "cave in juniper scrubland"
-        assert _resolve_room_name(g, "Cave In Juniper Scrubland") == "cave in juniper scrubland"
-        assert _resolve_room_name(g, "the cave in juniper scrubland") == "cave in juniper scrubland"
+        assert resolve_room_name(g, "cave in a juniper scrubland") == "cave in juniper scrubland"
+        assert resolve_room_name(g, "Cave In Juniper Scrubland") == "cave in juniper scrubland"
+        assert resolve_room_name(g, "the cave in juniper scrubland") == "cave in juniper scrubland"
 
     def test_leading_in_prefix_resolves_to_existing_node(self):
         # Bug 46: LLM returns "in an alder ghostwood" / "in alder forest" when the
         # stored node is "alder ghostwood" / "alder forest".
-        from agent import _resolve_room_name
+        from world_graph import resolve_room_name
         import networkx as nx
         g = nx.MultiDiGraph()
         g.add_node("alder ghostwood")
         g.add_node("cedar tangle")
         g.add_node("alder forest")
         # "in an X" → same as "X" (leading preposition + article variant)
-        assert _resolve_room_name(g, "in an alder ghostwood") == "alder ghostwood"
-        assert _resolve_room_name(g, "an alder ghostwood") == "alder ghostwood"
+        assert resolve_room_name(g, "in an alder ghostwood") == "alder ghostwood"
+        assert resolve_room_name(g, "an alder ghostwood") == "alder ghostwood"
         # article-only variant still works
-        assert _resolve_room_name(g, "a cedar tangle") == "cedar tangle"
-        assert _resolve_room_name(g, "an alder forest") == "alder forest"
+        assert resolve_room_name(g, "a cedar tangle") == "cedar tangle"
+        assert resolve_room_name(g, "an alder forest") == "alder forest"
 
-        assert _resolve_room_name(g, "on a jousting field") == "jousting field"
+        assert resolve_room_name(g, "on a jousting field") == "jousting field"
 
         # "inside" / "outside" must NOT be stripped — they are distinct locations
         g2 = nx.MultiDiGraph()
         g2.add_node("inside a cave")
         g2.add_node("outside a cave")
-        assert _resolve_room_name(g2, "inside a cave") == "inside a cave"
-        assert _resolve_room_name(g2, "outside a cave") == "outside a cave"
+        assert resolve_room_name(g2, "inside a cave") == "inside a cave"
+        assert resolve_room_name(g2, "outside a cave") == "outside a cave"
         # bare "a cave" must NOT accidentally match "inside a cave"; new node gets
         # canonicalised name ("cave"), not the raw LLM string
-        assert _resolve_room_name(g2, "a cave") == "cave"
+        assert resolve_room_name(g2, "a cave") == "cave"
 
     def test_description_suffix_resolves_to_existing_short_node(self):
         # Bug 57: LLM sometimes appends the full room description after the short name,
         # separated by comma or semicolon. Both forms must resolve to the same node.
-        from agent import _resolve_room_name
+        from world_graph import resolve_room_name
         import networkx as nx
         g = nx.MultiDiGraph()
         g.add_node("jousting field")
         g.add_node("dingy stable")
         g.add_node("dismal fairground in a rowan coppice")
         # semicolon-separated description variant
-        assert _resolve_room_name(g, "on a jousting field; an acre of firm meadow, divided by a fence") == "jousting field"
+        assert resolve_room_name(g, "on a jousting field; an acre of firm meadow, divided by a fence") == "jousting field"
         # trailing period variant
-        assert _resolve_room_name(g, "on a jousting field; an acre of firm meadow.") == "jousting field"
+        assert resolve_room_name(g, "on a jousting field; an acre of firm meadow.") == "jousting field"
         # comma-separated description variant
-        assert _resolve_room_name(g, "a dingy stable, a temporary building with canvas walls") == "dingy stable"
+        assert resolve_room_name(g, "a dingy stable, a temporary building with canvas walls") == "dingy stable"
         # short form still works
-        assert _resolve_room_name(g, "a dingy stable") == "dingy stable"
+        assert resolve_room_name(g, "a dingy stable") == "dingy stable"
         # no separator — unchanged
-        assert _resolve_room_name(g, "on a dismal fairground in a rowan coppice") == "dismal fairground in a rowan coppice"
+        assert resolve_room_name(g, "on a dismal fairground in a rowan coppice") == "dismal fairground in a rowan coppice"
 
     def test_new_node_stored_under_short_name(self):
         # Bug 57: when the LLM returns a long-form name for a room not yet in the graph,
         # the new node should be stored under the short name, not the full description.
-        from agent import _resolve_room_name
+        from world_graph import resolve_room_name
         import networkx as nx
         g = nx.MultiDiGraph()
-        result = _resolve_room_name(g, "a dingy stable, a temporary building with canvas walls")
+        result = resolve_room_name(g, "a dingy stable, a temporary building with canvas walls")
         assert result == "dingy stable"
-        result2 = _resolve_room_name(g, "on a jousting field; an acre of firm meadow")
+        result2 = resolve_room_name(g, "on a jousting field; an acre of firm meadow")
         assert result2 == "jousting field"
 
     # ── Bug 45: maze rooms sharing a name but not exits must not collapse ─────
@@ -843,117 +841,117 @@ class TestNullRoomHandling:
         # Two physically distinct rooms both reported as "Alder Clump" by the LLM
         # (a maze). Their exit sets share nothing, so the second must resolve to
         # a fresh, disambiguated node rather than merging into the first.
-        from agent import _resolve_room_name
+        from world_graph import resolve_room_name
         g = nx.MultiDiGraph()
-        first = _resolve_room_name(g, "Alder Clump", ["north", "east"])
+        first = resolve_room_name(g, "Alder Clump", ["north", "east"])
         assert first == "Alder Clump"
         # Record the first room's exits as real edges, the way update_graph would
         # after a live step — a bare node with no edges has no recorded exits yet.
         update_graph({"world_graph": g}, first, ["north", "east"], None, "")
 
-        second = _resolve_room_name(g, "Alder Clump", ["south", "west"])
+        second = resolve_room_name(g, "Alder Clump", ["south", "west"])
         assert second == "Alder Clump #2"
         assert second != first
 
     def test_third_disjoint_visit_gets_next_suffix(self):
         # Suffix numbering must scale past #2, not just handle the binary case.
-        from agent import _resolve_room_name
+        from world_graph import resolve_room_name
         g = nx.MultiDiGraph()
         g.add_node("Alder Clump")
         g.add_edge("Alder Clump", "Unknown (north from Alder Clump)", label="north")
         g.add_node("Alder Clump #2")
         g.add_edge("Alder Clump #2", "Unknown (south from Alder Clump #2)", label="south")
 
-        third = _resolve_room_name(g, "Alder Clump", ["up", "down"])
+        third = resolve_room_name(g, "Alder Clump", ["up", "down"])
         assert third == "Alder Clump #3"
 
     def test_overlapping_exits_on_repeated_name_merges_into_existing_node(self):
         # A revisit where the LLM under-reports one exit must still merge into
         # the same node, not fragment into a new one — only a fully disjoint
         # exit set indicates a genuinely different room.
-        from agent import _resolve_room_name
+        from world_graph import resolve_room_name
         g = nx.MultiDiGraph()
         g.add_node("Alder Clump")
         g.add_edge("Alder Clump", "Unknown (north from Alder Clump)", label="north")
         g.add_edge("Alder Clump", "Unknown (east from Alder Clump)", label="east")
 
-        resolved = _resolve_room_name(g, "Alder Clump", ["north"])
+        resolved = resolve_room_name(g, "Alder Clump", ["north"])
         assert resolved == "Alder Clump"
 
     def test_node_with_no_recorded_exits_yet_is_treated_as_same_room(self):
         # A node created from a terse first visit (no exits known yet) must not
         # be treated as incompatible just because it has nothing recorded.
-        from agent import _resolve_room_name
+        from world_graph import resolve_room_name
         g = nx.MultiDiGraph()
         g.add_node("Alder Clump")  # no edges yet — exits unknown
 
-        resolved = _resolve_room_name(g, "Alder Clump", ["north", "east"])
+        resolved = resolve_room_name(g, "Alder Clump", ["north", "east"])
         assert resolved == "Alder Clump"
 
     def test_no_exits_this_step_falls_back_to_name_only_match(self):
         # Bug 45's own edge case: a terse response with no exit list this step
         # gives nothing to disambiguate with — fall back to pre-fix behavior
         # (first name match) rather than guessing.
-        from agent import _resolve_room_name
+        from world_graph import resolve_room_name
         g = nx.MultiDiGraph()
         g.add_node("Alder Clump")
         g.add_node("Alder Clump #2")
 
-        resolved = _resolve_room_name(g, "Alder Clump", exits=[])
+        resolved = resolve_room_name(g, "Alder Clump", exits=[])
         assert resolved == "Alder Clump"
-        resolved_default = _resolve_room_name(g, "Alder Clump")
+        resolved_default = resolve_room_name(g, "Alder Clump")
         assert resolved_default == "Alder Clump"
 
     def test_known_exits_splits_compound_alias_label(self):
         # Bug 48/59: a merged alias label ("south/down") must count as both
         # exits known, not just the first.
-        from agent import _known_exits
+        from world_graph import known_exits
         g = nx.MultiDiGraph()
         g.add_edge("Start", "Cellar", label="south/down")
-        assert _known_exits(g, "Start") == {"south", "down"}
+        assert known_exits(g, "Start") == {"south", "down"}
 
     # ── Bug 78: verbose-but-grounded room quotes must not fragment the graph ──
 
     def test_verbose_narrator_quote_resolves_to_existing_short_node(self):
         # A model quotes the whole sentence instead of just the room name, but
         # the room already exists under its short form.
-        from agent import _resolve_room_name
+        from world_graph import resolve_room_name
         g = nx.MultiDiGraph()
         g.add_node("dingy stable")
-        assert _resolve_room_name(g, "You are in the dingy stable") == "dingy stable"
-        assert _resolve_room_name(g, "You are in a dingy stable") == "dingy stable"
-        assert _resolve_room_name(g, "You go south and are in the dingy stable") == "dingy stable"
+        assert resolve_room_name(g, "You are in the dingy stable") == "dingy stable"
+        assert resolve_room_name(g, "You are in a dingy stable") == "dingy stable"
+        assert resolve_room_name(g, "You go south and are in the dingy stable") == "dingy stable"
 
     def test_verbose_narrator_quote_on_empty_graph_canonicalizes_correctly(self):
         # First visit, empty graph, nothing to match against — the fix must
         # also live in _canonicalize_room (new-node naming), not just
         # candidate matching.
-        from agent import _resolve_room_name
+        from world_graph import resolve_room_name
         g = nx.MultiDiGraph()
-        assert _resolve_room_name(g, "You are in the dingy stable") == "dingy stable"
-        assert _resolve_room_name(g, "You go south and are in an alder ghostwood") == "alder ghostwood"
+        assert resolve_room_name(g, "You are in the dingy stable") == "dingy stable"
+        assert resolve_room_name(g, "You go south and are in an alder ghostwood") == "alder ghostwood"
 
     def test_narrator_prefix_strip_preserves_outside_inside_distinction(self):
         # Must not regress: "outside"/"inside" stay part of the room name.
-        from agent import _resolve_room_name
+        from world_graph import resolve_room_name
         g = nx.MultiDiGraph()
         g.add_node("outside a cave")
         g.add_node("inside a cave")
-        assert _resolve_room_name(g, "You are outside a cave") == "outside a cave"
-        assert _resolve_room_name(g, "You are inside a cave") == "inside a cave"
+        assert resolve_room_name(g, "You are outside a cave") == "outside a cave"
+        assert resolve_room_name(g, "You are inside a cave") == "inside a cave"
 
     def test_shared_word_different_rooms_do_not_fuzzy_merge(self):
         # Two genuinely different rooms sharing one generic word must never
         # merge via the fuzzy containment tier.
-        from agent import _resolve_room_name
+        from world_graph import resolve_room_name
         g = nx.MultiDiGraph()
         g.add_node("jousting field")
         g.add_node("trampled field")
-        assert _resolve_room_name(g, "You are on a jousting field") == "jousting field"
-        assert _resolve_room_name(g, "You are on a trampled field") == "trampled field"
+        assert resolve_room_name(g, "You are on a jousting field") == "jousting field"
+        assert resolve_room_name(g, "You are on a trampled field") == "trampled field"
         # A bare, under-specified quote sharing only the generic word must not
         # silently resolve to either existing node.
-        ambiguous = _resolve_room_name(g, "a field")
+        ambiguous = resolve_room_name(g, "a field")
         assert ambiguous not in ("jousting field", "trampled field")
 
     def test_fuzzy_containment_merges_verbose_quote_into_existing_short_node(self):
@@ -961,26 +959,26 @@ class TestNullRoomHandling:
         # "Headhunters" vs "Headhunters saloon bar of the Orc's Head Inn" —
         # not a narrator-prefix artifact, genuinely needs the word-containment
         # tier (the game itself narrates the same room at two levels of detail).
-        from agent import _resolve_room_name
+        from world_graph import resolve_room_name
         g = nx.MultiDiGraph()
         g.add_node("Headhunters")
-        assert _resolve_room_name(g, "Headhunters saloon bar of the Orc's Head Inn") == "Headhunters"
+        assert resolve_room_name(g, "Headhunters saloon bar of the Orc's Head Inn") == "Headhunters"
 
     def test_fuzzy_containment_still_respects_exit_disambiguation(self):
         # Bug 45 must not regress: a fuzzy (contains-existing-name) match is
         # fed through the exact same exit-compatibility gate as an exact match.
-        from agent import _resolve_room_name
+        from world_graph import resolve_room_name
         g = nx.MultiDiGraph()
-        first = _resolve_room_name(g, "Alder Clump", ["north", "east"])
+        first = resolve_room_name(g, "Alder Clump", ["north", "east"])
         update_graph({"world_graph": g}, first, ["north", "east"], None, "")
-        second = _resolve_room_name(g, "You are in the Alder Clump maze", ["south", "west"])
+        second = resolve_room_name(g, "You are in the Alder Clump maze", ["south", "west"])
         assert second == "Alder Clump #2"
 
     def test_fuzzy_containment_merges_when_exits_compatible(self):
-        from agent import _resolve_room_name
+        from world_graph import resolve_room_name
         g = nx.MultiDiGraph()
         g.add_node("Alder Clump")  # no exits recorded yet
-        assert _resolve_room_name(g, "You are in the Alder Clump maze", ["north"]) == "Alder Clump"
+        assert resolve_room_name(g, "You are in the Alder Clump maze", ["north"]) == "Alder Clump"
 
     def test_process_agent_step_disjoint_maze_produces_two_distinct_rooms(self, stub_child):
         # End-to-end: two consecutive steps reporting the same room name with
@@ -1156,14 +1154,14 @@ class TestMarkEdgeFutile:
         state = make_state(current_room="Hall")
         state["world_graph"].add_node("Hall")
         state["world_graph"].add_edge("Hall", "Unknown (north from Hall)", label="north")
-        _mark_edge_futile(state, "Hall", "north")
+        mark_edge_futile(state, "Hall", "north")
         assert ("Hall", "north") in state["futile_edges"]
 
     def test_tags_graph_edge_data(self):
         state = make_state(current_room="Hall")
         state["world_graph"].add_node("Hall")
         state["world_graph"].add_edge("Hall", "Unknown (north from Hall)", label="north")
-        _mark_edge_futile(state, "Hall", "north")
+        mark_edge_futile(state, "Hall", "north")
         data = state["world_graph"].get_edge_data("Hall", "Unknown (north from Hall)")
         assert data is not None
         # MultiDiGraph: get_edge_data returns {key: data_dict}
@@ -1172,7 +1170,7 @@ class TestMarkEdgeFutile:
     def test_no_crash_when_edge_absent(self):
         state = make_state(current_room="Hall")
         state["world_graph"].add_node("Hall")
-        _mark_edge_futile(state, "Hall", "north")  # edge doesn't exist — should not raise
+        mark_edge_futile(state, "Hall", "north")  # edge doesn't exist — should not raise
         assert ("Hall", "north") in state["futile_edges"]
 
 
@@ -1294,7 +1292,7 @@ class TestNavCommand:
     def test_fast_template_used_when_configured(self):
         state = make_state(current_room="Hall", visited_rooms={"Courtyard"})
         with patch.object(config, "fast_nav_command", "run to {target}"):
-            assert _nav_command(state, "Courtyard", fast=True) == "run to Courtyard"
+            assert nav_command(state, "Courtyard", fast=True) == "run to Courtyard"
 
     def test_fast_template_not_used_for_unvisited_room(self):
         state = make_state(current_room="Hall")
@@ -1302,12 +1300,12 @@ class TestNavCommand:
         state["world_graph"].add_node("Courtyard")
         state["world_graph"].add_edge("Hall", "Courtyard", label="north")
         with patch.object(config, "fast_nav_command", "run to {target}"):
-            assert _nav_command(state, "Courtyard", fast=True) == "north"
+            assert nav_command(state, "Courtyard", fast=True) == "north"
 
     def test_full_template_used_when_configured(self):
         state = make_state(current_room="Hall", visited_rooms={"Courtyard"})
         with patch.object(config, "full_nav_command", "go to {target}"):
-            assert _nav_command(state, "Courtyard", fast=False) == "go to Courtyard"
+            assert nav_command(state, "Courtyard", fast=False) == "go to Courtyard"
 
     def test_falls_back_to_graph_when_no_template(self):
         state = make_state(current_room="Hall")
@@ -1315,13 +1313,13 @@ class TestNavCommand:
         state["world_graph"].add_node("Courtyard")
         state["world_graph"].add_edge("Hall", "Courtyard", label="north")
         with patch.object(config, "fast_nav_command", None):
-            assert _nav_command(state, "Courtyard", fast=True) == "north"
+            assert nav_command(state, "Courtyard", fast=True) == "north"
 
     def test_graph_fallback_returns_none_when_no_path(self):
         state = make_state(current_room="Hall")
         state["world_graph"].add_node("Hall")
         with patch.object(config, "fast_nav_command", None):
-            assert _nav_command(state, "Courtyard", fast=True) is None
+            assert nav_command(state, "Courtyard", fast=True) is None
 
     def test_blacklisted_target_falls_back_to_graph_even_if_visited(self):
         state = make_state(
@@ -1331,14 +1329,14 @@ class TestNavCommand:
         state["world_graph"].add_node("Courtyard")
         state["world_graph"].add_edge("Hall", "Courtyard", label="north")
         with patch.object(config, "fast_nav_command", "run to {target}"):
-            assert _nav_command(state, "Courtyard", fast=True) == "north"
+            assert nav_command(state, "Courtyard", fast=True) == "north"
 
     def test_non_blacklisted_target_still_uses_fast_template(self):
         state = make_state(
             current_room="Hall", visited_rooms={"Courtyard"}, nav_blacklist={"Elsewhere"}
         )
         with patch.object(config, "fast_nav_command", "run to {target}"):
-            assert _nav_command(state, "Courtyard", fast=True) == "run to Courtyard"
+            assert nav_command(state, "Courtyard", fast=True) == "run to Courtyard"
 
 
 class TestActiveGoalNavigation:

@@ -12,11 +12,12 @@ from unittest.mock import patch
 
 import pytest
 
-from agent import _base_room_name, _detect_loop, _normalize_room, process_agent_step
+from agent import _detect_loop, process_agent_step
 from env_utils import load_env_file
 from llm import OPENAI_AVAILABLE, CloudLLMAdapter
 from tests.conftest import make_state
 from tests.simulations.fixtures import MAZE_WALK_RESPONSES
+from world_graph import base_room_name, normalize_room
 
 pytestmark = [pytest.mark.llm, pytest.mark.slow]
 
@@ -70,7 +71,7 @@ def test_maze_walk_keeps_repeated_room_name_distinct(deepseek_llm, stub_child):
     alder_clump_nodes = [
         node for node in state["world_graph"].nodes
         if not node.startswith("Unknown")
-        and _normalize_room(_base_room_name(node)) == "alder clump"
+        and normalize_room(base_room_name(node)) == "alder clump"
     ]
     # >=2 is the actual regression proof: bug 45 would collapse every "Alder
     # Clump" visit into exactly 1 node regardless of exits.

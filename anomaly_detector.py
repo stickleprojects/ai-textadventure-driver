@@ -26,7 +26,7 @@ _THRASH_UNIQUE_ROOMS = 4  # ≤ this many distinct rooms in a window = thrash
 def _norm_room(entry):
     """Normalise extracted room name for thrash detection.
 
-    Mirrors the bug-57 fix in agent._short_room_name: truncate at the first
+    Mirrors the bug-57 fix in world_graph.short_room_name: truncate at the first
     comma/semicolon, strip trailing period, strip leading preposition/article.
     Applied here so the detector works correctly on both old (fragmented) and
     new (already-canonicalised) logs.

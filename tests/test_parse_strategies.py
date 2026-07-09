@@ -35,6 +35,7 @@ from env_utils import load_env_file
 load_env_file()  # populate os.environ from .env before any os.environ.get calls below
 
 import agent
+import world_graph
 from parse_strategies import (
     DeterministicParseStrategy,
     LLMJsonModeParseStrategy,
@@ -137,8 +138,8 @@ def _assert_case_applied(state, case):
         assert state["current_room"] == case.room
         for direction in case.exits:
             # update_graph normalizes compound directions before naming the
-            # placeholder node (southwest -> sw, etc. — agent._DIRECTION_NORMALIZE).
-            normalized = agent._DIRECTION_NORMALIZE.get(direction, direction)
+            # placeholder node (southwest -> sw, etc. — world_graph.DIRECTION_NORMALIZE).
+            normalized = world_graph.DIRECTION_NORMALIZE.get(direction, direction)
             assert state["world_graph"].has_node(f"Unknown ({normalized} from {case.room})")
     for obj in case.objects:
         assert obj in state["uninspected_objects"]
