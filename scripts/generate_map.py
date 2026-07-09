@@ -16,13 +16,13 @@ import networkx as nx
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
-from agent import update_graph, _resolve_room_name
 from ui import save_graph_image
+from world_graph import resolve_room_name, update_graph
 
 
 def rebuild_graph(game_log):
     """Replay log entries to reconstruct the world graph and last known room."""
-    graph = nx.DiGraph()
+    graph = nx.MultiDiGraph()
     state = {"world_graph": graph, "current_room": "Unknown Location"}
     previous_room = None
 
@@ -33,7 +33,7 @@ def rebuild_graph(game_log):
         exits = extracted.get("exits") or []
 
         if room:
-            state["current_room"] = _resolve_room_name(state["world_graph"], room, exits)
+            state["current_room"] = resolve_room_name(state["world_graph"], room, exits)
 
         update_graph(state, state["current_room"], exits, previous_room, action)
         previous_room = state["current_room"]

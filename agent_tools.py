@@ -21,6 +21,7 @@ from pathlib import Path
 
 import agent
 import parse_strategies
+import world_graph
 from game_engine import execute_game_command as _run_game_command
 
 _NON_TERMINAL_CALL_CAP = 6
@@ -200,7 +201,10 @@ def _build_user_message(last_response, inventory, forced_fallback_notice):
 
 def _impl_query_map(state, room=None):
     graph = state["world_graph"]
-    target_room = room or state["current_room"]
+    if room:
+        target_room = world_graph.resolve_room_name(graph, room)
+    else:
+        target_room = state["current_room"]
     known_exits, futile_exits = [], []
     if target_room in graph:
         for _, dest, data in graph.edges(target_room, data=True):
@@ -403,8 +407,8 @@ def run_tool_calling_step(state, child, tool_adapter, parse_strategy, run_id, st
     if is_death:
         utility = "death"
 
-    if utility == "futile" and action_taken in agent._DIRECTIONS:
-        agent._mark_edge_futile(state, previous_room, action_taken)
+    if utility == "futile" and action_taken in world_graph.DIRECTIONS:
+        world_graph.mark_edge_futile(state, previous_room, action_taken)
 
     entry = {
         "timestamp": datetime.now().strftime("%H:%M:%S"),

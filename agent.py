@@ -8,6 +8,7 @@ import parse_strategies
 from game_config import config
 from game_engine import execute_game_command
 from llm import extract_knowledge  # noqa: F401 — kept as agent.extract_knowledge: parse_strategies.LLMJsonModeParseStrategy calls it via module-attribute lookup so tests patching "agent.extract_knowledge" still work
+from world_graph import DIRECTIONS, REVERSE, mark_edge_futile, nav_command
 
 _SCORE_RE = re.compile(r"you score\s+(\d+)\s+out of\s+(\d+)", re.IGNORECASE)
 _SCORE_INTERVAL = 20
@@ -15,172 +16,6 @@ _SCORE_INTERVAL = 20
 # resuming normal priorities, so a game state that genuinely never confirms a
 # room (or a run of unparseable "look" responses) can't loop forever.
 _POSITION_LOST_MAX_ATTEMPTS = 3
-
-_ARTICLE_RE = re.compile(r"\b(a|an|the)\b\s*", re.IGNORECASE)
-# Strip leading positional prepositions — LLM says "in an alder ghostwood",
-# "on a jousting field" etc.  Two passes needed: preposition first, then article.
-# "inside"/"outside" are NOT stripped: they denote distinct rooms.
-_LEADING_PREP_RE = re.compile(r"^(in|on|at)\s+", re.IGNORECASE)
-_LEADING_ARTICLE_RE = re.compile(r"^(a|an|the)\s+", re.IGNORECASE)
-# Bug 78: a grounded (bug 74) but overly-verbose room quote — "You are in the
-# dingy stable" instead of just "the dingy stable" — defeats _LEADING_PREP_RE
-# above, since that regex is anchored at the very start of the string and
-# "You are in ..." starts with "You", not "in". Strip the narrator's own
-# framing before the existing preposition/article logic runs, mirroring
-# game_config.py's room_patterns (same "you (go X and) are ..." shape,
-# generalized here as a strip instead of a capture). Two patterns, like
-# room_patterns: "outside"/"inside" stop *before* the word rather than
-# consuming it, since (per the comment above) they're part of the room's
-# identity here, not a connector.
-_NARRATOR_PREFIX_RE = re.compile(
-    r"^you\s+(?:go\s+\w+\s+and\s+)?are\s+(?:in|on|at|beside)\s+", re.IGNORECASE
-)
-_NARRATOR_PREFIX_OUTSIDE_RE = re.compile(
-    r"^you\s+(?:go\s+\w+\s+and\s+)?are\s+(?=(?:outside|inside)\b)", re.IGNORECASE
-)
-# Bug 45 disambiguation suffix appended to a node id when the same display name is
-# reused for a physically distinct room (e.g. "Alder Clump #2").
-_DISAMBIGUATION_RE = re.compile(r" #(\d+)$")
-# Bug 78: floor on the existing-node side of _resolve_room_name's fuzzy
-# containment match (see there) — a degenerate-input guard, not tuned against
-# any observed false positive (comfortably below "cave" (4) and this game's
-# shortest real room name, "junipers" (8)).
-_MIN_FUZZY_MATCH_CHARS = 4
-
-
-def _short_room_name(name):
-    """Truncate at the first comma or semicolon and strip trailing period.
-
-    Knight Orc room names follow the pattern '<short name>[, | ; <description>]'.
-    The LLM sometimes returns the full description, sometimes just the short name.
-    Truncating at the first separator and stripping trailing punctuation gives a
-    stable short form that matches across variants.
-    """
-    return re.split(r"[,;]", name, maxsplit=1)[0].rstrip(".")
-
-
-def _strip_narrator_prefix(name):
-    """Strip a leading "You (go north and) are ..." narrator preamble (bug 78).
-    Exactly one of the two regexes can match a given string, so applying both
-    in sequence is safe (whichever doesn't match is a no-op)."""
-    name = _NARRATOR_PREFIX_RE.sub("", name)
-    return _NARRATOR_PREFIX_OUTSIDE_RE.sub("", name)
-
-
-def _normalize_room(name):
-    name = _short_room_name(name)
-    name = _strip_narrator_prefix(name)
-    name = _LEADING_PREP_RE.sub("", name)
-    return _ARTICLE_RE.sub("", name).strip().lower()
-
-
-def _canonicalize_room(name):
-    """Return a clean short node name for storage.
-
-    Truncates at the first comma/semicolon (bug 57), strips a leading
-    narrator preamble (bug 78, e.g. "You are in ..."), then leading
-    prepositions and articles.  Mid-string articles and spatial prefixes
-    like 'inside'/'outside' are preserved.
-    """
-    name = _short_room_name(name)
-    name = _strip_narrator_prefix(name)
-    name = _LEADING_PREP_RE.sub("", name)
-    name = _LEADING_ARTICLE_RE.sub("", name)
-    return name.strip()
-
-
-def _base_room_name(node):
-    """Strip a bug-45 disambiguation suffix (' #2') to recover the shared display name."""
-    return _DISAMBIGUATION_RE.sub("", node)
-
-
-def _known_exits(graph, node):
-    """Return the set of exit directions already recorded as edges from node.
-
-    Compound alias labels ("south/down", bug 48/59) are split into their parts so
-    both aliases count as known exits, not just the first.
-    """
-    exits = set()
-    for _, _, data in graph.edges(node, data=True):
-        label = data.get("label", "")
-        if label:
-            exits.update(label.split("/"))
-    return frozenset(exits)
-
-
-def _resolve_room_name(graph, room_name, exits=None):
-    """Return the graph node room_name should resolve to.
-
-    Prevents the same physical room being stored twice when the LLM returns
-    slight article variations ('cave in juniper scrubland' vs 'cave in a juniper
-    scrubland') by matching on a normalised display name. If no match exists,
-    returns the canonicalised form of room_name so new nodes are stored without
-    noisy leading prepositions/articles.
-
-    Bug 45: matching by name alone also collapses maze rooms that legitimately
-    share a display name but are physically distinct places, so the agent
-    believes an unexplored area is already fully mapped. When `exits` is given
-    and disjoint from every existing same-named node's recorded exits, this
-    returns a fresh node (display name + numeric suffix, e.g. "Alder Clump #2")
-    instead of reusing the first match. A node with no recorded exits yet, or
-    whose exits overlap the observed set, is treated as the same room — this
-    keeps normal revisits (where the LLM may under-report an exit) merged into
-    one node instead of fragmenting.
-
-    `exits` is optional: when omitted (or empty, e.g. a terse response with no
-    exit list this step), there's nothing to disambiguate with, so resolution
-    falls back to name-only matching — the same behaviour as before bug 45's fix.
-
-    Bug 78: if nothing matches exactly, falls back to one more tier before
-    creating a new node — an existing node whose full (normalized) name is
-    entirely contained, word-for-word, within room_name's words (e.g. an
-    existing "Headhunters" node against an incoming "Headhunters saloon bar
-    of the Orc's Head Inn" — the same room described at two levels of detail
-    by the game itself, not just an LLM-verbosity artifact). Deliberately
-    one-directional (existing-node-words ⊆ incoming-words, never the
-    reverse): the reverse direction is exactly what
-    test_leading_in_prefix_resolves_to_existing_node's bare "a cave" case
-    (tests/test_agent.py) already asserts must NOT match either of an
-    existing "inside a cave"/"outside a cave" — a bidirectional check would
-    silently break that. _MIN_FUZZY_MATCH_CHARS guards against a
-    degenerate/near-empty existing node name matching everything. Fuzzy
-    candidates flow through the exact same exit-compatibility gate below as
-    an exact-name match, so bug 45's maze-room disambiguation is unaffected.
-    """
-    target = _normalize_room(room_name)
-    candidates = [
-        node for node in graph.nodes
-        if not node.startswith("Unknown") and _normalize_room(_base_room_name(node)) == target
-    ]
-    if not candidates:
-        target_words = set(target.split())
-        candidates = [
-            node for node in graph.nodes
-            if not node.startswith("Unknown")
-            and len((base_norm := _normalize_room(_base_room_name(node))).replace(" ", "")) >= _MIN_FUZZY_MATCH_CHARS
-            and set(base_norm.split()) <= target_words
-        ]
-    if not candidates:
-        return _canonicalize_room(room_name)
-
-    if not exits:
-        return candidates[0]
-
-    exits_set = frozenset(_DIRECTION_NORMALIZE.get(d.lower(), d.lower()) for d in exits)
-    compatible = [
-        node for node in candidates
-        if not _known_exits(graph, node) or not exits_set.isdisjoint(_known_exits(graph, node))
-    ]
-    if compatible:
-        return compatible[0]
-
-    # Same display name, but no exit in common with any known node using it —
-    # a physically distinct room reusing the name. Disambiguate with a suffix.
-    base = _base_room_name(candidates[0])
-    existing_suffixes = [
-        int(m.group(1)) for c in candidates if (m := _DISAMBIGUATION_RE.search(c))
-    ]
-    return f"{base} #{max(existing_suffixes, default=1) + 1}"
 
 
 def _is_hard_failure(text):
@@ -243,14 +78,6 @@ def _parse_inventory_response(text):
     return _split_item_list(m.group(1))
 
 
-# P005/P006: "in"/"out" are real navigable directions (see _REVERSE and
-# _DIRECTION_NORMALIZE below) but were missing here, so every guard keyed on
-# this set silently ignored them — most importantly the futile-edge marker in
-# process_agent_step (`action_taken in _DIRECTIONS`), which meant a failed
-# "out" was never persisted as futile and kept getting re-offered forever.
-_DIRECTIONS = {"north", "south", "east", "west", "up", "down", "ne", "nw", "se", "sw", "in", "out"}
-
-
 def _is_creature(name):
     return bool(set(name.lower().split()) & config.creature_words)
 
@@ -284,7 +111,7 @@ def _detect_loop(game_log, window=10, threshold=8):
     recent = game_log[-window:]
 
     def _is_productive_move(i):
-        if recent[i]["action"] not in _DIRECTIONS or i == 0:
+        if recent[i]["action"] not in DIRECTIONS or i == 0:
             return False
         prev_room = recent[i - 1].get("extracted", {}).get("room")
         curr_room = recent[i].get("extracted", {}).get("room")
@@ -295,97 +122,6 @@ def _detect_loop(game_log, window=10, threshold=8):
         if actions.count(action) >= threshold:
             return action
     return None
-
-
-_REVERSE = {
-    "north": "south", "south": "north",
-    "east": "west",   "west": "east",
-    "up": "down",     "down": "up",
-    "ne": "sw",       "sw": "ne",
-    "nw": "se",       "se": "nw",
-    "in": "out",      "out": "in",
-}
-
-# LLM sometimes returns full direction names; normalise to the abbreviated form
-# used throughout the codebase so BFS vectors and placeholder keys stay consistent.
-_DIRECTION_NORMALIZE = {
-    "northeast": "ne", "northwest": "nw",
-    "southeast": "se", "southwest": "sw",
-    "inside": "in",    "outside": "out",
-    "downwards": "down", "upwards": "up",
-}
-
-
-def update_graph(state, room_name, exits, previous_room, action):
-    """Adds the current room and its exits to the world graph."""
-    if not room_name:
-        return
-    exits = [_DIRECTION_NORMALIZE.get(d.lower(), d.lower()) for d in exits]
-    if room_name not in state["world_graph"]:
-        state["world_graph"].add_node(room_name)
-
-    reverse_action = _REVERSE.get(action, "")
-    if previous_room and previous_room != room_name and reverse_action:
-        # Remove outbound placeholder from previous_room and the inbound placeholder
-        # from room_name — both are now resolved by this traversal.
-        for placeholder in (
-            f"Unknown ({action} from {previous_room})",
-            f"Unknown ({reverse_action} from {room_name})",
-        ):
-            if state["world_graph"].has_node(placeholder):
-                state["world_graph"].remove_node(placeholder)
-        # Store each direction alias as its own edge (MultiDiGraph allows multiple
-        # edges per node pair). Only add if this exact label is not already present.
-        existing_labels = {
-            d.get("label")
-            for d in (state["world_graph"].get_edge_data(previous_room, room_name) or {}).values()
-        }
-        if action not in existing_labels:
-            state["world_graph"].add_edge(previous_room, room_name, label=action)
-
-    for direction in exits:
-        existing_labels = {d.get("label", "") for _, _, d in state["world_graph"].edges(room_name, data=True)}
-        if direction in existing_labels:
-            continue
-        # If this exit points back the way we came, wire the real return edge so
-        # the placeholder is never created (and can't be re-added on the same step).
-        if direction == reverse_action and previous_room and previous_room != room_name:
-            state["world_graph"].add_edge(room_name, previous_room, label=direction)
-            continue
-        target_node = f"Unknown ({direction} from {room_name})"
-        if not state["world_graph"].has_edge(room_name, target_node):
-            state["world_graph"].add_edge(room_name, target_node, label=direction)
-
-
-def get_next_move_to_target(state, target_room):
-    """Returns the next movement command toward target_room via the shortest known path."""
-    if target_room == state["current_room"]:
-        return None
-    try:
-        path = nx.shortest_path(state["world_graph"], source=state["current_room"], target=target_room)
-        if len(path) > 1:
-            edge_data = state["world_graph"].get_edge_data(state["current_room"], path[1])
-            # MultiDiGraph: get_edge_data returns {key: data} — pick first edge's label.
-            return next(iter(edge_data.values()))['label']
-    except (nx.NetworkXNoPath, nx.NodeNotFound):
-        return None
-
-
-def _nav_command(state, target, fast=True):
-    """Return a navigation command using the game's native nav if configured, else graph-based.
-
-    Fast/full nav templates are only used when the target is in visited_rooms —
-    the game only accepts 'run to X' / 'go to X' for rooms it has already seen
-    the player enter. Unvisited targets fall back to graph-based step navigation.
-    """
-    template = config.fast_nav_command if fast else config.full_nav_command
-    if (
-        template
-        and target in state.get("visited_rooms", set())
-        and target not in state.get("nav_blacklist", set())
-    ):
-        return template.format(target=target)
-    return get_next_move_to_target(state, target)
 
 
 def determine_next_action(state):
@@ -416,7 +152,7 @@ def determine_next_action(state):
             verb = "cast" if solution in state["spellbook"] else "use"
             state["active_goal"] = None
             return f"{verb} {solution} on {target}", f"goal: apply {solution} to {target}"
-        move = _nav_command(state, target_room, fast=True)
+        move = nav_command(state, target_room, fast=True)
         if move:
             return move, f"goal: navigating to {target_room}"
         state["active_goal"] = None
@@ -467,8 +203,8 @@ def determine_next_action(state):
         # "Unknown" if the return trip wasn't wired in update_graph). Only fall
         # back to it when it's the sole remaining exit, so it's still explored.
         last_entry = state["game_log"][-1] if state["game_log"] else None
-        last_direction = last_entry["action"] if last_entry and last_entry.get("action") in _DIRECTIONS else None
-        reverse_of_last = _REVERSE.get(last_direction)
+        last_direction = last_entry["action"] if last_entry and last_entry.get("action") in DIRECTIONS else None
+        reverse_of_last = REVERSE.get(last_direction)
         fresh_exits = [data for data in unknown_exits if data["label"].split("/")[0] != reverse_of_last]
         direction = (fresh_exits or unknown_exits)[0]["label"].split("/")[0]
         return direction, f"exploring exit '{direction}' from {state['current_room']}"
@@ -481,7 +217,7 @@ def determine_next_action(state):
     # revisited a few times.
     recent_dir_freq = Counter(
         e["action"] for e in state["game_log"][-20:]
-        if e.get("action") in _DIRECTIONS
+        if e.get("action") in DIRECTIONS
     )
     recent_room_visits = Counter(
         e.get("extracted", {}).get("room") for e in state["game_log"][-10:]
@@ -512,7 +248,7 @@ def determine_next_action(state):
             best_score = score
             best_target = node
     if best_target:
-        move = _nav_command(state, best_target, fast=True)
+        move = nav_command(state, best_target, fast=True)
         if move:
             return move, f"navigating to {best_target} (has unexplored exits)"
 
@@ -539,7 +275,7 @@ def determine_next_action(state):
         except (nx.NetworkXNoPath, nx.NodeNotFound):
             continue
     if best_unvisited:
-        move = _nav_command(state, best_unvisited, fast=True)
+        move = nav_command(state, best_unvisited, fast=True)
         if move:
             return move, f"navigating to unvisited room {best_unvisited}"
 
@@ -552,15 +288,6 @@ def determine_next_action(state):
         return cmd, f"npc wait: {cmd}"
 
     return "look", "fallback: no unexplored exits or unvisited rooms reachable"
-
-
-def _mark_edge_futile(state, from_room, direction):
-    """Mark a direction from a room as permanently futile — skip in future unknown-exit scans."""
-    state["futile_edges"].add((from_room, direction))
-    for _, _, data in state["world_graph"].edges(from_room, data=True):
-        if data.get("label") == direction:
-            data["futile"] = True
-            break
 
 
 def _snapshot_state(state):
@@ -711,8 +438,8 @@ def process_agent_step(state, child, llm_instance, parse_strategy=None):
         utility = "death"
         state["recheck_inventory"] = True
 
-    if utility == "futile" and action_taken in _DIRECTIONS:
-        _mark_edge_futile(state, previous_room, action_taken)
+    if utility == "futile" and action_taken in DIRECTIONS:
+        mark_edge_futile(state, previous_room, action_taken)
 
     entry = {
         "timestamp": datetime.now().strftime("%H:%M:%S"),

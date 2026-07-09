@@ -6,13 +6,15 @@ LLM call — see game_config.py's docstring for what each pattern key means.
 Patterns were derived from real saved run logs (logs/*.json), not guessed:
 room/exit/visible-entity phrasing, the "the X"-narrated NPC roles now in
 creature_words (gripper, hermit, innkeeper, prophet, valkyrie), and the
-narrated direction words "downwards"/"upwards" (now in agent._DIRECTION_NORMALIZE)
-all came from scanning actual game output rather than assumed conventions.
+narrated direction words "downwards"/"upwards" (now in
+world_graph.DIRECTION_NORMALIZE) all came from scanning actual game output
+rather than assumed conventions.
 """
 import re
 
 import agent
 from game_config import config
+import world_graph
 
 from .base import ParseStrategy, split_verb_object
 
@@ -90,7 +92,7 @@ class DeterministicParseStrategy(ParseStrategy):
         "you are in X" more than once (e.g. a death-and-respawn narrated in
         the same response), since the final mention reflects where the
         player actually ended up. Returns the raw matched text unshortened;
-        agent._resolve_room_name (called downstream by apply_parse_result)
+        world_graph.resolve_room_name (called downstream by apply_parse_result)
         already truncates at the first comma/semicolon and strips leading
         articles/prepositions, so over-capturing trailing description here
         is harmless."""
@@ -110,12 +112,9 @@ class DeterministicParseStrategy(ParseStrategy):
         read of which exits actually exist (the same reasoning as bug 76's
         LLM-side fix), though a genuine additional exit named after it (e.g.
         "Exits lead in all directions and inside.") still gets kept."""
-        # Computed here, not at module level: agent.py imports this package,
-        # so accessing agent._DIRECTIONS/_DIRECTION_NORMALIZE at import time
-        # (rather than deferred into a function body, like every agent.X
-        # access in base.py already does) would fail whenever agent is only
-        # partway through its own initialization.
-        known_direction_words = agent._DIRECTIONS | set(agent._DIRECTION_NORMALIZE)
+        # Computed here, not at module level, to match the surrounding
+        # strategy pattern and keep direction vocabulary lookup local.
+        known_direction_words = world_graph.DIRECTIONS | set(world_graph.DIRECTION_NORMALIZE)
         exits = []
         for pattern in config.exit_clause_patterns:
             for m in pattern.finditer(response_text):

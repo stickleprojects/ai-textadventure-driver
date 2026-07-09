@@ -48,6 +48,7 @@ import json
 
 import agent
 from game_config import config
+import world_graph
 
 _ORCHESTRATOR_DIR = Path("runs") / "orchestrator"
 
@@ -221,11 +222,11 @@ def apply_parse_result(state, result, action_taken, response_text, previous_room
     room_claim = result.get("room_quote") or result.get("room")
     room_unresolved = False
     if room_claim and room_claim.lower() in resp_lower:
-        state["current_room"] = agent._resolve_room_name(state["world_graph"], room_claim, exits)
+        state["current_room"] = world_graph.resolve_room_name(state["world_graph"], room_claim, exits)
         state.setdefault("visited_rooms", set()).add(state["current_room"])
         state["position_lost"] = False
         state["position_lost_attempts"] = 0
-    elif action_taken in agent._DIRECTIONS and (
+    elif action_taken in world_graph.DIRECTIONS and (
         (action_result is not None and action_result.get("succeeded"))
         or (action_result is None and not agent._is_hard_failure(response_text) and not agent._is_soft_failure(response_text))
     ):
@@ -248,7 +249,7 @@ def apply_parse_result(state, result, action_taken, response_text, previous_room
             )
 
     if exits is not None and not room_unresolved:
-        agent.update_graph(state, state["current_room"], exits, previous_room, action_taken)
+        world_graph.update_graph(state, state["current_room"], exits, previous_room, action_taken)
 
     if agent._is_hard_failure(response_text):
         parts = action_taken.split(" on ", 1) if action_taken else []

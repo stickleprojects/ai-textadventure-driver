@@ -41,7 +41,7 @@ JSON schema (all keys optional — missing keys keep their defaults):
                                         parse_strategies.DeterministicParseStrategy (no LLM) —
                                         the captured text is passed through as-is (room/exit
                                         canonicalization already happens downstream in
-                                        agent._resolve_room_name), so a pattern can over-capture
+                                        world_graph.resolve_room_name), so a pattern can over-capture
                                         trailing description without needing to trim it itself.
     "exit_clause_patterns":   [str]  — regex fragments identifying the exits sentence; each must
                                         have a named group (?P<exits>...) capturing the raw

@@ -11,11 +11,12 @@ from env_utils import load_env_file
 load_env_file()  # populate os.environ from .env before config or LLM setup
 
 from game_config import config
-from agent import process_agent_step, update_graph
+from agent import process_agent_step
 from game_engine import start_level9
 from llm import LLAMA_AVAILABLE, OPENAI_AVAILABLE, extract_knowledge, load_llm, load_cloud_llm
 from run_evaluator import load_strategy
 from ui import generate_json_log, generate_markdown_log, render_graph
+from world_graph import update_graph
 
 _config_path = os.environ.get("GAME_CONFIG", "configs/knight_orc.json")
 _strategy_path = os.environ.get("STRATEGY_PATH", "configs/knight_orc_strategy.json")
