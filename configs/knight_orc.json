@@ -37,7 +37,12 @@
         "creature",
         "beast",
         "monster",
-        "demon"
+        "demon",
+        "gripper",
+        "hermit",
+        "innkeeper",
+        "prophet",
+        "valkyrie"
     ],
     "hard_failure_patterns": [
         "you can'?t",
@@ -103,6 +108,21 @@
     "theft_patterns": [
         "(?:just\\s+)?stole\\s+(?:the\\s+)?(?P<item>.+?)\\s+from\\s+",
         "takes?\\s+(?:the\\s+)?(?P<item>.+?)\\s+from\\s+"
+    ],
+    "room_patterns": [
+        "you (?:go \\w+ and )?are (?:in|on|at|beside) (?P<room>.+?)(?=\\s*(?:exits? leads?|an exit leads|you can see|in the distance is)|$)",
+        "you (?:go \\w+ and )?are (?P<room>(?:outside|inside) .+?)(?=\\s*(?:exits? leads?|an exit leads|you can see|in the distance is)|$)"
+    ],
+    "exit_clause_patterns": [
+        "(?:exits? leads?|an exit leads) (?P<exits>[^.]+)\\."
+    ],
+    "visible_entity_patterns": [
+        "you can see (?P<entities>[^.]+)\\."
+    ],
+    "take_confirmation_patterns": [
+        "you take\\b",
+        "^taken\\.?$",
+        "^ok\\.?$"
     ],
     "hints": [
         "Say hello to denzyl as he can help you with your quest.",

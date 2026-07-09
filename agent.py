@@ -256,6 +256,7 @@ _DIRECTION_NORMALIZE = {
     "northeast": "ne", "northwest": "nw",
     "southeast": "se", "southwest": "sw",
     "inside": "in",    "outside": "out",
+    "downwards": "down", "upwards": "up",
 }
 
 

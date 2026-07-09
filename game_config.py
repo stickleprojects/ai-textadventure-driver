@@ -36,6 +36,30 @@ JSON schema (all keys optional — missing keys keep their defaults):
                                        third person, e.g. by creature name, not just "you"),
                                        so add new phrasings here rather than trying to also
                                        identify the victim from text.
+    "room_patterns":          [str]  — regex fragments identifying a room-description sentence;
+                                        each must have a named group (?P<room>...). Used by
+                                        parse_strategies.DeterministicParseStrategy (no LLM) —
+                                        the captured text is passed through as-is (room/exit
+                                        canonicalization already happens downstream in
+                                        agent._resolve_room_name), so a pattern can over-capture
+                                        trailing description without needing to trim it itself.
+    "exit_clause_patterns":   [str]  — regex fragments identifying the exits sentence; each must
+                                        have a named group (?P<exits>...) capturing the raw
+                                        comma/and-separated list text (further split and filtered
+                                        against known direction words downstream — deliberately
+                                        does NOT expand "in all directions" into every compass
+                                        point: that's a hallucination, not a grounded read, the
+                                        same reasoning as bug 76's LLM-side fix).
+    "visible_entity_patterns": [str] — regex fragments identifying a "you can see X" style
+                                        sentence; each must have a named group (?P<entities>...)
+                                        capturing the raw comma/and-separated list text.
+    "take_confirmation_patterns": [str] — regex fragments; a response to a "take" action matching
+                                        any of these confirms the item was actually taken (as
+                                        opposed to merely not matching a failure pattern) — the
+                                        item name itself comes from the action text, not the
+                                        response (see docs/agent_behavior_spec.md's "Handling
+                                        uncertainty": don't guess a take succeeded just because
+                                        nothing matched a known failure phrase).
     "hints": [str]  — user-authored strategy hints injected into the LLM prompt as additional context
 }
 
@@ -64,6 +88,10 @@ class GameConfig:
             "man", "woman", "person", "peasant",
             "troll", "goblin", "dwarf", "elf",
             "creature", "beast", "monster", "demon",
+            # Knight-Orc-specific NPC roles narrated as "the X" rather than a
+            # proper name — found by scanning saved run logs for "the <word>
+            # <action verb>" narration and "You can see the X" phrasings.
+            "gripper", "hermit", "innkeeper", "prophet", "valkyrie",
         })
         self._hard_failure_patterns = [
             r"you can'?t",
@@ -96,6 +124,31 @@ class GameConfig:
             r"(?:just\s+)?stole\s+(?:the\s+)?(?P<item>.+?)\s+from\s+",
             r"takes?\s+(?:the\s+)?(?P<item>.+?)\s+from\s+",
         ]
+        self._room_patterns = [
+            # "in"/"on"/"at"/"beside" are grammatical connectors, dropped from
+            # the captured room text (agent._LEADING_PREP_RE strips them too,
+            # so either would work — dropped here to match room_patterns'
+            # captured text to the LLM path's own convention). "outside"/
+            # "inside" are NOT connectors here — Knight Orc treats "outside
+            # a cave" and "inside a cave" as distinct rooms (see
+            # agent.py's _LEADING_PREP_RE comment), so the second pattern
+            # keeps that word as part of the captured room text.
+            r"you (?:go \w+ and )?are (?:in|on|at|beside) (?P<room>.+?)"
+            r"(?=\s*(?:exits? leads?|an exit leads|you can see|in the distance is)|$)",
+            r"you (?:go \w+ and )?are (?P<room>(?:outside|inside) .+?)"
+            r"(?=\s*(?:exits? leads?|an exit leads|you can see|in the distance is)|$)",
+        ]
+        self._exit_clause_patterns = [
+            r"(?:exits? leads?|an exit leads) (?P<exits>[^.]+)\.",
+        ]
+        self._visible_entity_patterns = [
+            r"you can see (?P<entities>[^.]+)\.",
+        ]
+        self._take_confirmation_patterns = [
+            r"you take\b",
+            r"^taken\.?$",
+            r"^ok\.?$",
+        ]
         self.end_state_patterns = {
             k: [re.compile(p, re.IGNORECASE) for p in patterns]
             for k, patterns in self._DEFAULT_END_STATE_PATTERNS.items()
@@ -123,6 +176,17 @@ class GameConfig:
         # Each pattern compiled separately (not OR-joined) since named groups
         # can't repeat within a single compiled pattern.
         self.theft_patterns = [re.compile(p, re.IGNORECASE) for p in self._theft_patterns]
+        self.room_patterns = [
+            re.compile(p, re.IGNORECASE | re.DOTALL) for p in self._room_patterns
+        ]
+        self.exit_clause_patterns = [
+            re.compile(p, re.IGNORECASE | re.DOTALL) for p in self._exit_clause_patterns
+        ]
+        self.visible_entity_patterns = [
+            re.compile(p, re.IGNORECASE | re.DOTALL) for p in self._visible_entity_patterns
+        ]
+        self.take_confirmation_pattern = re.compile(
+            "|".join(self._take_confirmation_patterns), re.IGNORECASE | re.MULTILINE)
 
     @property
     def inspection_sequence(self):
@@ -156,6 +220,18 @@ class GameConfig:
             recompile = True
         if "theft_patterns" in data:
             self._theft_patterns = list(data["theft_patterns"])
+            recompile = True
+        if "room_patterns" in data:
+            self._room_patterns = list(data["room_patterns"])
+            recompile = True
+        if "exit_clause_patterns" in data:
+            self._exit_clause_patterns = list(data["exit_clause_patterns"])
+            recompile = True
+        if "visible_entity_patterns" in data:
+            self._visible_entity_patterns = list(data["visible_entity_patterns"])
+            recompile = True
+        if "take_confirmation_patterns" in data:
+            self._take_confirmation_patterns = list(data["take_confirmation_patterns"])
             recompile = True
         if recompile:
             self._compile()

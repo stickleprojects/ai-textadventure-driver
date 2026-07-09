@@ -37,6 +37,10 @@
       }
     },
     "theft_patterns": { "type": "array", "items": { "type": "string" } },
+    "room_patterns": { "type": "array", "items": { "type": "string" } },
+    "exit_clause_patterns": { "type": "array", "items": { "type": "string" } },
+    "visible_entity_patterns": { "type": "array", "items": { "type": "string" } },
+    "take_confirmation_patterns": { "type": "array", "items": { "type": "string" } },
     "hints": { "type": "array", "items": { "type": "string" } }
   }
 }
