@@ -9,7 +9,7 @@ from game_config import config
 from game_engine import execute_game_command
 from llm import extract_knowledge  # noqa: F401 — kept as agent.extract_knowledge: parse_strategies.LLMJsonModeParseStrategy calls it via module-attribute lookup so tests patching "agent.extract_knowledge" still work
 from response_classification import is_hard_failure, is_scenery_response, is_soft_failure
-from world_graph import DIRECTIONS, REVERSE, mark_edge_futile, nav_command
+from world_graph import DIRECTIONS, REVERSE, mark_edge_futile, nav_command, normalize_direction
 
 _SCORE_RE = re.compile(r"you score\s+(\d+)\s+out of\s+(\d+)", re.IGNORECASE)
 _SCORE_INTERVAL = 20
@@ -31,10 +31,12 @@ def _parse_inspection_action(action, target):
 
 def _record_verb_outcome(state, target, verb, outcome):
     """Record that verb was attempted on target with the given outcome."""
+    target = parse_strategies.resolve_entity_key(state["known_entities"], target)
     entity = state["known_entities"].setdefault(
         target, {"status": "discovered", "location": state["current_room"], "verb_outcomes": {}}
     )
     entity.setdefault("verb_outcomes", {})[verb] = outcome
+    return target
 
 
 def _detect_loop(game_log, window=10, threshold=8):
@@ -48,13 +50,13 @@ def _detect_loop(game_log, window=10, threshold=8):
     recent = game_log[-window:]
 
     def _is_productive_move(i):
-        if recent[i]["action"] not in DIRECTIONS or i == 0:
+        if normalize_direction(recent[i]["action"]) not in DIRECTIONS or i == 0:
             return False
         prev_room = recent[i - 1].get("extracted", {}).get("room")
         curr_room = recent[i].get("extracted", {}).get("room")
         return bool(prev_room and curr_room and prev_room != curr_room)
 
-    actions = [e["action"] for i, e in enumerate(recent) if not _is_productive_move(i)]
+    actions = [e["action"].lower() for i, e in enumerate(recent) if not _is_productive_move(i)]
     for action in set(actions):
         if actions.count(action) >= threshold:
             return action
@@ -118,7 +120,8 @@ def determine_next_action(state):
 
     if state["uninspected_objects"]:
         new_target = state["uninspected_objects"].pop(0)
-        entity_data = state["known_entities"].get(new_target, {})
+        entity_key = parse_strategies.resolve_entity_key(state["known_entities"], new_target)
+        entity_data = state["known_entities"].get(entity_key, {})
         verb_outcomes = entity_data.get("verb_outcomes", {})
         post_take_verbs = [
             v for v in config.candidate_verbs
@@ -140,7 +143,11 @@ def determine_next_action(state):
         # "Unknown" if the return trip wasn't wired in update_graph). Only fall
         # back to it when it's the sole remaining exit, so it's still explored.
         last_entry = state["game_log"][-1] if state["game_log"] else None
-        last_direction = last_entry["action"] if last_entry and last_entry.get("action") in DIRECTIONS else None
+        last_direction = (
+            normalize_direction(last_entry["action"])
+            if last_entry and normalize_direction(last_entry.get("action", "")) in DIRECTIONS
+            else None
+        )
         reverse_of_last = REVERSE.get(last_direction)
         fresh_exits = [data for data in unknown_exits if data["label"].split("/")[0] != reverse_of_last]
         direction = (fresh_exits or unknown_exits)[0]["label"].split("/")[0]
@@ -153,8 +160,8 @@ def determine_next_action(state):
     # but genuinely unexplored frontier once both sides of the shuttle have been
     # revisited a few times.
     recent_dir_freq = Counter(
-        e["action"] for e in state["game_log"][-20:]
-        if e.get("action") in DIRECTIONS
+        normalize_direction(e["action"]) for e in state["game_log"][-20:]
+        if normalize_direction(e.get("action", "")) in DIRECTIONS
     )
     recent_room_visits = Counter(
         e.get("extracted", {}).get("room") for e in state["game_log"][-10:]
@@ -278,7 +285,9 @@ def process_agent_step(state, child, llm_instance, parse_strategy=None):
 
     snap_before = _snapshot_state(state)
     pre_verb_outcomes = (
-        state["known_entities"].get(effective_target, {}).get("verb_outcomes", {}).copy()
+        state["known_entities"].get(
+            parse_strategies.resolve_entity_key(state["known_entities"], effective_target), {}
+        ).get("verb_outcomes", {}).copy()
         if effective_target else {}
     )
 
@@ -300,12 +309,12 @@ def process_agent_step(state, child, llm_instance, parse_strategy=None):
     if insp_verb and effective_target and insp_verb != "take":
         if is_soft_failure(response):
             # Valid verb, blocked by current game state — retry later
-            _record_verb_outcome(state, effective_target, insp_verb, "blocked")
+            effective_target = _record_verb_outcome(state, effective_target, insp_verb, "blocked")
         elif is_hard_failure(response):
             # Verb is permanently invalid for this object
-            _record_verb_outcome(state, effective_target, insp_verb, "invalid")
+            effective_target = _record_verb_outcome(state, effective_target, insp_verb, "invalid")
         else:
-            _record_verb_outcome(state, effective_target, insp_verb, "succeeded")
+            effective_target = _record_verb_outcome(state, effective_target, insp_verb, "succeeded")
 
     result = parse_strategy.parse(response, action_taken)
     token_usage = result.pop("_usage", {"input_tokens": 0, "output_tokens": 0})
@@ -317,12 +326,12 @@ def process_agent_step(state, child, llm_instance, parse_strategy=None):
         if is_soft_failure(response):
             # State-dependent (e.g. "you're already carrying that", hands full) —
             # may succeed on a later attempt/run, so never persist as permanent.
-            _record_verb_outcome(state, effective_target, "take", "blocked")
+            effective_target = _record_verb_outcome(state, effective_target, "take", "blocked")
             take_failed = True
         elif is_hard_failure(response):
             # Permanently un-takeable (e.g. too heavy, fixed in place, scenery) —
             # safe to persist cross-run.
-            _record_verb_outcome(state, effective_target, "take", "invalid")
+            effective_target = _record_verb_outcome(state, effective_target, "take", "invalid")
             take_failed = True
         else:
             taken = {i.lower() for i in result.get("added_to_inventory", [])}
@@ -331,7 +340,7 @@ def process_agent_step(state, child, llm_instance, parse_strategy=None):
                 if c.get("change") == "gained" and c.get("item")
             }
             if effective_target.lower() in taken:
-                _record_verb_outcome(state, effective_target, "take", "succeeded")
+                effective_target = _record_verb_outcome(state, effective_target, "take", "succeeded")
             else:
                 # Neither a known failure pattern nor confirmed by parsing as
                 # actually taken — don't guess. Verify via INVENTORY (see
@@ -375,7 +384,7 @@ def process_agent_step(state, child, llm_instance, parse_strategy=None):
         utility = "death"
         state["recheck_inventory"] = True
 
-    if utility == "futile" and action_taken in DIRECTIONS:
+    if utility == "futile" and normalize_direction(action_taken) in DIRECTIONS:
         mark_edge_futile(state, previous_room, action_taken)
 
     entry = {

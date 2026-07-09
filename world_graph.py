@@ -56,6 +56,12 @@ DIRECTION_NORMALIZE = {
 }
 
 
+def normalize_direction(word):
+    """Return a lowercased, normalized direction alias for comparisons."""
+    word = (word or "").strip().lower()
+    return DIRECTION_NORMALIZE.get(word, word)
+
+
 def _require_multidigraph(graph):
     if not isinstance(graph, nx.MultiDiGraph):
         raise TypeError("world_graph must be a networkx.MultiDiGraph")
@@ -147,14 +153,15 @@ def update_graph(state, room_name, exits, previous_room, action):
         return
     graph = state["world_graph"]
     _require_multidigraph(graph)
-    exits = [DIRECTION_NORMALIZE.get(d.lower(), d.lower()) for d in exits]
+    exits = [normalize_direction(d) for d in exits]
     if room_name not in graph:
         graph.add_node(room_name)
 
-    reverse_action = REVERSE.get(action, "")
+    normalized_action = normalize_direction(action) if action else ""
+    reverse_action = REVERSE.get(normalized_action, "")
     if previous_room and previous_room != room_name and reverse_action:
         for placeholder in (
-            f"Unknown ({action} from {previous_room})",
+            f"Unknown ({normalized_action} from {previous_room})",
             f"Unknown ({reverse_action} from {room_name})",
         ):
             if graph.has_node(placeholder):
@@ -163,8 +170,8 @@ def update_graph(state, room_name, exits, previous_room, action):
             d.get("label")
             for d in (graph.get_edge_data(previous_room, room_name) or {}).values()
         }
-        if action not in existing_labels:
-            graph.add_edge(previous_room, room_name, label=action)
+        if normalized_action not in existing_labels:
+            graph.add_edge(previous_room, room_name, label=normalized_action)
 
     for direction in exits:
         existing_labels = {d.get("label", "") for _, _, d in graph.edges(room_name, data=True)}
@@ -211,6 +218,7 @@ def mark_edge_futile(state, from_room, direction):
     """Mark a direction from a room as permanently futile."""
     graph = state["world_graph"]
     _require_multidigraph(graph)
+    direction = normalize_direction(direction)
     state["futile_edges"].add((from_room, direction))
     for _, _, data in graph.edges(from_room, data=True):
         if data.get("label") == direction:

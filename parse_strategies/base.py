@@ -119,6 +119,22 @@ class ParseStrategy:
         raise NotImplementedError
 
 
+def resolve_entity_key(entities, name):
+    """Resolve case-insensitive entity keys while preserving first casing."""
+    if name in entities:
+        return name
+    lowered = (name or "").lower()
+    for existing in entities:
+        if existing.lower() == lowered:
+            return existing
+    return name
+
+
+def _case_insensitive_member(name, items):
+    lowered = (name or "").lower()
+    return any(item.lower() == lowered for item in items)
+
+
 def apply_parse_result(state, result, action_taken, response_text, previous_room):
     """The unified state-mutation function — turns a ParseResult (from any
     ParseStrategy) into state updates, shared by agent.py::process_agent_step
@@ -136,6 +152,7 @@ def apply_parse_result(state, result, action_taken, response_text, previous_room
     take_failed = False
 
     if verb and obj:
+        obj = resolve_entity_key(state["known_entities"], obj)
         if action_result is not None:
             # New-style: the strategy directly reports success/failure.
             outcome = _classify_action_result(action_result, response_text)
@@ -196,7 +213,9 @@ def apply_parse_result(state, result, action_taken, response_text, previous_room
 
     for gift in result.get("received_from_npc", []):
         item = (gift.get("item") or "").strip() if isinstance(gift, dict) else None
-        if item and item not in state["inventory"]:
+        if item:
+            item = resolve_entity_key(state["known_entities"], item)
+        if item and not _case_insensitive_member(item, state["inventory"]):
             state["inventory"].append(item)
             entity = state["known_entities"].get(item)
             if entity is None:
@@ -227,7 +246,7 @@ def apply_parse_result(state, result, action_taken, response_text, previous_room
         state.setdefault("visited_rooms", set()).add(state["current_room"])
         state["position_lost"] = False
         state["position_lost_attempts"] = 0
-    elif action_taken in world_graph.DIRECTIONS and (
+    elif world_graph.normalize_direction(action_taken) in world_graph.DIRECTIONS and (
         (action_result is not None and action_result.get("succeeded"))
         or (action_result is None and not response_classification.is_hard_failure(response_text) and not response_classification.is_soft_failure(response_text))
     ):
@@ -265,21 +284,24 @@ def apply_parse_result(state, result, action_taken, response_text, previous_room
             state.setdefault("nav_blacklist", set()).add(nav_target)
 
     for npc in npcs:
-        if npc not in state["known_npcs"]:
-            state["known_npcs"][npc] = {"location": state["current_room"], "greeted": False}
+        npc_key = resolve_entity_key(state["known_npcs"], npc)
+        if npc_key not in state["known_npcs"]:
+            state["known_npcs"][npc_key] = {"location": state["current_room"], "greeted": False}
 
     for obj_name in objects:
-        if obj_name in state["known_npcs"] or response_classification.is_creature(obj_name):
-            if obj_name not in state["known_npcs"]:
-                state["known_npcs"][obj_name] = {"location": state["current_room"], "greeted": False}
+        npc_key = resolve_entity_key(state["known_npcs"], obj_name)
+        if npc_key in state["known_npcs"] or response_classification.is_creature(obj_name):
+            if npc_key not in state["known_npcs"]:
+                state["known_npcs"][npc_key] = {"location": state["current_room"], "greeted": False}
             continue
-        entity = state["known_entities"].get(obj_name)
+        entity_key = resolve_entity_key(state["known_entities"], obj_name)
+        entity = state["known_entities"].get(entity_key)
         permanently_untakeable = entity is not None and entity.get("verb_outcomes", {}).get("take") == "invalid"
-        already_pending_or_held = obj_name in state["uninspected_objects"] or obj_name in state["inventory"]
+        already_pending_or_held = _case_insensitive_member(obj_name, state["uninspected_objects"]) or _case_insensitive_member(obj_name, state["inventory"])
         if not permanently_untakeable and not already_pending_or_held:
             state["uninspected_objects"].append(obj_name)
             if entity is None:
-                state["known_entities"][obj_name] = {"status": "discovered", "location": state["current_room"]}
+                state["known_entities"][entity_key] = {"status": "discovered", "location": state["current_room"]}
             else:
                 entity["location"] = state["current_room"]
 
@@ -298,7 +320,8 @@ def apply_parse_result(state, result, action_taken, response_text, previous_room
         if c.get("change") == "lost" and c.get("item")
     )
     for item in gained_items:
-        if item not in state["inventory"]:
+        item = resolve_entity_key(state["known_entities"], item)
+        if not _case_insensitive_member(item, state["inventory"]):
             state["inventory"].append(item)
         entity = state["known_entities"].get(item)
         if entity is None:
@@ -345,10 +368,12 @@ def apply_parse_result(state, result, action_taken, response_text, previous_room
         parsed = response_classification.parse_inventory_response(response_text)
         if parsed is not None:
             for item in state["inventory"]:
-                if item in state["known_entities"]:
-                    state["known_entities"][item]["status"] = "discovered"
+                item_key = resolve_entity_key(state["known_entities"], item)
+                if item_key in state["known_entities"]:
+                    state["known_entities"][item_key]["status"] = "discovered"
             state["inventory"] = parsed
             for item in parsed:
+                item = resolve_entity_key(state["known_entities"], item)
                 entity = state["known_entities"].get(item)
                 if entity is None:
                     state["known_entities"][item] = {"status": "held", "location": None, "verb_outcomes": {}}

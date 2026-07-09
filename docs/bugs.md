@@ -55,7 +55,7 @@ Architect-generated anomaly plans are tracked separately in [plans.md](plans.md)
 | 70 | [70.md](bugs/70.md) | Failed `take` abandons inspection even when the object is worth examining | ✅ Fixed |
 | 71 | [71.md](bugs/71.md) | `agent_dev_loop.py` doesn't handle Ctrl-C — no interrupted-run record, no diagnostic log | 🔲 Open |
 | 72 | [72.md](bugs/72.md) | `_parse_inventory_response` never matched Knight Orc's real INVENTORY response — `recheck_inventory` silently never resynced | ✅ Fixed |
-| 73 | [73.md](bugs/73.md) | Inconsistent action casing from the tool-calling model can mask loop detection and fragment entity history | 🔲 Open |
+| 73 | [73.md](bugs/73.md) | Inconsistent action casing from the tool-calling model can mask loop detection and fragment entity history | ✅ Fixed |
 | 74 | [74.md](bugs/74.md) | `parse_game_response` can hallucinate a room with no support in the raw text | ✅ Fixed |
 | 75 | [75.md](bugs/75.md) | `inventory_changes` has no hard-failure suppression — bug 35 recurring in the new tool-calling path | ✅ Fixed |
 | 76 | [76.md](bugs/76.md) | Exit hallucination guard only covers up/down, not the rest of the compass | ✅ Fixed |

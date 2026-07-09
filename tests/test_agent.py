@@ -3,6 +3,8 @@ from unittest.mock import MagicMock, patch
 import pytest
 import networkx as nx
 
+import agent_tools
+import parse_strategies
 from agent import (
     _POSITION_LOST_MAX_ATTEMPTS,
     _compute_utility,
@@ -22,7 +24,7 @@ from response_classification import (
     parse_inventory_response,
 )
 from tests.conftest import make_state
-from world_graph import mark_edge_futile, nav_command, update_graph
+from world_graph import mark_edge_futile, nav_command, normalize_direction, update_graph
 
 
 # ── is_failure_response (backward compat — matches hard OR soft) ─────────────
@@ -164,6 +166,19 @@ class TestRecordVerbOutcome:
         _record_verb_outcome(state, "hat", "wear", "succeeded")
         assert state["known_entities"]["hat"]["verb_outcomes"]["wear"] == "succeeded"
 
+    def test_case_insensitive_target_reuses_existing_key(self):
+        state = make_state()
+        state["known_entities"]["Putty Knife"] = {
+            "status": "held",
+            "location": "Hall",
+            "verb_outcomes": {"read": "invalid"},
+        }
+        resolved = _record_verb_outcome(state, "putty knife", "examine", "succeeded")
+        assert resolved == "Putty Knife"
+        assert "putty knife" not in state["known_entities"]
+        assert state["known_entities"]["Putty Knife"]["verb_outcomes"]["read"] == "invalid"
+        assert state["known_entities"]["Putty Knife"]["verb_outcomes"]["examine"] == "succeeded"
+
 
 # ── _detect_loop ──────────────────────────────────────────────────────────────
 
@@ -192,6 +207,27 @@ def test_detect_loop_ignores_productive_navigation():
 def test_detect_loop_catches_navigation_stuck_in_same_room():
     game_log = [{"action": "north", "extracted": {"room": "Dead End"}} for _ in range(10)]
     assert _detect_loop(game_log) == "north"
+
+
+def test_detect_loop_casefolds_mixed_casing_actions():
+    game_log = [{"action": "look", "extracted": {"room": "Hall"}} for _ in range(3)]
+    game_log.extend({"action": "LOOK", "extracted": {"room": "Hall"}} for _ in range(5))
+    assert _detect_loop(game_log, window=8, threshold=8) == "look"
+
+
+def test_detect_loop_exempts_productive_uppercase_direction_moves():
+    game_log = [
+        {"action": "look", "extracted": {"room": "Room A"}},
+        {"action": "NORTH", "extracted": {"room": "Room B"}},
+        {"action": "NORTH", "extracted": {"room": "Room C"}},
+        {"action": "NORTH", "extracted": {"room": "Room D"}},
+    ]
+    assert _detect_loop(game_log, window=4, threshold=3) is None
+
+
+def test_resolve_entity_key_case_insensitive_match_returns_existing_key():
+    entities = {"Putty Knife": {"verb_outcomes": {"read": "invalid"}}}
+    assert parse_strategies.resolve_entity_key(entities, "putty knife") == "Putty Knife"
 
 
 # ── determine_next_action — existing priority logic ───────────────────────────
@@ -240,6 +276,22 @@ def test_uninspected_objects_starts_inspection():
     assert determine_next_action(state)[0] == "take sword"
     assert state["current_inspection"]["target"] == "sword"
     assert state["uninspected_objects"] == ["key"]
+
+
+def test_uninspected_objects_uses_case_insensitive_preseeded_entity_history():
+    state = make_state(
+        known_entities={
+            "Putty Knife": {
+                "status": "discovered",
+                "location": "Hall",
+                "verb_outcomes": {"read": "invalid"},
+            }
+        },
+        uninspected_objects=["putty knife"],
+    )
+    action, _ = determine_next_action(state)
+    assert action == "take putty knife"
+    assert "read" not in state["current_inspection"]["sequence"]
 
 
 def test_unknown_exit_explored():
@@ -1012,6 +1064,38 @@ class TestNullRoomHandling:
         # The "out" exit should wire the real return edge, not create a placeholder
         assert not state["world_graph"].has_node("Unknown (out from Cave)")
         assert state["world_graph"].has_edge("Cave", "Juniper Scrubland")
+
+    def test_uppercase_direction_action_still_cleans_placeholders_and_wires_reverse(self):
+        state = make_state(current_room="Forest")
+        state["world_graph"].add_edge("Forest", "Unknown (west from Forest)", label="west")
+        state["world_graph"].add_edge("Clearing", "Unknown (east from Clearing)", label="east")
+        update_graph(state, "Clearing", ["east"], "Forest", "WEST")
+        assert not state["world_graph"].has_node("Unknown (west from Forest)")
+        assert not state["world_graph"].has_node("Unknown (east from Clearing)")
+        labels = {
+            data["label"]
+            for data in state["world_graph"].get_edge_data("Forest", "Clearing").values()
+        }
+        assert "west" in labels
+
+
+def test_normalize_direction_covers_case_and_aliases():
+    assert normalize_direction("Northeast") == "ne"
+    assert normalize_direction("LOOK") == "look"
+
+
+def test_query_entity_history_resolves_case_insensitive_entity_key():
+    state = make_state(known_entities={
+        "Putty Knife": {
+            "status": "discovered",
+            "location": "Hall",
+            "verb_outcomes": {"examine": "succeeded"},
+            "last_result_summary": "already checked",
+        }
+    })
+    result = agent_tools._impl_query_entity_history(state, "putty knife")
+    assert result["verb_outcomes"]["examine"] == "succeeded"
+    assert result["last_result_summary"] == "already checked"
 
 
 class TestStuckAnomalyLoop:
