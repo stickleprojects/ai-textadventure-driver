@@ -119,11 +119,11 @@ class TestKeyringExpansion:
 
 
 class TestPrecedence:
-    def test_existing_env_not_overwritten(self, tmp_path, monkeypatch):
+    def test_existing_env_is_overwritten_when_different(self, tmp_path, monkeypatch):
         monkeypatch.setenv("TEST_EXISTING", "from_shell")
         path = _write_env(tmp_path, "TEST_EXISTING=from_file\n")
         load_env_file(path)
-        assert os.environ["TEST_EXISTING"] == "from_shell"
+        assert os.environ["TEST_EXISTING"] == "from_file"
 
     def test_not_set_key_is_set(self, tmp_path):
         path = _write_env(tmp_path, "TEST_KEY=from_file\n")
