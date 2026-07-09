@@ -89,7 +89,8 @@ def _write_report(issues, game_log, ts, log_path):
         "## Files to edit",
         "- `configs/knight_orc.json` — creature words, failure phrases, inspection sequence",
         "- `llm.py` — LLM prompt and `extract_knowledge()` retry logic",
-        "- `agent.py` — `_is_creature()`, `determine_next_action()`, `process_agent_step()`",
+        "- `agent.py` — `determine_next_action()`, `process_agent_step()`",
+        "- `response_classification.py` — `is_creature()`, `is_hard_failure()`, `is_soft_failure()`, `parse_inventory_response()`",
         "- `game_engine.py` — pexpect interface, failure detection patterns",
     ]
 

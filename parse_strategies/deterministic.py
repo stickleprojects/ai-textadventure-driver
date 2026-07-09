@@ -12,8 +12,8 @@ rather than assumed conventions.
 """
 import re
 
-import agent
 from game_config import config
+import response_classification
 import world_graph
 
 from .base import ParseStrategy, split_verb_object
@@ -77,7 +77,7 @@ class DeterministicParseStrategy(ParseStrategy):
         verb keeps the simpler "no failure pattern matched" = succeeded
         default already used elsewhere in this codebase.
         """
-        if agent._is_hard_failure(response_text) or agent._is_soft_failure(response_text):
+        if response_classification.is_hard_failure(response_text) or response_classification.is_soft_failure(response_text):
             return {"succeeded": False, "reason_if_failed": None}
         if verb == "take":
             succeeded = bool(config.take_confirmation_pattern.search(response_text))
@@ -156,6 +156,6 @@ class DeterministicParseStrategy(ParseStrategy):
         NPC introduced with one ("the Annihilator")."""
         m = _LEADING_ARTICLE_RE.match(phrase)
         bare = m.group(1) if m else phrase
-        if agent._is_creature(bare) or bare[:1].isupper():
+        if response_classification.is_creature(bare) or bare[:1].isupper():
             return "npc", bare
         return "object", bare

@@ -24,6 +24,6 @@ Enhancements, new functionality, tooling, and infrastructure improvements.
 | 60 | [60.md](features/60.md) | Code-quality review step in `--spec-target` | 🔲 Open |
 | 61 | [61.md](features/61.md) | Wire the Streamlit UI into the tool-calling main loop, and surface its decision detail | 🔲 Open |
 | 62 | [62.md](features/62.md) | Pluggable game-response parsing (`ParseStrategy`), decoupled from deciding | ✅ Fixed |
-| 63 | [63.md](features/63.md) | Map/world-graph logic trapped in `agent.py`, reached into privately | 🔲 Open |
-| 64 | [64.md](features/64.md) | Game-response classification helpers reached into privately from `parse_strategies` | 🔲 Open |
+| 63 | [63.md](features/63.md) | Map/world-graph logic trapped in `agent.py`, reached into privately | ✅ Fixed |
+| 64 | [64.md](features/64.md) | Game-response classification helpers reached into privately from `parse_strategies` | ✅ Fixed |
 | 65 | [65.md](features/65.md) | `.env` loader should support OS keyring references for API keys | ✅ Fixed |

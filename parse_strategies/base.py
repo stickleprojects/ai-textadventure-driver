@@ -48,6 +48,7 @@ import json
 
 import agent
 from game_config import config
+import response_classification
 import world_graph
 
 _ORCHESTRATOR_DIR = Path("runs") / "orchestrator"
@@ -99,9 +100,9 @@ def _classify_action_result(action_result, response_text):
     if action_result.get("succeeded"):
         return "succeeded"
     combined = f"{action_result.get('reason_if_failed') or ''} {response_text}"
-    if agent._is_hard_failure(combined):
+    if response_classification.is_hard_failure(combined):
         return "invalid"
-    if agent._is_soft_failure(combined):
+    if response_classification.is_soft_failure(combined):
         return "blocked"
     # Unrecognized failure phrasing — default to the safer, retryable
     # classification rather than permanently blacklisting an action that
@@ -148,9 +149,9 @@ def apply_parse_result(state, result, action_taken, response_text, previous_room
         elif verb != "take":
             # Legacy-style, non-take verb: classify from hard/soft failure
             # patterns alone (agent.py's original steps 6-24 behavior).
-            if agent._is_soft_failure(response_text):
+            if response_classification.is_soft_failure(response_text):
                 agent._record_verb_outcome(state, obj, verb, "blocked")
-            elif agent._is_hard_failure(response_text):
+            elif response_classification.is_hard_failure(response_text):
                 agent._record_verb_outcome(state, obj, verb, "invalid")
             else:
                 agent._record_verb_outcome(state, obj, verb, "succeeded")
@@ -158,10 +159,10 @@ def apply_parse_result(state, result, action_taken, response_text, previous_room
             # Legacy-style "take": needs added_to_inventory/inventory_changes
             # to tell a confirmed success apart from an unrecognized response
             # (original ambiguity-handling logic, unchanged).
-            if agent._is_soft_failure(response_text):
+            if response_classification.is_soft_failure(response_text):
                 agent._record_verb_outcome(state, obj, "take", "blocked")
                 take_failed = True
-            elif agent._is_hard_failure(response_text):
+            elif response_classification.is_hard_failure(response_text):
                 agent._record_verb_outcome(state, obj, "take", "invalid")
                 take_failed = True
             else:
@@ -180,7 +181,7 @@ def apply_parse_result(state, result, action_taken, response_text, previous_room
         # A failed take doesn't mean the object isn't worth examining (bug
         # 31/70) — only abandon the queued inspection when the game says
         # there's nothing there to look at.
-        if take_failed and agent._is_scenery_response(response_text):
+        if take_failed and response_classification.is_scenery_response(response_text):
             state["current_inspection"]["target"] = None
             state["current_inspection"]["step_index"] = 0
 
@@ -228,7 +229,7 @@ def apply_parse_result(state, result, action_taken, response_text, previous_room
         state["position_lost_attempts"] = 0
     elif action_taken in world_graph.DIRECTIONS and (
         (action_result is not None and action_result.get("succeeded"))
-        or (action_result is None and not agent._is_hard_failure(response_text) and not agent._is_soft_failure(response_text))
+        or (action_result is None and not response_classification.is_hard_failure(response_text) and not response_classification.is_soft_failure(response_text))
     ):
         # Movement appeared to succeed but no room was parsed — position
         # unknown until a future step resolves it (mirrors the original
@@ -251,7 +252,7 @@ def apply_parse_result(state, result, action_taken, response_text, previous_room
     if exits is not None and not room_unresolved:
         world_graph.update_graph(state, state["current_room"], exits, previous_room, action_taken)
 
-    if agent._is_hard_failure(response_text):
+    if response_classification.is_hard_failure(response_text):
         parts = action_taken.split(" on ", 1) if action_taken else []
         if len(parts) == 2 and action_taken.startswith(("use ", "cast ")):
             state["unresolved_anomalies"].pop(parts[1], None)
@@ -268,7 +269,7 @@ def apply_parse_result(state, result, action_taken, response_text, previous_room
             state["known_npcs"][npc] = {"location": state["current_room"], "greeted": False}
 
     for obj_name in objects:
-        if obj_name in state["known_npcs"] or agent._is_creature(obj_name):
+        if obj_name in state["known_npcs"] or response_classification.is_creature(obj_name):
             if obj_name not in state["known_npcs"]:
                 state["known_npcs"][obj_name] = {"location": state["current_room"], "greeted": False}
             continue
@@ -286,7 +287,7 @@ def apply_parse_result(state, result, action_taken, response_text, previous_room
     # didn't succeed, so nothing should have been gained as a direct result
     # of it, regardless of what's claimed — applies to both schema aliases.
     gained_items, lost_items = [], []
-    if not agent._is_hard_failure(response_text):
+    if not response_classification.is_hard_failure(response_text):
         gained_items.extend(result.get("added_to_inventory", []))
         gained_items.extend(
             c["item"] for c in result.get("inventory_changes", [])
@@ -341,7 +342,7 @@ def apply_parse_result(state, result, action_taken, response_text, previous_room
         # (see "Handling uncertainty" in the behavior spec) — independent
         # of whether inventory_changes was reported for whatever
         # take/theft/gift preceded it (bug 72's parser, ported).
-        parsed = agent._parse_inventory_response(response_text)
+        parsed = response_classification.parse_inventory_response(response_text)
         if parsed is not None:
             for item in state["inventory"]:
                 if item in state["known_entities"]:
@@ -355,7 +356,7 @@ def apply_parse_result(state, result, action_taken, response_text, previous_room
                     entity["status"] = "held"
         state["recheck_inventory"] = False
 
-    is_death = agent._is_death(response_text)
+    is_death = response_classification.is_death(response_text)
 
     extracted = {
         "room": state["current_room"] if room_claim and not room_unresolved else result.get("room"),
@@ -375,6 +376,6 @@ def apply_parse_result(state, result, action_taken, response_text, previous_room
     # (extract_knowledge's dict had the key popped, not zeroed), which
     # existing consumers/tests treat as "nothing to report" either way but
     # assert on via strict `not in` checks in a few places.
-    if gained_items or not agent._is_hard_failure(response_text):
+    if gained_items or not response_classification.is_hard_failure(response_text):
         extracted["added_to_inventory"] = gained_items
     return extracted, is_death, unrecognized_failure
