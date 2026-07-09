@@ -1,7 +1,6 @@
 import json
 import re
-
-import streamlit as st
+from functools import lru_cache
 
 from game_config import config
 
@@ -312,10 +311,15 @@ class OpenAIToolAdapter:
 
 
 # ---------------------------------------------------------------------------
-# Factory functions
+# Factory functions — cached so app.py's Streamlit reruns (and repeated calls
+# from anywhere else) reuse the same client/model instead of reconnecting or
+# reloading every time. Plain functools.lru_cache rather than
+# @st.cache_resource: this module has no other Streamlit dependency, and a
+# script/test process calling these doesn't need Streamlit's caching UI
+# (cache-clear button, cross-session sharing) — just memoization by args.
 # ---------------------------------------------------------------------------
 
-@st.cache_resource
+@lru_cache(maxsize=None)
 def load_llm(model_path):
     """Load the local llama.cpp model wrapped in LocalLLMAdapter. Returns None if unavailable."""
     if not LLAMA_AVAILABLE:
@@ -325,7 +329,7 @@ def load_llm(model_path):
     )
 
 
-@st.cache_resource
+@lru_cache(maxsize=None)
 def load_cloud_llm(provider, model, api_key, base_url=None, json_mode=True):
     """Load a cloud LLM adapter.
 
@@ -348,7 +352,7 @@ def load_cloud_llm(provider, model, api_key, base_url=None, json_mode=True):
     return CloudLLMAdapter(client, model, json_mode=json_mode)
 
 
-@st.cache_resource
+@lru_cache(maxsize=None)
 def load_anthropic_tool_llm(model, api_key):
     """Load an AnthropicToolAdapter for the tool-calling main loop. Returns None if unavailable."""
     if not ANTHROPIC_AVAILABLE:
@@ -356,7 +360,7 @@ def load_anthropic_tool_llm(model, api_key):
     return AnthropicToolAdapter(anthropic.Anthropic(api_key=api_key), model)
 
 
-@st.cache_resource
+@lru_cache(maxsize=None)
 def load_openai_tool_llm(provider, model, api_key, base_url=None):
     """Load an OpenAIToolAdapter for the tool-calling main loop (DeepSeek, OpenAI, etc.).
 
