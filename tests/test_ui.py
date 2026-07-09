@@ -141,7 +141,7 @@ class TestCloudMode:
 
 
 class TestToolCallingMode:
-    """Verify that a non-local LLM_PROVIDER loads tool adapters (not CloudLLMAdapter)."""
+    """Verify that a non-local LLM_PROVIDER loads tool adapters (not load_cloud_llm)."""
 
     def _run(self, provider="anthropic"):
         from streamlit.testing.v1 import AppTest

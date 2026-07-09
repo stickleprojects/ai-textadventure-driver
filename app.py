@@ -100,7 +100,7 @@ st.title("🛡️ Knight Orc Autonomous OS")
 st.markdown("Local LLM-driven text adventure agent featuring autonomous spatial backtracking and dynamic anomaly resolution.")
 
 
-def _run_step(child):
+def _run_step(child, state, llm, parse_strategy):
     """Dispatch one agent step to the appropriate loop based on LLM_PROVIDER."""
     if LLM_PROVIDER == "local":
         process_agent_step(state, child, llm)
@@ -195,7 +195,7 @@ with st.sidebar:
         if st.button("Step Once", use_container_width=True):
             child = st.session_state.level9_process
             if child and child.isalive():
-                _run_step(child)
+                _run_step(child, state, llm, parse_strategy)
             else:
                 st.error("Engine offline. Boot engine first.")
 
@@ -227,7 +227,7 @@ with col_viz:
         for entry in state["game_log"][-8:]:
             st.markdown(f"**> `{entry['action']}`**")
             st.text(entry['response'])
-            trace = entry.get("tool_trace") or entry.get("llm_trace")
+            trace = entry.get("tool_trace") if "tool_trace" in entry else entry.get("llm_trace")
             if trace:
                 with st.expander("Decision detail", expanded=False):
                     st.json(trace)
@@ -273,7 +273,7 @@ with col_state:
 if state["is_running"]:
     child = st.session_state.level9_process
     if child and child.isalive():
-        _run_step(child)
+        _run_step(child, state, llm, parse_strategy)
         time.sleep(step_delay)
         st.rerun()
     else:
