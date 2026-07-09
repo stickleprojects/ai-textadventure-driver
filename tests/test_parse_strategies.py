@@ -34,7 +34,6 @@ import pytest
 from env_utils import load_env_file
 load_env_file()  # populate os.environ from .env before any os.environ.get calls below
 
-import agent
 import world_graph
 from parse_strategies import (
     DeterministicParseStrategy,
