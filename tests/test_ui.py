@@ -52,7 +52,16 @@ class TestLocalMode:
         if env_overrides:
             env.update(env_overrides)
         with patch.dict(os.environ, env, clear=False):
-            with patch("llm.LLAMA_AVAILABLE", True), patch("llm.load_llm", return_value=_make_mock_llm()):
+            # app.py calls env_utils.load_env_file() at its own module scope,
+            # re-run fresh on every AppTest .run(). load_env_file() now
+            # deliberately overwrites os.environ whenever a real .env value
+            # differs (so a keyring: reference can refresh) — on a machine
+            # with a real .env configured, that would silently clobber the
+            # env dict set above back to whatever .env actually contains.
+            # No-op it here so this test's env is authoritative regardless
+            # of what .env exists on the machine running it.
+            with patch("env_utils.load_env_file", return_value=set()), \
+                 patch("llm.LLAMA_AVAILABLE", True), patch("llm.load_llm", return_value=_make_mock_llm()):
                 at = AppTest.from_file(APP_PATH, default_timeout=10)
                 at.run()
         return at
@@ -98,7 +107,11 @@ class TestCloudMode:
             "LLM_BASE_URL": "",
         }
         with patch.dict(os.environ, env, clear=False):
-            with patch("llm.OPENAI_AVAILABLE", True), patch("llm.load_cloud_llm", return_value=_make_mock_llm()):
+            # See TestLocalMode._run's comment: no-op the real .env load so
+            # this test's env (including the fake "sk-test" key) can't be
+            # silently overwritten by a real .env on the machine running it.
+            with patch("env_utils.load_env_file", return_value=set()), \
+                 patch("llm.OPENAI_AVAILABLE", True), patch("llm.load_cloud_llm", return_value=_make_mock_llm()):
                 at = AppTest.from_file(APP_PATH, default_timeout=10)
                 at.run()
         return at
