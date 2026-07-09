@@ -1,6 +1,9 @@
 """Tests for env_utils.load_env_file."""
 import os
+from types import SimpleNamespace
+
 import pytest
+import env_utils
 from env_utils import load_env_file
 
 
@@ -79,6 +82,40 @@ class TestIndirectExpansion:
         path = _write_env(tmp_path, "LLM_API_KEY=$DEEPSEEK_API_KEY\n")
         load_env_file(path)
         assert os.environ["LLM_API_KEY"] == "sk-realkey"
+
+
+class TestKeyringExpansion:
+    def test_keyring_reference_resolved(self, tmp_path, monkeypatch):
+        monkeypatch.delenv("LLM_API_KEY", raising=False)
+
+        fake_keyring = SimpleNamespace(get_password=lambda service, username: "sk-from-keyring")
+        monkeypatch.setattr(env_utils, "import_module", lambda name: fake_keyring)
+
+        path = _write_env(tmp_path, "LLM_API_KEY=keyring:deepseek,default\n")
+        load_env_file(path)
+        assert os.environ["LLM_API_KEY"] == "sk-from-keyring"
+
+    def test_keyring_reference_missing_secret_left_as_is(self, tmp_path, monkeypatch):
+        monkeypatch.delenv("LLM_API_KEY", raising=False)
+
+        fake_keyring = SimpleNamespace(get_password=lambda service, username: None)
+        monkeypatch.setattr(env_utils, "import_module", lambda name: fake_keyring)
+
+        path = _write_env(tmp_path, "LLM_API_KEY=keyring:deepseek,default\n")
+        load_env_file(path)
+        assert os.environ["LLM_API_KEY"] == "keyring:deepseek,default"
+
+    def test_keyring_reference_without_keyring_module_left_as_is(self, tmp_path, monkeypatch):
+        monkeypatch.delenv("LLM_API_KEY", raising=False)
+
+        def _raise_import_error(_):
+            raise ImportError("keyring not installed")
+
+        monkeypatch.setattr(env_utils, "import_module", _raise_import_error)
+
+        path = _write_env(tmp_path, "LLM_API_KEY=keyring:deepseek,default\n")
+        load_env_file(path)
+        assert os.environ["LLM_API_KEY"] == "keyring:deepseek,default"
 
 
 class TestPrecedence:

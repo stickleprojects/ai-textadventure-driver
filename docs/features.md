@@ -26,3 +26,4 @@ Enhancements, new functionality, tooling, and infrastructure improvements.
 | 62 | [62.md](features/62.md) | Pluggable game-response parsing (`ParseStrategy`), decoupled from deciding | ✅ Fixed |
 | 63 | [63.md](features/63.md) | Map/world-graph logic trapped in `agent.py`, reached into privately | 🔲 Open |
 | 64 | [64.md](features/64.md) | Game-response classification helpers reached into privately from `parse_strategies` | 🔲 Open |
+| 65 | [65.md](features/65.md) | `.env` loader should support OS keyring references for API keys | ✅ Fixed |
