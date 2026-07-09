@@ -13,3 +13,4 @@ ignore = ["E501"]  # line-length: not enforced yet; add once codebase is reforma
 # sys.path manipulation before project imports is intentional in these tests
 "tests/test_issue10c.py" = ["E402"]
 "tests/test_issue27.py" = ["E402"]
+"tests/test_parse_strategies.py" = ["E402"]

@@ -2,21 +2,35 @@
 ParseStrategy + apply_parse_result, asserting the SAME resulting state
 regardless of which strategy produced the raw ParseResult.
 
-LLMJsonModeParseStrategy / LLMToolCallParseStrategy are exercised with a
-faked backend (no real LLM/API call — that's what tests/test_evals.py's
-`pytest.mark.llm` suite is for) returning a known-good extraction for each
-case, in that strategy's own schema. This tests the strategy + shared
-apply_parse_result plumbing, not LLM extraction quality.
+Two tiers:
+- test_llm_json_mode_strategy / test_llm_tool_call_strategy — fast, free,
+  run by default. Exercise a faked backend (no real LLM/API call) returning
+  a known-good extraction for each case, in that strategy's own schema.
+  This tests the strategy + shared apply_parse_result plumbing, not LLM
+  extraction quality.
+- test_llm_json_mode_strategy_real / test_llm_tool_call_strategy_real —
+  marked `cloud` (excluded by default, run with `-m cloud`), make real
+  network calls against every provider we have credentials for (loaded
+  from .env via env_utils.load_env_file(), same as scripts/watch_run.py).
+  Parametrized across whatever's actually configured — anthropic
+  (ANTHROPIC_API_KEY), LLM_PROVIDER's own key (LLM_API_KEY, when not
+  "local"), and the local llama.cpp model if its file exists — each
+  skipped individually if its credentials/file aren't present, so this
+  degrades gracefully in an environment with no .env at all.
 
 DeterministicParseStrategy is a skeleton (parse() raises NotImplementedError,
 see parse_strategies/deterministic.py) — its cases are xfail until a real
 implementation exists. Once implemented, these same cases start exercising
 it for free; pytest will report XPASS as a nudge to remove the xfail marks.
 """
+import os
 from dataclasses import dataclass, field
 from unittest.mock import patch
 
 import pytest
+
+from env_utils import load_env_file
+load_env_file()  # populate os.environ from .env before any os.environ.get calls below
 
 from parse_strategies import (
     DeterministicParseStrategy,
@@ -25,6 +39,7 @@ from parse_strategies import (
     apply_parse_result,
 )
 from tests.conftest import make_state
+from llm import load_anthropic_tool_llm, load_cloud_llm, load_llm, load_openai_tool_llm
 
 
 @dataclass
@@ -157,6 +172,106 @@ def test_llm_tool_call_strategy(case):
 @pytest.mark.parametrize("case", [_xfail_deterministic(c) for c in KNOWN_CASES], ids=[c.id for c in KNOWN_CASES])
 def test_deterministic_strategy(case):
     strategy = DeterministicParseStrategy()
+    result = strategy.parse(case.response, case.action)
+    state = make_state()
+    extracted, is_death, _ = apply_parse_result(state, result, case.action, case.response, previous_room=None)
+    _assert_case_applied(state, case)
+
+
+# ---------------------------------------------------------------------------
+# Real-backend tests — actually call configured cloud/local LLMs, no fakes.
+# Excluded by default (pytest.ini: `-m "not cloud"`); run with `-m cloud`.
+# ---------------------------------------------------------------------------
+
+ANTHROPIC_API_KEY = os.environ.get("ANTHROPIC_API_KEY", "")
+ANTHROPIC_MODEL = os.environ.get("ANTHROPIC_MODEL", "claude-haiku-4-5-20251001")
+LLM_PROVIDER = os.environ.get("LLM_PROVIDER", "local")
+LLM_MODEL = os.environ.get("LLM_MODEL", "deepseek-chat")
+LLM_API_KEY = os.environ.get("LLM_API_KEY", "")
+LOCAL_MODEL_PATH = os.environ.get("EVAL_MODEL_PATH", "../models/Phi-3.5-mini-instruct-Q3_K_M.gguf")
+
+
+def _real_tool_call_backends():
+    """(id, tool_adapter) pairs for every tool-calling backend we have real
+    credentials for — built once at collection time (constructs API clients,
+    makes no network call yet; the actual request happens in strategy.parse())."""
+    backends = []
+    if ANTHROPIC_API_KEY:
+        backends.append(("anthropic", load_anthropic_tool_llm(ANTHROPIC_MODEL, ANTHROPIC_API_KEY)))
+    if LLM_PROVIDER != "local" and LLM_API_KEY:
+        backends.append((LLM_PROVIDER, load_openai_tool_llm(LLM_PROVIDER, LLM_MODEL, LLM_API_KEY)))
+    return [(bid, adapter) for bid, adapter in backends if adapter is not None]
+
+
+def _real_json_mode_backends():
+    """(id, llm_instance) pairs for every JSON-mode-capable backend we have
+    real credentials/files for — same collection-time-safe construction."""
+    backends = []
+    if LLM_PROVIDER != "local" and LLM_API_KEY:
+        backends.append((f"{LLM_PROVIDER}-json", load_cloud_llm(LLM_PROVIDER, LLM_MODEL, LLM_API_KEY, json_mode=True)))
+    if os.path.isfile(LOCAL_MODEL_PATH):
+        backends.append(("local", load_llm(LOCAL_MODEL_PATH)))
+    return [(bid, inst) for bid, inst in backends if inst is not None]
+
+
+def _backend_params(backends, no_creds_reason):
+    """Parametrize values for a list of (id, backend) pairs, or a single
+    skipped placeholder if the list is empty — so the suite reports
+    "skipped: no credentials" instead of silently collecting zero tests.
+    Carries (id, backend) as the param value (not just the object) so tests
+    can look a specific (case, backend id) combination up in
+    _KNOWN_REAL_MODEL_FAILURES."""
+    if not backends:
+        return [pytest.param((None, None), id="none", marks=pytest.mark.skip(reason=no_creds_reason))]
+    return [pytest.param((bid, backend), id=bid) for bid, backend in backends]
+
+
+# Known, real-model quality gaps — not a bug in the strategy/apply_parse_result
+# plumbing (that's what these tests exist to check), so these get xfail rather
+# than a loosened assertion that would silently stop catching a regression in
+# the plumbing itself.
+_KNOWN_REAL_MODEL_FAILURES = {
+    ("room_and_exits", "anthropic"): (
+        "bug 78: Claude quoted the full sentence "
+        "('You are in the dingy stable') as room_quote instead of just the "
+        "room name — grounded (satisfies bug 74) but too verbose for "
+        "_resolve_room_name to canonicalize to the short form."
+    ),
+}
+
+
+def _xfail_if_known_real_failure(case_id, backend_id):
+    reason = _KNOWN_REAL_MODEL_FAILURES.get((case_id, backend_id))
+    if reason:
+        pytest.xfail(reason)
+
+
+@pytest.mark.cloud
+@pytest.mark.parametrize(
+    "tool_call_backend",
+    _backend_params(_real_tool_call_backends(), "no cloud tool-calling credentials configured (ANTHROPIC_API_KEY / LLM_API_KEY)"),
+)
+@pytest.mark.parametrize("case", KNOWN_CASES, ids=[c.id for c in KNOWN_CASES])
+def test_llm_tool_call_strategy_real(case, tool_call_backend):
+    backend_id, tool_adapter = tool_call_backend
+    _xfail_if_known_real_failure(case.id, backend_id)
+    strategy = LLMToolCallParseStrategy(tool_adapter)
+    result = strategy.parse(case.response, case.action)
+    state = make_state()
+    extracted, is_death, _ = apply_parse_result(state, result, case.action, case.response, previous_room=None)
+    _assert_case_applied(state, case)
+
+
+@pytest.mark.cloud
+@pytest.mark.parametrize(
+    "json_mode_backend",
+    _backend_params(_real_json_mode_backends(), "no JSON-mode credentials/local model configured (LLM_API_KEY / EVAL_MODEL_PATH)"),
+)
+@pytest.mark.parametrize("case", KNOWN_CASES, ids=[c.id for c in KNOWN_CASES])
+def test_llm_json_mode_strategy_real(case, json_mode_backend):
+    backend_id, llm_instance = json_mode_backend
+    _xfail_if_known_real_failure(case.id, backend_id)
+    strategy = LLMJsonModeParseStrategy(llm_instance)
     result = strategy.parse(case.response, case.action)
     state = make_state()
     extracted, is_death, _ = apply_parse_result(state, result, case.action, case.response, previous_room=None)
