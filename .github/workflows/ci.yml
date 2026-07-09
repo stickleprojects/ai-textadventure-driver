@@ -79,4 +79,4 @@ jobs:
             anthropic
         # llama-cpp-python omitted — binary build; llm-marked tests skipped in CI
       - name: Run tests
-        run: pytest -m "not llm and not integration and not slow" -v
+        run: pytest -m "not llm and not cloud and not integration and not slow" -v

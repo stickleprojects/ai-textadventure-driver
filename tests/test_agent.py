@@ -685,8 +685,13 @@ class TestNullRoomHandling:
         assert not state["world_graph"].has_node("Unknown (out from Dingy Stable)")
 
     def test_exits_still_recorded_when_room_extracted_alongside(self, stub_child):
+        # Exits must be literally present in the response text (bug 76's
+        # grounding, retroactively applied to this path) — a response that
+        # only names the room, without naming its exits, can't demonstrate
+        # this case.
         state = make_state(current_room="Dingy Stable")
-        with patch("agent.execute_game_command", return_value="You are in a huge pile of garbage."), \
+        response = "You are in a huge pile of garbage. Exits lead north and out."
+        with patch("agent.execute_game_command", return_value=response), \
              patch("agent.extract_knowledge",
                    return_value={"room": "huge pile of garbage", "exits": ["north", "out"]}):
             process_agent_step(state, stub_child, None)
@@ -1039,10 +1044,14 @@ class TestUtilityTaggedInLog:
         assert state["game_log"][-1]["utility"] == "futile"
 
     def test_room_change_tagged_productive(self, stub_child):
+        # The claimed room must be a literal (grounded) substring of the
+        # response text (bug 74's grounding, retroactively applied to this
+        # path) — a response that never names the destination can't
+        # demonstrate a real room change.
         state = make_state(current_room="Hall")
         state["world_graph"].add_node("Hall")
         state["world_graph"].add_edge("Hall", "Unknown (north from Hall)", label="north")
-        with patch("agent.execute_game_command", return_value="You go north."), \
+        with patch("agent.execute_game_command", return_value="You go north. You are in the Courtyard."), \
              patch("agent.extract_knowledge", return_value={"room": "Courtyard", "exits": []}):
             process_agent_step(state, stub_child, None)
         assert state["game_log"][-1]["utility"] == "productive"
