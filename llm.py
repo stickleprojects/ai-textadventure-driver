@@ -53,6 +53,12 @@ IMPORTANT distinctions:
 - Copy the room description VERBATIM from the game text — do not paraphrase, drop articles, or
   shorten it. For example: "you go north and are outside a cave in a juniper scrubland" →
   room = "outside a cave in a juniper scrubland" (not "cave in juniper scrubland").
+- Do NOT include the narrator's framing words ("You are", "you go north and are", etc.) in the
+  room value itself — start the room text at the room's own name. For example: "You are in the
+  dingy stable" → room = "the dingy stable" (or "dingy stable"), not "You are in the dingy
+  stable". This is a different rule from the one above: strip the leading "You (...) are"
+  narration, but still keep the room's own descriptive words — including "outside"/"inside" —
+  intact afterward.
 - A room must be a named place: "Alder Clump", "Castle Entrance", "Dark Corridor". It must NOT be:
   a direction ("northeast", "propet_northeast"), a character name ("Denzyl", "troll"),
   an object name ("flagpole", "rubbish"), or a bare descriptor ("dark"). If in doubt, set null.
