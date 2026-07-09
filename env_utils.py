@@ -8,12 +8,13 @@ Handles the common patterns:
     KEY=keyring:SERVICE,USER  # resolved from OS keyring at load time
     # comment line
 
-Existing environment variables are never overwritten — the .env file
-only fills in values that are not already set. This means shell exports
-always take precedence over the file.
+Environment variables may be overwritten when the resolved .env value
+differs from the current os.environ value. This enables indirect values
+like keyring references to be resolved and refreshed at load time.
 """
 import os
 import re
+import subprocess
 from importlib import import_module
 
 _VAR_REF_RE = re.compile(r'\$\{?([A-Za-z_][A-Za-z0-9_]*)\}?')
@@ -37,15 +38,53 @@ def _resolve_keyring_reference(raw_value):
 
     try:
         keyring = import_module("keyring")
-    except Exception:
-        return raw_value
+    except Exception as e:
+        print(f"Warning: keyring module not available, cannot resolve {raw_value!r}: {e}")
+        keyring = None
 
-    try:
-        secret = keyring.get_password(service, username)
-    except Exception:
-        return raw_value
+    secret = None
+    if keyring is not None:
+        try:
+            secret = keyring.get_password(service, username)
+        except Exception as e:
+            print(f"Warning: failed to get password from keyring for {raw_value!r}: {e}")
+
+    # Linux fallback: query Secret Service keyring directly via secret-tool.
+    # This helps when python-keyring backend selection fails but the login
+    # keyring is available through libsecret.
+    if not secret and os.name == "posix":
+        secret = _lookup_with_secret_tool(service, username)
 
     return secret if secret else raw_value
+
+
+def _lookup_with_secret_tool(service, username):
+    """Best-effort Linux Secret Service lookup via secret-tool.
+
+    Tries common attribute names used by keyring/libsecret integrations.
+    Returns None if secret-tool is unavailable or lookup fails.
+    """
+    attribute_variants = (
+        ("service", service, "username", username),
+        ("service", service, "user", username),
+        ("service", service, "account", username),
+    )
+
+    for attrs in attribute_variants:
+        cmd = ["secret-tool", "lookup", *attrs]
+        try:
+            result = subprocess.run(cmd, capture_output=True, text=True, check=False)
+        except FileNotFoundError:
+            return None
+        except Exception:
+            continue
+
+        if result.returncode == 0:
+            candidate = result.stdout.strip()
+            if candidate:
+                return candidate
+
+    return None
 
 
 def load_env_file(path=".env"):
@@ -89,7 +128,7 @@ def load_env_file(path=".env"):
             )
             value = _resolve_keyring_reference(value)
 
-            if key not in os.environ:
+            if key not in os.environ or os.environ[key] != value:
                 os.environ[key] = value
                 set_keys.add(key)
 
