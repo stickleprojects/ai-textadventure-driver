@@ -32,7 +32,7 @@ The app defaults to:
 | File | Streamlit dependency | Responsibility |
 |------|---------------------|----------------|
 | `game_engine.py` | None | pexpect subprocess interface |
-| `llm.py` | `@st.cache_resource` only | Model loading + knowledge extraction (local or cloud) |
+| `llm.py` | None | Model loading + knowledge extraction (local or cloud) |
 | `agent.py` | None | State mutation and decision logic |
 | `run_evaluator.py` | None | Run classification, strategy load/merge, sidecar persistence |
 | `game_config.py` | None | `GameConfig` singleton loaded from `configs/knight_orc.json` |
