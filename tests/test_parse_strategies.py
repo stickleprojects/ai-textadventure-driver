@@ -18,10 +18,12 @@ Two tiers:
   skipped individually if its credentials/file aren't present, so this
   degrades gracefully in an environment with no .env at all.
 
-DeterministicParseStrategy is a skeleton (parse() raises NotImplementedError,
-see parse_strategies/deterministic.py) — its cases are xfail until a real
-implementation exists. Once implemented, these same cases start exercising
-it for free; pytest will report XPASS as a nudge to remove the xfail marks.
+KNOWN_CASES' response text is real, verbatim Knight Orc output sampled from
+saved run logs (logs/*.json) — not hand-invented phrasing — so the same
+cases that exercise the two LLM-backed strategies (via a faked backend
+reporting the expected extraction) also genuinely exercise
+DeterministicParseStrategy's regex patterns against the exact wording they
+were derived from.
 """
 import os
 from dataclasses import dataclass, field
@@ -32,6 +34,7 @@ import pytest
 from env_utils import load_env_file
 load_env_file()  # populate os.environ from .env before any os.environ.get calls below
 
+import agent
 from parse_strategies import (
     DeterministicParseStrategy,
     LLMJsonModeParseStrategy,
@@ -56,24 +59,30 @@ class KnownCase:
 
 
 KNOWN_CASES = [
+    # Real Knight Orc output, verbatim from logs/watch_20260708_*.json.
     KnownCase(
         id="room_and_exits",
-        action="look",
-        response="You are in the dingy stable. Exits lead north and east.",
-        room="dingy stable",
-        exits=["north", "east"],
+        action="south",
+        response="You go south and are in an alder ghostwood. Exits lead north, south, southwest, west and northwest.",
+        room="alder ghostwood",
+        exits=["north", "south", "southwest", "west", "northwest"],
     ),
     KnownCase(
         id="objects_and_npcs",
         action="look",
-        response="A putty knife lies here. A huge knight blocks the doorway.",
-        objects=["putty knife"],
-        npcs=["huge knight"],
+        response=(
+            "You are on a trampled field, pock-marked by the feet of humans and their horses. "
+            "An exit leads west. You can see Denzyl and a pile of garbage."
+        ),
+        room="trampled field",
+        exits=["west"],
+        objects=["pile of garbage"],
+        npcs=["Denzyl"],
     ),
     KnownCase(
         id="take_success",
         action="take putty knife",
-        response="Taken.",
+        response="You take the putty knife.",
         gained=["putty knife"],
     ),
     KnownCase(
@@ -127,7 +136,10 @@ def _assert_case_applied(state, case):
     if case.room:
         assert state["current_room"] == case.room
         for direction in case.exits:
-            assert state["world_graph"].has_node(f"Unknown ({direction} from {case.room})")
+            # update_graph normalizes compound directions before naming the
+            # placeholder node (southwest -> sw, etc. — agent._DIRECTION_NORMALIZE).
+            normalized = agent._DIRECTION_NORMALIZE.get(direction, direction)
+            assert state["world_graph"].has_node(f"Unknown ({normalized} from {case.room})")
     for obj in case.objects:
         assert obj in state["uninspected_objects"]
         assert obj in state["known_entities"]
@@ -138,16 +150,6 @@ def _assert_case_applied(state, case):
             assert item in state["inventory"]
         else:
             assert item not in state["inventory"]
-
-
-def _xfail_deterministic(case):
-    return pytest.param(
-        case,
-        marks=pytest.mark.xfail(
-            raises=NotImplementedError,
-            reason="DeterministicParseStrategy not yet implemented — feature 62 step 5",
-        ),
-    )
 
 
 @pytest.mark.parametrize("case", KNOWN_CASES, ids=[c.id for c in KNOWN_CASES])
@@ -169,7 +171,7 @@ def test_llm_tool_call_strategy(case):
     _assert_case_applied(state, case)
 
 
-@pytest.mark.parametrize("case", [_xfail_deterministic(c) for c in KNOWN_CASES], ids=[c.id for c in KNOWN_CASES])
+@pytest.mark.parametrize("case", KNOWN_CASES, ids=[c.id for c in KNOWN_CASES])
 def test_deterministic_strategy(case):
     strategy = DeterministicParseStrategy()
     result = strategy.parse(case.response, case.action)
