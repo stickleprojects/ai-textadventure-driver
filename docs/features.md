@@ -29,3 +29,5 @@ Enhancements, new functionality, tooling, and infrastructure improvements.
 | 65 | [65.md](features/65.md) | `.env` loader should support OS keyring references for API keys | ✅ Fixed |
 | 66 | [66.md](features/66.md) | GUI runs don't write `runs/<run_id>.json`, so the anomaly/architect pipeline can't see them | 🔲 Open |
 | 67 | [67.md](features/67.md) | Dashboard doesn't show the agent's believed room/inventory/objective/mode at a glance | 🔲 Open |
+| 68 | [68.md](features/68.md) | Agent-state panel is a flat dict, not a structured component | 🔲 Open |
+| 69 | [69.md](features/69.md) | No way to run a fixed batch of N steps, or to cancel one in progress | 🔲 Open |
