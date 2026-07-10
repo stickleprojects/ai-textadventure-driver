@@ -63,3 +63,4 @@ Architect-generated anomaly plans are tracked separately in [plans.md](plans.md)
 | 78 | [78.md](bugs/78.md) | A grounded but overly-verbose `room_quote` fragments the world graph | ✅ Fixed |
 | 79 | [79.md](bugs/79.md) | Local-model eval suite failing 7/14 cases, most with a fully empty extraction | 🔲 Open |
 | 80 | [80.md](bugs/80.md) | Alternating examine/look thrash invisible to all three deterministic anomaly detectors | 🔲 Open |
+| 81 | [81.md](bugs/81.md) | Tool-calling model hallucinates an object name and sends it as a live game command | 🔲 Open |
