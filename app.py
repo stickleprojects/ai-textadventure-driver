@@ -115,6 +115,8 @@ def init_state():
         st.session_state.run_id = None
     if 'initial_text' not in st.session_state:
         st.session_state.initial_text = None
+    if 'steps_remaining' not in st.session_state:
+        st.session_state.steps_remaining = 0
 
 
 init_state()
@@ -239,6 +241,7 @@ with st.sidebar:
         st.session_state.system_state = _make_clean_state()
         st.session_state.run_id = None
         st.session_state.initial_text = None
+        st.session_state.steps_remaining = 0
         state = st.session_state.system_state
         st.success("State reset. Config and strategy reloaded from disk.")
 
@@ -251,12 +254,18 @@ with st.sidebar:
         if st.button(label, use_container_width=True):
             state["is_running"] = not state["is_running"]
     with col2:
-        if st.button("Step Once", use_container_width=True):
+        step_count = st.number_input("Steps", min_value=1, value=1, step=1)
+        if st.button("Step", use_container_width=True):
             child = st.session_state.level9_process
             if child and child.isalive():
-                _run_step(child, state, llm, parse_strategy)
+                st.session_state.steps_remaining = int(step_count)
             else:
                 st.error("Engine offline. Boot engine first.")
+
+    if state["is_running"] or st.session_state.steps_remaining > 0:
+        if st.button("Cancel", use_container_width=True):
+            state["is_running"] = False
+            st.session_state.steps_remaining = 0
 
     st.divider()
     st.download_button(
@@ -310,35 +319,60 @@ with col_viz:
     )
 
 with col_state:
-    st.subheader("Dynamic Schema")
-    last_entry = state["game_log"][-1] if state["game_log"] else None
-    st.json({
-        "Location": state["current_room"],
-        "Mode": _derive_mode(state),
-        "Current reasoning": (last_entry or {}).get("reason"),
-        "Active Goal": state["active_goal"] or "None",
-        "Inventory": state["inventory"],
-        "Spellbook": state["spellbook"],
-    })
+    st.subheader("Agent State")
+    tab_overview, tab_inventory, tab_spellbook, tab_anomalies = st.tabs(
+        ["Overview", "Inventory", "Spellbook", "Anomalies"]
+    )
 
-    st.subheader("Unresolved Anomalies")
-    if state["unresolved_anomalies"]:
-        for target, data in state["unresolved_anomalies"].items():
-            st.warning(
-                f"**{target.upper()}** in {data['room']}\n\n"
-                f"*Reason:* {data['reason']} | *Needs:* {data['potential_solution']}"
-            )
-    else:
-        st.success("No active blockers detected.")
+    with tab_overview:
+        last_entry = state["game_log"][-1] if state["game_log"] else None
+        st.json({
+            "Location": state["current_room"],
+            "Mode": _derive_mode(state),
+            "Current reasoning": (last_entry or {}).get("reason"),
+            "Active Goal": state["active_goal"] or "None",
+        })
 
-# --- Auto-run loop ---
-if state["is_running"]:
+    with tab_inventory:
+        if state["inventory"]:
+            for item in state["inventory"]:
+                st.markdown(f"- {item}")
+        else:
+            st.caption("Nothing carried yet.")
+
+    with tab_spellbook:
+        if state["spellbook"]:
+            for spell in state["spellbook"]:
+                st.markdown(f"- {spell}")
+        else:
+            st.caption("No spells learned yet.")
+
+    with tab_anomalies:
+        if state["unresolved_anomalies"]:
+            for target, data in state["unresolved_anomalies"].items():
+                st.warning(
+                    f"**{target.upper()}** in {data['room']}\n\n"
+                    f"*Reason:* {data['reason']} | *Needs:* {data['potential_solution']}"
+                )
+        else:
+            st.success("No active blockers detected.")
+
+# --- Auto-run / step-batch loop ---
+# Both indefinite Auto-Run (state["is_running"]) and a fixed N-step batch
+# (st.session_state.steps_remaining, feature 69) share this single
+# rerun-driven loop — each rerun re-checks these flags, which is also what
+# makes the Cancel button (and the existing Stop Auto-Run toggle) able to
+# interrupt either one before it finishes.
+if state["is_running"] or st.session_state.steps_remaining > 0:
     child = st.session_state.level9_process
     if child and child.isalive():
         _run_step(child, state, llm, parse_strategy)
+        if st.session_state.steps_remaining > 0:
+            st.session_state.steps_remaining -= 1
         time.sleep(step_delay)
         st.rerun()
     else:
         state["is_running"] = False
+        st.session_state.steps_remaining = 0
         st.sidebar.error("Auto-Run stopped: Engine offline.")
         st.rerun()
