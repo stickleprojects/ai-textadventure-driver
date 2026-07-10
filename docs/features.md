@@ -22,7 +22,7 @@ Enhancements, new functionality, tooling, and infrastructure improvements.
 | 58 | [58.md](features/58.md) | Merge bidirectional edges in Spatial Matrix | ✅ Fixed |
 | 59 | [59.md](features/59.md) | Split agent/state code into reusable library vs. Knight-Orc-bespoke layers, add spec-driven tests | 🔲 Open |
 | 60 | [60.md](features/60.md) | Code-quality review step in `--spec-target` | 🔲 Open |
-| 61 | [61.md](features/61.md) | Wire the Streamlit UI into the tool-calling main loop, and surface its decision detail | 🔲 Open |
+| 61 | [61.md](features/61.md) | Wire the Streamlit UI into the tool-calling main loop, and surface its decision detail | ✅ Fixed |
 | 62 | [62.md](features/62.md) | Pluggable game-response parsing (`ParseStrategy`), decoupled from deciding | ✅ Fixed |
 | 63 | [63.md](features/63.md) | Map/world-graph logic trapped in `agent.py`, reached into privately | ✅ Fixed |
 | 64 | [64.md](features/64.md) | Game-response classification helpers reached into privately from `parse_strategies` | ✅ Fixed |
