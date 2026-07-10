@@ -197,6 +197,48 @@ def compare_to_history(run_record, run_history):
     return comparison
 
 
+def build_run_record(state, run_id, findings=None):
+    """Assemble the per-run summary dict written to runs/<run_id>.json.
+
+    Shared by scripts/watch_run.py (end of a headless run) and app.py
+    (after every GUI step, so a GUI session can be pointed at
+    detect_anomalies.py at any time). `findings` feeds classify_run's
+    loop/timeout/crash/interrupted detection — pass None (or omit) for
+    callers, like the GUI, that don't track findings themselves.
+    """
+    game_log = state["game_log"]
+    outcome = classify_run(game_log, findings or [], state.get("current_score"))
+    entity_verb_outcomes = {
+        name: {v: o for v, o in data.get("verb_outcomes", {}).items() if o == "invalid"}
+        for name, data in state.get("known_entities", {}).items()
+        if any(o == "invalid" for o in data.get("verb_outcomes", {}).values())
+    }
+    g = state["world_graph"]
+    world_graph_record = {
+        "nodes": [n for n in g.nodes if not n.startswith("Unknown")],
+        "edges": [
+            [u, v, d.get("label", "")]
+            for u, v, d in g.edges(data=True)
+            if not u.startswith("Unknown") and not v.startswith("Unknown")
+        ],
+    }
+    run_record = {
+        "run_id": run_id,
+        "outcome": outcome,
+        "final_score": state.get("current_score"),
+        "max_score": state.get("max_score"),
+        "steps": len(game_log),
+        "futile_edges": [list(e) for e in sorted(state.get("futile_edges", set()))],
+        "entity_verb_outcomes": entity_verb_outcomes,
+        "world_graph": world_graph_record,
+        **compute_playthrough_metrics(state, game_log),
+    }
+    total_input = sum(e.get("token_usage", {}).get("input_tokens", 0) for e in game_log)
+    total_output = sum(e.get("token_usage", {}).get("output_tokens", 0) for e in game_log)
+    run_record["token_usage"] = {"input_tokens": total_input, "output_tokens": total_output}
+    return run_record
+
+
 def merge_run_record(run_record, strategy_path):
     """Merge a completed run's data into the accumulated strategy file.
 

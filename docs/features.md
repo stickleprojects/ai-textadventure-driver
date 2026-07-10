@@ -27,3 +27,5 @@ Enhancements, new functionality, tooling, and infrastructure improvements.
 | 63 | [63.md](features/63.md) | Map/world-graph logic trapped in `agent.py`, reached into privately | ✅ Fixed |
 | 64 | [64.md](features/64.md) | Game-response classification helpers reached into privately from `parse_strategies` | ✅ Fixed |
 | 65 | [65.md](features/65.md) | `.env` loader should support OS keyring references for API keys | ✅ Fixed |
+| 66 | [66.md](features/66.md) | GUI runs don't write `runs/<run_id>.json`, so the anomaly/architect pipeline can't see them | 🔲 Open |
+| 67 | [67.md](features/67.md) | Dashboard doesn't show the agent's believed room/inventory/objective/mode at a glance | 🔲 Open |

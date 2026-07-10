@@ -36,7 +36,7 @@ from agent_tools import run_tool_calling_step
 from game_engine import start_level9
 from llm import load_llm, load_anthropic_tool_llm, load_openai_tool_llm
 from parse_strategies import DeterministicParseStrategy, LLMJsonModeParseStrategy, LLMToolCallParseStrategy
-from run_evaluator import classify_run, compute_playthrough_metrics, load_strategy, merge_run_record
+from run_evaluator import build_run_record, load_strategy, merge_run_record
 from ui import save_graph_image
 
 # Load the on-disk Knight Orc config by default (bare GameConfig() Python
@@ -320,36 +320,7 @@ def run(steps=50, verbose=False):
     finally:
         if child.isalive():
             child.close()
-        steps_run = len(state["game_log"])
-        outcome = classify_run(state["game_log"], findings, state.get("current_score"))
-        entity_verb_outcomes = {
-            name: {v: o for v, o in data.get("verb_outcomes", {}).items() if o == "invalid"}
-            for name, data in state.get("known_entities", {}).items()
-            if any(o == "invalid" for o in data.get("verb_outcomes", {}).values())
-        }
-        g = state["world_graph"]
-        world_graph_record = {
-            "nodes": [n for n in g.nodes if not n.startswith("Unknown")],
-            "edges": [
-                [u, v, d.get("label", "")]
-                for u, v, d in g.edges(data=True)
-                if not u.startswith("Unknown") and not v.startswith("Unknown")
-            ],
-        }
-        run_record = {
-            "run_id": run_id,
-            "outcome": outcome,
-            "final_score": state.get("current_score"),
-            "max_score": state.get("max_score"),
-            "steps": steps_run,
-            "futile_edges": [list(e) for e in sorted(state.get("futile_edges", set()))],
-            "entity_verb_outcomes": entity_verb_outcomes,
-            "world_graph": world_graph_record,
-            **compute_playthrough_metrics(state, state["game_log"]),
-        }
-        total_input = sum(e.get("token_usage", {}).get("input_tokens", 0) for e in state["game_log"])
-        total_output = sum(e.get("token_usage", {}).get("output_tokens", 0) for e in state["game_log"])
-        run_record["token_usage"] = {"input_tokens": total_input, "output_tokens": total_output}
+        run_record = build_run_record(state, run_id, findings)
 
         log_path = _write_log(state["game_log"], run_id)
         run_path = _write_run_record(run_record)
@@ -361,7 +332,9 @@ def run(steps=50, verbose=False):
         save_graph_image(state["world_graph"], state.get("current_room", ""), full_map_path, draw_unknowns=True)
 
         if verbose:
-            print(f"\nOutcome: {outcome}", file=sys.stderr)
+            total_input = run_record["token_usage"]["input_tokens"]
+            total_output = run_record["token_usage"]["output_tokens"]
+            print(f"\nOutcome: {run_record['outcome']}", file=sys.stderr)
             print(f"Tokens: {total_input:,} in / {total_output:,} out", file=sys.stderr)
             if LLM_INPUT_PRICE_PER_MILLION or LLM_OUTPUT_PRICE_PER_MILLION:
                 cost = (total_input * LLM_INPUT_PRICE_PER_MILLION

@@ -1,6 +1,8 @@
+import json
 import os
 import time
 from datetime import datetime
+from pathlib import Path
 
 import streamlit.components.v1 as components
 
@@ -24,7 +26,7 @@ from llm import (
     load_openai_tool_llm,
 )
 from parse_strategies import LLMToolCallParseStrategy
-from run_evaluator import load_strategy
+from run_evaluator import build_run_record, load_strategy, merge_run_record
 from ui import generate_json_log, generate_markdown_log, render_graph
 from world_graph import update_graph
 
@@ -32,6 +34,28 @@ _config_path = os.environ.get("GAME_CONFIG", "configs/knight_orc.json")
 _strategy_path = os.environ.get("STRATEGY_PATH", "configs/knight_orc_strategy.json")
 if _config_path and os.path.isfile(_config_path):
     config.load_from_file(_config_path)
+
+LOG_DIR = Path("logs")
+RUNS_DIR = Path("runs")
+
+
+def _persist_run(state, run_id):
+    """Write logs/<run_id>.json and runs/<run_id>.json after every step.
+
+    The GUI has no clean "run end" the way watch_run.py's step-count loop
+    does, so both files are refreshed after each step rather than once at
+    the end — this lets detect_anomalies.py be pointed at any GUI
+    session's run_id at any time (feature 66).
+    """
+    LOG_DIR.mkdir(exist_ok=True)
+    with open(LOG_DIR / f"{run_id}.json", "w") as f:
+        json.dump(state["game_log"], f, indent=2)
+
+    RUNS_DIR.mkdir(exist_ok=True)
+    run_record = build_run_record(state, run_id)
+    with open(RUNS_DIR / f"{run_id}.json", "w") as f:
+        json.dump(run_record, f, indent=2)
+    return run_record
 
 LLM_PROVIDER = os.environ.get("LLM_PROVIDER", "local")
 LLM_MODEL = os.environ.get("LLM_MODEL", "deepseek-chat")
@@ -110,6 +134,32 @@ def _run_step(child, state, llm, parse_strategy):
             state, child, llm, parse_strategy, st.session_state.run_id, step_num,
             initial_text=st.session_state.get("initial_text"),
         )
+    _persist_run(state, st.session_state.run_id)
+
+
+def _derive_mode(state):
+    """Describe what the agent believes it's currently doing.
+
+    Legacy path: active_goal/current_inspection/uninspected_objects already
+    fully describe a discrete mode. Tool-calling path has no equivalent
+    structured state (agent_tools.py never touches these fields) — labelling
+    it as freeform is honest; deriving a legacy-shaped mode for it would
+    misrepresent how that path actually decides (feature 67).
+    """
+    if LLM_PROVIDER != "local":
+        return "Freeform (model decides each turn)"
+    if state.get("active_goal"):
+        goal = state["active_goal"]
+        return f"Pursuing goal: {goal['solution']} on {goal['target']}"
+    insp = state.get("current_inspection") or {}
+    if insp.get("target"):
+        seq = insp.get("sequence", [])
+        idx = insp.get("step_index", 0)
+        verb = seq[idx] if idx < len(seq) else "?"
+        return f"Inspecting '{insp['target']}' (verb: {verb})"
+    if state.get("uninspected_objects"):
+        return f"Exploring ({len(state['uninspected_objects'])} object(s) queued for inspection)"
+    return "Exploring"
 
 
 # --- Sidebar ---
@@ -165,16 +215,25 @@ with st.sidebar:
             "response": init_response,
             "extracted": log_extracted,
         })
+        _persist_run(state, st.session_state.run_id)
 
         if child:
             st.success("glklevel9 instance running.")
         else:
             st.error(init_response)
 
+    if st.session_state.run_id:
+        st.caption(f"Run ID: `{st.session_state.run_id}`")
+
     if st.button("Reset Game & State", use_container_width=True, disabled=not engine_running):
         if st.session_state.level9_process is not None:
             st.session_state.level9_process.terminate(force=True)
             st.session_state.level9_process = None
+        if st.session_state.run_id:
+            # Merge into the cross-run strategy file exactly once, here — unlike
+            # the per-step logs/runs/ writes in _persist_run, merge_run_record
+            # appends to run_history unconditionally, so it must not run every step.
+            merge_run_record(build_run_record(state, st.session_state.run_id), _strategy_path)
         if _config_path and os.path.isfile(_config_path):
             config.load_from_file(_config_path)
         st.session_state.system_state = _make_clean_state()
@@ -252,9 +311,12 @@ with col_viz:
 
 with col_state:
     st.subheader("Dynamic Schema")
+    last_entry = state["game_log"][-1] if state["game_log"] else None
     st.json({
         "Location": state["current_room"],
-        "Active Goal": state["active_goal"] or "Exploring",
+        "Mode": _derive_mode(state),
+        "Current reasoning": (last_entry or {}).get("reason"),
+        "Active Goal": state["active_goal"] or "None",
         "Inventory": state["inventory"],
         "Spellbook": state["spellbook"],
     })

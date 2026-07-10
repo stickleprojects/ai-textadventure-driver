@@ -1,4 +1,6 @@
-from run_evaluator import compare_to_history, compute_playthrough_metrics
+import networkx as nx
+
+from run_evaluator import build_run_record, compare_to_history, compute_playthrough_metrics
 
 
 def _entry(objects=None, added_to_inventory=None, anomalies=None, resolved_anomalies=None):
@@ -96,3 +98,66 @@ def test_compare_to_history_ignores_prior_entries_missing_the_metric():
     run_history = [{"outcome": "ambiguous"}, {"puzzles_solved": 2}]
     comparison = compare_to_history(run_record, run_history)
     assert comparison["puzzles_solved"] == {"current": 4, "best_prior": 2}
+
+
+# ── build_run_record ────────────────────────────────────────────────────────
+
+def _base_state(**overrides):
+    state = {
+        "game_log": [],
+        "current_score": None,
+        "max_score": None,
+        "known_entities": {},
+        "world_graph": nx.MultiDiGraph(),
+        "futile_edges": set(),
+        "visited_rooms": set(),
+        "known_npcs": {},
+    }
+    state.update(overrides)
+    return state
+
+
+def test_build_run_record_basic_fields():
+    state = _base_state(current_score=3, max_score=10, game_log=[_entry()])
+    record = build_run_record(state, "ui_20260710_120000")
+    assert record["run_id"] == "ui_20260710_120000"
+    assert record["final_score"] == 3
+    assert record["max_score"] == 10
+    assert record["steps"] == 1
+
+
+def test_build_run_record_excludes_unknown_nodes_from_world_graph():
+    g = nx.MultiDiGraph()
+    g.add_node("Courtyard")
+    g.add_node("Unknown Location (north from Courtyard)")
+    g.add_edge("Courtyard", "Unknown Location (north from Courtyard)", label="north")
+    state = _base_state(world_graph=g)
+    record = build_run_record(state, "run1")
+    assert record["world_graph"]["nodes"] == ["Courtyard"]
+    assert record["world_graph"]["edges"] == []
+
+
+def test_build_run_record_entity_verb_outcomes_only_keeps_invalid():
+    state = _base_state(known_entities={
+        "flagpole": {"verb_outcomes": {"take": "invalid", "examine": "succeeded"}},
+        "putty knife": {"verb_outcomes": {"take": "blocked"}},
+    })
+    record = build_run_record(state, "run1")
+    assert record["entity_verb_outcomes"] == {"flagpole": {"take": "invalid"}}
+
+
+def test_build_run_record_sums_token_usage_across_steps():
+    game_log = [
+        {"token_usage": {"input_tokens": 100, "output_tokens": 20}},
+        {"token_usage": {"input_tokens": 50, "output_tokens": 10}},
+        {},
+    ]
+    state = _base_state(game_log=game_log)
+    record = build_run_record(state, "run1")
+    assert record["token_usage"] == {"input_tokens": 150, "output_tokens": 30}
+
+
+def test_build_run_record_outcome_reflects_findings():
+    state = _base_state(game_log=[_entry()])
+    record = build_run_record(state, "run1", findings=[{"type": "loop"}])
+    assert record["outcome"] == "agent_failure"
