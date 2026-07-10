@@ -16,6 +16,7 @@ unaffected by this module — see the "Scope" section of
 docs/main_loop_prompt.md for why.
 """
 import json
+import re
 from datetime import datetime
 from pathlib import Path
 
@@ -36,6 +37,201 @@ _NUDGE_MESSAGE = (
 _TERMINAL_TOOL = "execute_game_command"
 _NON_TERMINAL_TOOLS = {"query_map", "query_entity_history", "request_capability",
                         "write_journal", "search_journal"}
+
+
+# ---------------------------------------------------------------------------
+# Bug 81: grounding execute_game_command's own target against known ground
+# truth, mirroring the "grounding, not prompting, against hallucination"
+# principle docs/main_loop_prompt.md already applies to parse_game_response
+# (bugs 74/75/76/77) — extended here to the decide loop's own action
+# selection, which was previously unconstrained free text (see
+# docs/bugs/81.md). Deliberately biased toward permissive matching per that
+# bug's design constraints: a false reject (blocking a real object) is worse
+# than an occasional hallucination slipping through.
+# ---------------------------------------------------------------------------
+
+# Verbs whose command shape is "verb noun-phrase" and thus has an
+# object-noun-phrase worth grounding. Reuses config.candidate_verbs (via
+# parse_strategies.split_verb_object) rather than a new hardcoded list —
+# movement (north/south/...), meta commands (look, inventory, score), and
+# anything else with no object-noun-phrase shape never match this and are
+# never checked.
+_USE_CAST_ON_RE = re.compile(r"^(use|cast)\s+(.+?)\s+on\s+(.+)$", re.IGNORECASE)
+_USE_CAST_RE = re.compile(r"^(use|cast)\s+(.+)$", re.IGNORECASE)
+
+_OBJECT_STOPWORDS = {"a", "an", "the"}
+# Floor on the word-set-containment match, adapted from world_graph's
+# _MIN_FUZZY_MATCH_CHARS (bug 78 precedent) but lower — object nouns
+# ("key", "orb") are commonly shorter than the room-name phrases that
+# constant was calibrated for.
+_MIN_OBJECT_FUZZY_CHARS = 3
+
+# Pronoun-ish references aren't object names at all — fuzzy-matching them
+# against a candidate list is meaningless, and treating a bare "it"/"that"
+# as an ungrounded target would be a false positive on ordinary phrasing.
+_PRONOUN_TARGETS = {
+    "it", "them", "that", "this", "these", "those", "everything",
+    "all", "himself", "herself", "itself", "here", "around", "me",
+}
+
+
+def _normalize_object_words(text):
+    return [w for w in re.findall(r"[a-z0-9']+", (text or "").lower()) if w not in _OBJECT_STOPWORDS]
+
+
+def _fuzzy_object_match(target, candidate):
+    """True if target (a noun phrase pulled from a command) and candidate (a
+    known entity/npc/inventory/spellbook name) plausibly refer to the same
+    thing — exact match, or word-set containment either direction gated by a
+    minimum-length floor (e.g. "knife" matches "putty knife"). Same
+    permissive precedent as world_graph.resolve_room_name's fuzzy tier (bug
+    78), adapted for object nouns rather than room-name phrases."""
+    target_words = _normalize_object_words(target)
+    candidate_words = _normalize_object_words(candidate)
+    if not target_words or not candidate_words:
+        return False
+    target_set, candidate_set = set(target_words), set(candidate_words)
+    if target_set == candidate_set:
+        return True
+    if len(target_words) <= len(candidate_words):
+        smaller_norm, smaller_set, larger_set = " ".join(target_words), target_set, candidate_set
+    else:
+        smaller_norm, smaller_set, larger_set = " ".join(candidate_words), candidate_set, target_set
+    if not smaller_set <= larger_set:
+        return False
+    return len(smaller_norm.replace(" ", "")) >= _MIN_OBJECT_FUZZY_CHARS
+
+
+def _extract_grounding_checks(command):
+    """Return [(target, kind), ...] for the object-noun-phrase target(s) an
+    object-referencing command references, or [] if command isn't
+    object-referencing at all (movement, meta commands, no object shape).
+    kind is "room" (checked against known objects/npcs/inventory), "held"
+    (checked against inventory/spellbook only — the actor side of
+    "use X on Y"/"cast X on Y", which is typically something already held
+    and shouldn't be conflated with the room-object target Y), or "either"
+    (a bare "use X"/"cast X" with no second target)."""
+    if not command:
+        return []
+    stripped = command.strip()
+
+    m = _USE_CAST_ON_RE.match(stripped)
+    if m:
+        actor, target = m.group(2).strip(), m.group(3).strip()
+        checks = []
+        if actor:
+            checks.append((actor, "held"))
+        if target:
+            checks.append((target, "room"))
+        return checks
+
+    m = _USE_CAST_RE.match(stripped)
+    if m:
+        target = m.group(2).strip()
+        return [(target, "either")] if target else []
+
+    verb, obj = parse_strategies.split_verb_object(stripped)
+    if verb and obj:
+        return [(obj, "room")]
+    return []
+
+
+def _room_object_candidates(state):
+    """Broad, permissive ground-truth set for a room-object target: the
+    union of known_entities (cross-run pre-seeded + this-run discovered),
+    known_npcs, the most recent game_log entry's extracted objects/npcs, and
+    current inventory (design constraint 1 of bug 81's fix — deliberately
+    not scoped to "just the current room", since known_entities is the
+    fuller cross-run picture and being stricter risks false-rejecting a
+    real object)."""
+    names = set(state.get("known_entities", {}).keys())
+    names |= set(state.get("known_npcs", {}).keys())
+    names |= set(state.get("inventory", []))
+    if state.get("game_log"):
+        last_extracted = state["game_log"][-1].get("extracted", {})
+        names |= set(last_extracted.get("objects", []))
+        names |= set(last_extracted.get("npcs", []))
+    return names
+
+
+def _held_candidates(state):
+    """Ground truth for the actor side of "use X on Y"/"cast X on Y" —
+    inventory and spellbook only, deliberately not the room-object set
+    (design constraint 2 of bug 81's fix: X and Y are different kinds of
+    thing and shouldn't be checked against the same pool)."""
+    return set(state.get("inventory", [])) | set(state.get("spellbook", []))
+
+
+def _candidates_for_kind(state, kind):
+    if kind == "held":
+        return _held_candidates(state)
+    if kind == "either":
+        return _held_candidates(state) | _room_object_candidates(state)
+    return _room_object_candidates(state)
+
+
+def _current_room_display_names(state):
+    """Narrower, room-scoped set used only for the corrective message shown
+    back to the model — as opposed to _room_object_candidates' broader,
+    whole-run set used for the grounding *decision*. Telling the model
+    "objects you can interact with right now" using a run-wide dump would be
+    both noisy and actively misleading (implying far-away objects are here);
+    the acceptance check stays permissive, the displayed list stays
+    accurate."""
+    room = state.get("current_room")
+    names = {name for name, data in state.get("known_entities", {}).items() if data.get("location") == room}
+    names |= {name for name, data in state.get("known_npcs", {}).items() if data.get("location") == room}
+    names |= set(state.get("inventory", []))
+    if state.get("game_log"):
+        last_extracted = state["game_log"][-1].get("extracted", {})
+        names |= set(last_extracted.get("objects", []))
+        names |= set(last_extracted.get("npcs", []))
+    return names
+
+
+def _find_ungrounded_target(state, command, last_response):
+    """Returns (target, kind) for the first target in command that isn't
+    grounded in any known ground truth (see _candidates_for_kind), or None
+    if command isn't object-referencing, every target is grounded, or a
+    target genuinely appears in the raw text of the most recent game
+    response even though it wasn't in a structured extracted field (bug 77's
+    precedent — extraction can lag/miss things, so raw-text presence is
+    still evidence of a real object, not a hallucination)."""
+    checks = _extract_grounding_checks(command)
+    if not checks:
+        return None
+    last_response_lower = (last_response or "").lower()
+    for target, kind in checks:
+        normalized = " ".join(_normalize_object_words(target))
+        if not normalized or normalized in _PRONOUN_TARGETS:
+            continue
+        candidates = _candidates_for_kind(state, kind)
+        if any(_fuzzy_object_match(target, c) for c in candidates if c):
+            continue
+        if target.strip().lower() in last_response_lower:
+            continue
+        return target, kind
+    return None
+
+
+def _build_ungrounded_nudge_message(state, target, kind):
+    """Corrective message fed back to the model in place of dispatching the
+    ungrounded command — explicitly lists the real options and explicitly
+    forbids inventing new ones, rather than just implying it via the list."""
+    if kind == "held":
+        candidates = sorted(_held_candidates(state), key=str.lower)
+        known = ", ".join(candidates) if candidates else "nothing"
+        return (
+            f"'{target}' isn't something you're currently holding or have learned. "
+            f"You have: {known}. Use these exact names — don't invent new object names."
+        )
+    candidates = sorted(_current_room_display_names(state), key=str.lower)
+    known = ", ".join(candidates) if candidates else "nothing you've discovered here yet"
+    return (
+        f"'{target}' isn't a known object here. Objects you can actually interact "
+        f"with right now: {known}. Use these exact names — don't invent new object names."
+    )
+
 
 # ---------------------------------------------------------------------------
 # Tool schemas — canonical, backend-neutral (Anthropic's native input_schema
@@ -288,12 +484,18 @@ def _dispatch_tool(state, run_id, step_num, name, call_id, call_input, trace):
     return _tool_result(call_id, payload)
 
 
-def _run_decide_loop(state, run_id, step_num, tool_adapter, system_prompt, user_message):
+def _run_decide_loop(state, run_id, step_num, tool_adapter, system_prompt, user_message, last_response=None):
     """Runs the decide-only tool-calling episode for one step, returning
     (action_taken, action_reason, forced_fallback, total_usage, tool_trace).
     tool_trace is a list of {"tool", "input", "output"} dicts for every
     non-terminal tool call, plus a {"tool": "_nudge", "message": ...} entry
-    if a nudge was issued."""
+    if the tool-call cap was reached, and/or a
+    {"tool": "_ungrounded_target_nudge", "target", "message"} entry (bug 81)
+    if execute_game_command's own target wasn't grounded in known ground
+    truth on its first attempt. last_response is the raw text of the most
+    recent game response — used only to ground execute_game_command's
+    target against it (bug 77's raw-text precedent), not otherwise
+    consulted here."""
     total_usage = {"input_tokens": 0, "output_tokens": 0}
     tool_trace = []
 
@@ -306,7 +508,8 @@ def _run_decide_loop(state, run_id, step_num, tool_adapter, system_prompt, user_
     _track(step_response)
 
     non_terminal_calls = 0
-    nudged = False
+    cap_nudged = False
+    ground_nudged = False
 
     while True:
         tool_calls = step_response.get("tool_calls", [])
@@ -321,6 +524,7 @@ def _run_decide_loop(state, run_id, step_num, tool_adapter, system_prompt, user_
         results = []
         action_taken = action_reason = None
         terminal_seen = False
+        terminal_call_id = None
 
         for call in tool_calls:
             name, call_id, call_input = call["name"], call["id"], call["input"]
@@ -329,6 +533,7 @@ def _run_decide_loop(state, run_id, step_num, tool_adapter, system_prompt, user_
                 action_taken = call_input["command"]
                 action_reason = call_input.get("reason")
                 terminal_seen = True
+                terminal_call_id = call_id
                 results.append(_tool_result(call_id, {"response": "(pending — ends this step)"}))
                 continue
 
@@ -337,16 +542,36 @@ def _run_decide_loop(state, run_id, step_num, tool_adapter, system_prompt, user_
                 non_terminal_calls += 1
 
         if terminal_seen:
+            # Bug 81: give the model one chance to reconsider an ungrounded
+            # target before it's dispatched to the game — same nudge shape
+            # as the tool-call-cap case below (a corrective tool_result,
+            # not a rejection), but only once per step: if the model repeats
+            # (or doubles down on) the same kind of target after the nudge,
+            # trust it rather than force a fallback — a forced "look" wastes
+            # a turn too, and our grounding heuristic is deliberately
+            # permissive, not infallible.
+            ungrounded = None if ground_nudged else _find_ungrounded_target(state, action_taken, last_response)
+            if ungrounded:
+                ground_nudged = True
+                target, kind = ungrounded
+                message = _build_ungrounded_nudge_message(state, target, kind)
+                tool_trace.append({"tool": "_ungrounded_target_nudge", "target": target, "message": message})
+                for result in results:
+                    if result["id"] == terminal_call_id:
+                        result["content"] = json.dumps({"_ungrounded_target_nudge": message})
+                step_response = tool_adapter.continue_with_results(results)
+                _track(step_response)
+                continue
             return action_taken, action_reason, False, total_usage, tool_trace
 
         if non_terminal_calls >= _NON_TERMINAL_CALL_CAP:
-            if nudged:
+            if cap_nudged:
                 # Nudge already given and ignored — force the fallback ourselves,
                 # no further model call needed (see "Runaway guard" in
                 # docs/agent_tools_spec.md).
                 _log_tool_loop_exhausted(run_id, step_num, "nudge ignored")
                 return _FALLBACK_COMMAND, "forced fallback: tool-call limit exceeded", True, total_usage, tool_trace
-            nudged = True
+            cap_nudged = True
             tool_trace.append({"tool": "_nudge", "message": _NUDGE_MESSAGE})
             # Attach the nudge to the last real result's content rather than a
             # fabricated tool_result id — both backends validate that every
@@ -388,7 +613,7 @@ def run_tool_calling_step(state, child, tool_adapter, parse_strategy, run_id, st
     user_message = _build_user_message(last_response, state["inventory"], forced_fallback_notice)
 
     action_taken, action_reason, forced_fallback, usage, tool_trace = _run_decide_loop(
-        state, run_id, step_num, tool_adapter, system_prompt, user_message
+        state, run_id, step_num, tool_adapter, system_prompt, user_message, last_response
     )
 
     snap_before = agent._snapshot_state(state)

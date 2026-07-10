@@ -201,7 +201,17 @@ the order to use them in.
   and `inventory_changes` (bug 75, reusing the hard-failure suppression
   already proven for the legacy path's `added_to_inventory`). A rejected
   claim is discarded, not retried — see `docs/agent_tools_spec.md`'s
-  `parse_game_response` section for the full reasoning.
+  `parse_game_response` section for the full reasoning. Bug 81 extended
+  the same principle from *reporting* (parsing a response) to *acting*
+  (choosing `execute_game_command`'s own target) — a live case of the
+  model misattributing an examined object's own description ("rusty and
+  blunt") to an invented second object and sending a command for it. Since
+  the model gets to choose this string freely turn to turn (unlike
+  `room_quote`, there's no single response text to substring-check
+  against), the fix reuses the tool-call-cap nudge mechanism instead of a
+  reject-and-discard: the ungrounded target gets one corrective
+  `tool_result` and a chance to self-correct within the same step's
+  budget, rather than being silently dropped or forced into a fallback.
 
 ## Explicitly not decided yet (implementation-review pass)
 
